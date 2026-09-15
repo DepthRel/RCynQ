@@ -1,0 +1,19 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     x:Class="RCynQ.UI.Views.Dialogs.TextDialog"
+                     x:DataType="vm:TextDialogViewModel"
+                     Title="{Binding Title}"
+                     Width="920" Height="640" MinWidth="480" MinHeight="320"
+                     WindowStartupLocation="CenterOwner">
+  <Grid RowDefinitions="*,Auto" Margin="18">
+    <TextBox Classes="mono" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+             FontSize="12.5" VerticalContentAlignment="Top"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+             ScrollViewer.VerticalScrollBarVisibility="Auto"
+             Text="{Binding Text}" />
+    <Button Grid.Row="1" Classes="outline" HorizontalAlignment="Right" Margin="0,14,0,0"
+            Content="Закрыть" IsCancel="True" IsDefault="True" Click="OnCloseClick" />
+  </Grid>
+</dialogs:DialogWindow>

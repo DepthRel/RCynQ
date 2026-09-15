@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>RCynQ</title>
+  <defs>
+    <linearGradient id="violet" x1="30.5" y1="30.5" x2="225.5" y2="225.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D8B4FE" />
+      <stop offset="1" stop-color="#9333EA" />
+    </linearGradient>
+    <linearGradient id="blue" x1="7.5" y1="103" x2="248.5" y2="153" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA" />
+      <stop offset="1" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="mix" x1="30.5" y1="103" x2="225.5" y2="153" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9094FB" />
+      <stop offset="1" stop-color="#5C4BEA" />
+    </linearGradient>
+    <clipPath id="ring">
+      <path clip-rule="evenodd"
+            d="M128 30.5 A97.5 97.5 0 1 1 127.99 30.5 Z M128 66.75 A61.25 61.25 0 1 0 128.01 66.75 Z" />
+    </clipPath>
+  </defs>
+  <!-- Violet ring crossed by a blue bar; where they overlap the colors mix. -->
+  <circle cx="128" cy="128" r="79.375" fill="none" stroke="url(#violet)" stroke-width="36.25" />
+  <rect x="7.5" y="103" width="241" height="50" rx="25" fill="url(#blue)" />
+  <rect x="7.5" y="103" width="241" height="50" rx="25" fill="url(#mix)" clip-path="url(#ring)" />
+</svg>

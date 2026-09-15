@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.LogsView"
+             x:DataType="pages:LogsViewModel">
+  <UserControl.Styles>
+    <Style Selector="ListBox.logs">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.logs ListBoxItem">
+      <Setter Property="Padding" Value="14,4" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" Margin="28,22,28,20">
+    <Grid ColumnDefinitions="Auto,170,*,Auto,Auto" Margin="0,0,0,14">
+      <TextBlock Classes="secondary" Text="Уровень" VerticalAlignment="Center" Margin="0,0,10,0" />
+      <ComboBox Grid.Column="1" ItemsSource="{Binding Levels}" SelectedItem="{Binding SelectedLevel}" />
+      <Button Grid.Column="3" Classes="outline" Margin="10,0,0,0" Command="{Binding ReloadCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <controls:IconView Classes="small" IconKey="Icon.Refresh" />
+          <TextBlock Text="Обновить" />
+        </StackPanel>
+      </Button>
+      <Button Grid.Column="4" Classes="outline" Margin="10,0,0,0" Command="{Binding ExportCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <controls:IconView Classes="small" IconKey="Icon.Upload" />
+          <TextBlock Text="Экспорт" />
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="card">
+      <Panel>
+        <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoEntries}" Text="Записей нет." />
+        <ListBox Classes="logs" ItemsSource="{Binding Entries}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="items:LogItemViewModel">
+              <Grid ColumnDefinitions="100,90,*">
+                <TextBlock Classes="mono muted" FontSize="12" Text="{Binding TimeText}" />
+                <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12"
+                           Classes.warning="{Binding IsWarning}"
+                           Classes.danger="{Binding IsError}"
+                           Text="{Binding Level}" />
+                <SelectableTextBlock Grid.Column="2" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" Text="{Binding Message}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Panel>
+    </Border>
+  </Grid>
+</UserControl>

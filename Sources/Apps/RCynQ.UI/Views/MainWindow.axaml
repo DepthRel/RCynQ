@@ -1,0 +1,150 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:RCynQ.UI.ViewModels"
+        xmlns:nav="using:RCynQ.UI.ViewModels.Navigation"
+        xmlns:controls="using:RCynQ.UI.Controls"
+        x:Class="RCynQ.UI.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding NodeTitle}"
+        Width="1000" Height="700" MinWidth="520" MinHeight="460"
+        Icon="avares://RCynQ.UI/Assets/rcynq.ico"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Styles>
+    <Style Selector="Ellipse.connection">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="Fill" Value="{StaticResource TextMutedBrush}" />
+    </Style>
+    <Style Selector="Ellipse.connection.connected">
+      <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+    <!-- Tab strip: icon above label, rounded accent underline under the selected tab; tabs that do not fit move to "…". -->
+    <Border Grid.Row="0"
+            IsVisible="{Binding !IsSetupVisible}"
+            Background="{StaticResource NavBackgroundBrush}"
+            BorderBrush="{StaticResource DividerBrush}"
+            BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto,Auto" Margin="10,6,10,0">
+        <ItemsControl ItemsSource="{Binding Tabs}" ClipToBounds="True">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <controls:OverflowStackPanel Spacing="2" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="nav:NavigationItemViewModel">
+              <Button Classes="nav"
+                      Classes.selected="{Binding IsSelected}"
+                      IsEnabled="{Binding IsAvailable}"
+                      AutomationProperties.Name="{Binding Title}"
+                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectTabCommand}"
+                      CommandParameter="{Binding}">
+                <Grid RowDefinitions="*,Auto">
+                  <StackPanel Margin="14,9,14,8">
+                    <Panel HorizontalAlignment="Center">
+                      <controls:IconView IconKey="{Binding IconKey}" Width="20" Height="20" />
+                      <Ellipse Classes="attention"
+                               IsVisible="{Binding HasAttention}"
+                               HorizontalAlignment="Right" VerticalAlignment="Top"
+                               Margin="0,-2,-6,0" />
+                    </Panel>
+                    <TextBlock Classes="nav-label" Text="{Binding Title}" />
+                  </StackPanel>
+                  <Border Grid.Row="1" Classes="indicator" />
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button x:Name="OverflowButton"
+                Grid.Column="1"
+                Classes="nav"
+                IsVisible="False"
+                MinWidth="56"
+                ToolTip.Tip="Вкладки, которые не поместились"
+                AutomationProperties.Name="Ещё"
+                Click="OnOverflowClick">
+          <Grid RowDefinitions="*,Auto">
+            <TextBlock Text="…" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="14,0,14,4" />
+            <Border Grid.Row="1" Classes="indicator" />
+          </Grid>
+        </Button>
+
+        <Button Grid.Column="2"
+                Classes="icon"
+                VerticalAlignment="Center"
+                Margin="4,0,0,6"
+                ToolTip.Tip="Обновить"
+                AutomationProperties.Name="Обновить"
+                Command="{Binding RefreshCommand}">
+          <controls:IconView IconKey="Icon.Refresh" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <!-- Messages: service start problems and messages of the current page -->
+    <StackPanel Grid.Row="1" IsVisible="{Binding !IsSetupVisible}">
+      <Border Classes="banner warning" Margin="28,14,28,0" IsVisible="{Binding HasInstallationWarning}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{Binding InstallationWarning}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" VerticalAlignment="Center"
+                  Content="Это тот же узел" Command="{Binding AcceptInstallationCommand}" />
+        </Grid>
+      </Border>
+      <Border Classes="banner error" Margin="28,14,28,0" IsVisible="{Binding HasStartupError}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource DangerBrush}" Margin="0,0,10,0" />
+          <SelectableTextBlock Grid.Column="1" Text="{Binding StartupError}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" Content="Повторить" Command="{Binding RefreshCommand}" />
+        </Grid>
+      </Border>
+      <Border Classes="banner error" Margin="28,14,28,0" IsVisible="{Binding CurrentPage.HasError, FallbackValue=False}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource DangerBrush}" Margin="0,0,10,0" />
+          <SelectableTextBlock Grid.Column="1" Text="{Binding CurrentPage.ErrorMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="Скрыть">
+            <controls:IconView Classes="small" IconKey="Icon.X" />
+          </Button>
+        </Grid>
+      </Border>
+      <Border Classes="banner info" Margin="28,14,28,0" IsVisible="{Binding CurrentPage.HasInfo, FallbackValue=False}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
+          <SelectableTextBlock Grid.Column="1" Text="{Binding CurrentPage.InfoMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="Скрыть">
+            <controls:IconView Classes="small" IconKey="Icon.X" />
+          </Button>
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <!-- First-run setup -->
+    <ContentControl Grid.Row="0" Grid.RowSpan="3" Content="{Binding Setup}" IsVisible="{Binding IsSetupVisible}" />
+
+    <!-- Page -->
+    <Panel Grid.Row="2" IsVisible="{Binding !IsSetupVisible}">
+      <ContentControl Content="{Binding CurrentPage}" />
+      <ProgressBar Classes="thin" VerticalAlignment="Top" IsIndeterminate="True" IsVisible="{Binding CurrentPage.IsBusy, FallbackValue=False}" />
+    </Panel>
+
+    <!-- Status bar -->
+    <Border Grid.Row="3"
+            Background="{StaticResource NavBackgroundBrush}"
+            BorderBrush="{StaticResource DividerBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="14,5">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Ellipse Classes="connection" Classes.connected="{Binding IsConnected}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted" FontSize="12" Text="{Binding ConnectionText}" VerticalAlignment="Center" />
+        <TextBlock Classes="muted" FontSize="12" Text="{Binding ServiceText}" VerticalAlignment="Center" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

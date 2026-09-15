@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:setup="using:RCynQ.UI.ViewModels.Setup"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Setup.SetupView"
+             x:DataType="setup:SetupViewModel">
+  <ScrollViewer>
+    <Border Classes="card" Margin="28" Padding="28,24" MaxWidth="640" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <StackPanel Spacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Image Source="avares://RCynQ.UI/Assets/rcynq-256.png" Width="40" Height="40" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Classes="page-title" Text="Настройка узла RCynQ" />
+            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding ConfigPath, StringFormat='Конфигурация: {0}'}" />
+          </StackPanel>
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,14,*">
+          <StackPanel>
+            <TextBlock Classes="field-label" Text="Идентификатор узла" />
+            <TextBox Classes="mono" Text="{Binding NodeId}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Classes="field-label" Text="Отображаемое имя" />
+            <TextBox Text="{Binding Name}" />
+          </StackPanel>
+        </Grid>
+
+        <StackPanel>
+          <TextBlock Classes="field-label" Text="Роль узла" />
+          <ComboBox ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
+          <TextBlock Classes="muted" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding RoleHint}" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding IsPathVisible}">
+          <TextBlock Classes="field-label" Text="{Binding PathLabel}" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Classes="mono" Text="{Binding Path}" Watermark="/home/dev/projects/app" />
+            <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="Обзор..." Command="{Binding BrowseCommand}" />
+          </Grid>
+        </StackPanel>
+
+        <Grid ColumnDefinitions="140,14,*">
+          <StackPanel>
+            <TextBlock Classes="field-label" Text="Порт сервиса" />
+            <NumericUpDown Value="{Binding ListenPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" IsVisible="{Binding IsTokenVisible}">
+            <TextBlock Classes="field-label" Text="Общий link-токен (одинаковый на Source и Dest)" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Classes="mono" Text="{Binding LinkToken}" />
+              <Button Grid.Column="1" Classes="icon" Margin="6,0,0,0" ToolTip.Tip="Сгенерировать новый" Command="{Binding GenerateTokenCommand}">
+                <controls:IconView Classes="small" IconKey="Icon.Refresh" />
+              </Button>
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <Border Classes="banner error" IsVisible="{Binding HasError}">
+          <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+        </Border>
+
+        <Button Classes="accent" HorizontalAlignment="Right" IsDefault="True" IsEnabled="{Binding !IsBusy}" Command="{Binding SaveCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Play" />
+            <TextBlock Text="Сохранить и запустить" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Shared build settings for every RCynQ project.
+    GenerateDocumentationFile makes the compiler report members without XML
+    documentation (CS1591), which enforces the AGENTS.md documentation rule.
+  -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+</Project>

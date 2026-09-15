@@ -1,0 +1,42 @@
+{
+  "SyncBridge": {
+    "NodeId": "source-1",
+    "Name": "Laptop",
+    "Role": "Source",
+    "WorkdirPath": "/home/dev/projects/app",
+    "ListenPort": 18443,
+    "LinkToken": "replace-with-a-long-random-shared-token",
+    "ExcludedDirectories": [ "bin", "obj", ".vs", ".idea", "node_modules" ],
+    "Ssh": {
+      "IdentityFile": "/home/dev/.ssh/rcynq_ed25519",
+      "ConnectTimeoutSeconds": 10
+    },
+    "Chain": [
+      {
+        "Name": "relay",
+        "PeerNodeId": "mediator-1",
+        "PeerRole": "Mediator",
+        "Host": "203.0.113.4",
+        "SshPort": 22,
+        "SshUser": "jump",
+        "Transport": "AmneziaWG",
+        "FallbackTransports": [ "Direct" ],
+        "TransportSettings": { "configPath": "/etc/amnezia/amneziawg/awg0.conf" },
+        "RemotePort": 22,
+        "Priority": 10
+      },
+      {
+        "Name": "dest",
+        "PeerNodeId": "dest-1",
+        "PeerRole": "Dest",
+        "Host": "10.8.0.2",
+        "SshPort": 22,
+        "SshUser": "rcynq",
+        "GitRepoPath": "/srv/repos/app",
+        "SigningPublicKey": "paste the SigningPublicKey from the Dest export",
+        "RemotePort": 18443,
+        "Priority": 1000
+      }
+    ]
+  }
+}

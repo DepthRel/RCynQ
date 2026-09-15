@@ -1,0 +1,141 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:items="using:RCynQ.UI.ViewModels.Items"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.ExportDialog"
+                     x:DataType="vm:ExportDialogViewModel"
+                     Title="Экспорт конфигурации"
+                     Icon="avares://RCynQ.UI/Assets/rcynq.ico"
+                     Width="660" SizeToContent="Height" MaxHeight="820" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <dialogs:DialogWindow.Styles>
+    <Style Selector="ListBox.addresses">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.addresses ListBoxItem">
+      <Setter Property="Padding" Value="12,7" />
+    </Style>
+    <Style Selector="TextBlock.badge">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    </Style>
+  </dialogs:DialogWindow.Styles>
+
+  <Grid RowDefinitions="*,Auto">
+    <ScrollViewer>
+      <StackPanel Margin="22,22,22,8" Spacing="14">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="page-title" Text="Экспорт конфигурации" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="Данные определены автоматически средствами ОС. Проверьте их: файл импортируется на соседнем узле. Закрытые ключи не экспортируются." />
+        </StackPanel>
+
+        <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsProbing}" />
+        <Border Classes="banner error" IsVisible="{Binding HasProbeError}">
+          <TextBlock Text="{Binding ProbeError}" TextWrapping="Wrap" />
+        </Border>
+
+        <StackPanel>
+          <TextBlock Classes="field-label" Text="Адрес, по которому соседи подключаются к узлу" />
+          <Border Classes="card" IsVisible="{Binding HasAddresses}" Margin="0,0,0,8">
+            <ListBox Classes="addresses" MaxHeight="190" ItemsSource="{Binding Addresses}" SelectedItem="{Binding SelectedAddress}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="items:AddressOptionViewModel">
+                  <Grid ColumnDefinitions="*,Auto,120">
+                    <StackPanel Spacing="1">
+                      <TextBlock Classes="mono" Text="{Binding Address}" />
+                      <TextBlock Classes="muted" FontSize="11.5" Text="{Binding InterfaceName}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Classes="badge" Margin="12,0" VerticalAlignment="Center" Text="{Binding KindText}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="12"
+                               Classes.success="{Binding SshReachable}" Classes.danger="{Binding !SshReachable}"
+                               Text="{Binding StatusText}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+          <TextBox Classes="mono" Text="{Binding Host}" Watermark="IP-адрес или имя хоста (можно ввести вручную)" />
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,12,140">
+          <StackPanel>
+            <TextBlock Classes="field-label" Text="SSH-пользователь" />
+            <TextBox Classes="mono" Text="{Binding User}" Watermark="rcynq" />
+          </StackPanel>
+          <StackPanel Grid.Column="2">
+            <TextBlock Classes="field-label" Text="SSH-порт" />
+            <NumericUpDown Value="{Binding SshPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
+          </StackPanel>
+        </Grid>
+
+        <Border Classes="card padded">
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*">
+              <Panel Margin="0,0,10,0">
+                <controls:IconView Classes="small" IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding SshdOk}" />
+                <controls:IconView Classes="small" IconKey="Icon.X" Foreground="{StaticResource DangerBrush}" IsVisible="{Binding !SshdOk}" />
+              </Panel>
+              <TextBlock Grid.Column="1" Text="{Binding SshdStatus}" TextWrapping="Wrap" />
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*">
+              <Panel Margin="0,0,10,0">
+                <controls:IconView Classes="small" IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding ServicePortOk}" />
+                <controls:IconView Classes="small" IconKey="Icon.X" Foreground="{StaticResource DangerBrush}" IsVisible="{Binding !ServicePortOk}" />
+              </Panel>
+              <TextBlock Grid.Column="1" Text="{Binding ServicePortStatus}" TextWrapping="Wrap" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <CheckBox IsChecked="{Binding IncludeSshKey}" IsEnabled="{Binding HasSshKey}" Content="Включить публичный SSH-ключ узла" />
+                <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap" Text="{Binding SshKeyDescription}" />
+              </StackPanel>
+              <Button Grid.Column="1" Classes="outline" VerticalAlignment="Center" IsVisible="{Binding CanGenerateKey}" IsEnabled="{Binding !IsProbing}" Command="{Binding GenerateKeyCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <controls:IconView Classes="small" IconKey="Icon.Plus" />
+                  <TextBlock Text="Создать ключ" />
+                </StackPanel>
+              </Button>
+            </Grid>
+
+            <StackPanel Spacing="2">
+              <CheckBox IsChecked="{Binding IncludeHostKey}" IsEnabled="{Binding HasHostKey}" Content="Включить отпечаток ключа хоста sshd" />
+              <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap"
+                         Text="{Binding HostKeyFingerprint, FallbackValue='не определён', TargetNullValue='не определён'}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <ItemsControl ItemsSource="{Binding Warnings}" IsVisible="{Binding HasWarnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+                <controls:IconView Classes="small" IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,1,10,0" VerticalAlignment="Top" />
+                <TextBlock Grid.Column="1" Classes="secondary" FontSize="12.5" TextWrapping="Wrap" Text="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Classes="danger" Text="{Binding Error}" TextWrapping="Wrap"
+                   IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="22,8,22,20">
+      <Button Classes="outline" IsEnabled="{Binding !IsProbing}" Command="{Binding ProbeCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <controls:IconView Classes="small" IconKey="Icon.Refresh" />
+          <TextBlock Text="Проверить снова" />
+        </StackPanel>
+      </Button>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+        <Button Classes="outline" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
+        <Button Classes="accent" Content="Экспортировать" IsDefault="True" IsEnabled="{Binding CanConfirm}" Command="{Binding ConfirmCommand}" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</dialogs:DialogWindow>

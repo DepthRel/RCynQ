@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.TunnelView"
+             x:DataType="pages:TunnelViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <StackPanel>
+        <TextBlock Classes="section" Text="Звенья и транспорт" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,-4,0,10"
+                   Text="Direct использует SSH напрямую. Для AmneziaWG туннель можно поднять и остановить вручную; при сбое сервис переключается на резервный транспорт." />
+        <Border Classes="card">
+          <StackPanel>
+            <Border Classes="header-row">
+              <Grid ColumnDefinitions="1.3*,1.4*,1.1*,110,Auto">
+                <TextBlock Text="Звено" />
+                <TextBlock Grid.Column="1" Text="SSH" />
+                <TextBlock Grid.Column="2" Text="Транспорт" />
+                <TextBlock Grid.Column="3" Text="Статус" />
+              </Grid>
+            </Border>
+            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoLinks}" Text="Звенья не настроены. Добавьте узлы на вкладке «Роль и узлы»." />
+            <ItemsControl Classes="rows" ItemsSource="{Binding Links}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="items:TunnelLinkItemViewModel">
+                  <Border Classes="row">
+                    <Grid ColumnDefinitions="1.3*,1.4*,1.1*,110,Auto">
+                      <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="muted" FontSize="12" Text="{Binding PeerText}" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="secondary" Text="{Binding ActiveTransport}" />
+                        <TextBlock Classes="muted" FontSize="12" Text="{Binding FallbackText}" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="3" Classes="status"
+                                 Classes.online="{Binding IsOnline}"
+                                 Classes.degraded="{Binding IsDegraded}"
+                                 Classes.offline="{Binding IsOffline}"
+                                 Text="{Binding StatusText}"
+                                 ToolTip.Tip="{Binding Message}" />
+                      <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" IsVisible="{Binding CanToggle}">
+                        <Button Classes="icon" Padding="6" ToolTip.Tip="Поднять туннель"
+                                Command="{Binding $parent[ItemsControl].((pages:TunnelViewModel)DataContext).StartCommand}"
+                                CommandParameter="{Binding}">
+                          <controls:IconView Classes="small" IconKey="Icon.Play" />
+                        </Button>
+                        <Button Classes="icon" Padding="6" ToolTip.Tip="Остановить туннель"
+                                Command="{Binding $parent[ItemsControl].((pages:TunnelViewModel)DataContext).StopCommand}"
+                                CommandParameter="{Binding}">
+                          <controls:IconView Classes="small" IconKey="Icon.Stop" />
+                        </Button>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

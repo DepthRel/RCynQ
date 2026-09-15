@@ -1,0 +1,39 @@
+<Solution>
+  <Folder Name="/Sources/Apps/">
+    <Project Path="Sources/Apps/RCynQ.Cli/RCynQ.Cli.csproj" />
+    <Project Path="Sources/Apps/RCynQ.Service/RCynQ.Service.csproj" />
+    <Project Path="Sources/Apps/RCynQ.UI/RCynQ.UI.csproj" />
+  </Folder>
+  <Folder Name="/Sources/Core/">
+    <Project Path="Sources/Core/RCynQ.Core.Data.Migrations.SQLite/RCynQ.Core.Data.Migrations.SQLite.csproj" />
+    <Project Path="Sources/Core/RCynQ.Core.Data.Migrations/RCynQ.Core.Data.Migrations.csproj" />
+    <Project Path="Sources/Core/RCynQ.Core.Data/RCynQ.Core.Data.csproj" />
+    <Project Path="Sources/Core/RCynQ.Core/RCynQ.Core.csproj" />
+  </Folder>
+  <Folder Name="/Sources/Database/">
+    <Project Path="Sources/Database/RCynQ.Dbs.SQLite.DbMigrator/RCynQ.Dbs.SQLite.DbMigrator.csproj" />
+  </Folder>
+  <Folder Name="/Sources/Infrastructure/">
+    <Project Path="Sources/Infrastructure/RCynQ.Git/RCynQ.Git.csproj" />
+    <Project Path="Sources/Infrastructure/RCynQ.Ssh/RCynQ.Ssh.csproj" />
+  </Folder>
+  <Folder Name="/Sources/Sync/">
+    <Project Path="Sources/Sync/RCynQ.Sync/RCynQ.Sync.csproj" />
+  </Folder>
+  <Folder Name="/Sources/Transports/">
+    <Project Path="Sources/Transports/RCynQ.Transports.Abstractions/RCynQ.Transports.Abstractions.csproj" />
+    <Project Path="Sources/Transports/RCynQ.Transports.AmneziaWG/RCynQ.Transports.AmneziaWG.csproj" />
+    <Project Path="Sources/Transports/RCynQ.Transports.Direct/RCynQ.Transports.Direct.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/RCynQ.Cli.Tests/RCynQ.Cli.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Core.Data.Tests/RCynQ.Core.Data.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Core.Tests/RCynQ.Core.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Git.Tests/RCynQ.Git.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Service.Tests/RCynQ.Service.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Ssh.Tests/RCynQ.Ssh.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Sync.Tests/RCynQ.Sync.Tests.csproj" />
+    <Project Path="Tests/RCynQ.Transports.Tests/RCynQ.Transports.Tests.csproj" />
+    <Project Path="Tests/RCynQ.UI.Tests/RCynQ.UI.Tests.csproj" />
+  </Folder>
+</Solution>

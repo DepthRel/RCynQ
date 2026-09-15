@@ -1,0 +1,63 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using RCynQ.Core.Abstractions;
+using RCynQ.Core.Exceptions;
+using RCynQ.Core.Patches;
+using RCynQ.Git.Hashing;
+
+namespace RCynQ.Sync.Signing;
+
+/// <summary>
+/// Builds the deterministic byte payload covered by a patch signature.
+/// </summary>
+/// <remarks>
+/// Every field is length-prefixed (<c>length:value\n</c>), so no path content can make two different envelopes
+/// produce the same payload. Binary payloads are represented by their SHA-256 digests.
+/// </remarks>
+public static class PayloadCanonicalizer
+{
+    /// <summary>
+    /// The payload format version.
+    /// </summary>
+    public const string Version = "rcynq-patch-v1";
+
+    /// <summary>
+    /// Builds the canonical payload of an envelope (the signature itself is excluded).
+    /// </summary>
+    /// <param name="envelope">The envelope.</param>
+    /// <returns>The payload bytes.</returns>
+    public static byte[] Build(PatchEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        var builder = new StringBuilder();
+        Append(builder, Version);
+        Append(builder, envelope.Id.ToString("D"));
+        Append(builder, envelope.SourceNode.Value);
+        Append(builder, envelope.TargetNode.Value);
+        Append(builder, envelope.CreatedAtUtc.UtcTicks.ToString(CultureInfo.InvariantCulture));
+        Append(builder, envelope.BaseStateHash);
+        Append(builder, envelope.IncomingStateHash);
+        Append(builder, envelope.Manifest.Count.ToString(CultureInfo.InvariantCulture));
+        foreach (var change in envelope.Manifest)
+        {
+            Append(builder, ((int)change.Kind).ToString(CultureInfo.InvariantCulture));
+            Append(builder, change.Path);
+            Append(builder, change.Sha256 ?? "-");
+            Append(builder, change.SizeBytes?.ToString(CultureInfo.InvariantCulture) ?? "-");
+            Append(builder, change.IsSymlink ? "1" : "0");
+        }
+
+        Append(builder, DefaultStateHasher.Sha256Hex(envelope.Diff));
+        Append(builder, DefaultStateHasher.Sha256Hex(envelope.Bundle));
+        return Encoding.UTF8.GetBytes(builder.ToString());
+    }
+
+    /// <summary>
+    /// Appends a length-prefixed field.
+    /// </summary>
+    /// <param name="builder">The builder.</param>
+    /// <param name="value">The field value.</param>
+    private static void Append(StringBuilder builder, string value)
+        => builder.Append(value.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(value).Append('\n');
+}

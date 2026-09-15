@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RollForward>Major</RollForward>
+    <AssemblyName>rcynq</AssemblyName>
+    <RootNamespace>RCynQ.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CliFx" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\RCynQ.Core\RCynQ.Core.csproj" />
+    <ProjectReference Include="..\..\Core\RCynQ.Core.Data\RCynQ.Core.Data.csproj" />
+    <ProjectReference Include="..\..\Core\RCynQ.Core.Data.Migrations.SQLite\RCynQ.Core.Data.Migrations.SQLite.csproj" />
+    <ProjectReference Include="..\..\Sync\RCynQ.Sync\RCynQ.Sync.csproj" />
+    <ProjectReference Include="..\..\Transports\RCynQ.Transports.Abstractions\RCynQ.Transports.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Transports\RCynQ.Transports.Direct\RCynQ.Transports.Direct.csproj" />
+    <ProjectReference Include="..\..\Transports\RCynQ.Transports.AmneziaWG\RCynQ.Transports.AmneziaWG.csproj" />
+  </ItemGroup>
+
+</Project>

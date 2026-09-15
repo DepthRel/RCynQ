@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.OverviewView"
+             x:DataType="pages:OverviewViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <Grid ColumnDefinitions="*,12,*,12,*">
+        <Border Classes="card padded">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="muted" Text="Роль" />
+            <TextBlock Classes="value" Text="{Binding RoleText}" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="2" Classes="card padded">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="muted" Text="Узел" />
+            <TextBlock Classes="value" Text="{Binding NodeName}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="4" Classes="card padded">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="muted" Text="Последняя синхронизация" />
+            <TextBlock Classes="value mono" Text="{Binding LastSyncText}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <StackPanel>
+        <TextBlock Classes="section" Text="Проблемы" />
+        <Border Classes="card">
+          <Panel>
+            <Border Classes="row" IsVisible="{Binding !HasProblems}">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" />
+                <TextBlock Classes="secondary" Text="Проблем не обнаружено" />
+              </StackPanel>
+            </Border>
+            <ItemsControl Classes="rows" ItemsSource="{Binding Problems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="items:ProblemItemViewModel">
+                  <Border Classes="row">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                      <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" />
+                      <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" />
+                      <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Padding="10,5" MinHeight="28"
+                              Command="{Binding $parent[ItemsControl].((pages:OverviewViewModel)DataContext).NavigateCommand}"
+                              CommandParameter="{Binding}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="Перейти" />
+                          <controls:IconView Classes="small" IconKey="Icon.ChevronRight" />
+                        </StackPanel>
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Panel>
+        </Border>
+      </StackPanel>
+
+      <StackPanel>
+        <TextBlock Classes="section" Text="Звенья цепочки" />
+        <Border Classes="card">
+          <Panel>
+            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoLinks}" Text="Звенья не настроены." />
+            <ItemsControl Classes="rows" ItemsSource="{Binding Links}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="items:TunnelLinkItemViewModel">
+                  <Border Classes="row">
+                    <Grid ColumnDefinitions="1.1*,1.2*,1.4*,*,110">
+                      <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding PeerText}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="2" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="3" Classes="secondary" Text="{Binding ActiveTransport}" />
+                      <TextBlock Grid.Column="4" Classes="status"
+                                 Classes.online="{Binding IsOnline}"
+                                 Classes.degraded="{Binding IsDegraded}"
+                                 Classes.offline="{Binding IsOffline}"
+                                 Text="{Binding StatusText}"
+                                 ToolTip.Tip="{Binding Message}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Panel>
+        </Border>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

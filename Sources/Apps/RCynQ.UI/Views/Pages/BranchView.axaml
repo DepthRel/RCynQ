@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.BranchView"
+             x:DataType="pages:BranchViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <Border Classes="card padded">
+        <Grid ColumnDefinitions="Auto,*">
+          <controls:IconView IconKey="Icon.Branch" Width="26" Height="26" VerticalAlignment="Top" Margin="0,2,14,0"
+                             Foreground="{StaticResource AccentBrush}" />
+          <StackPanel Grid.Column="1" Spacing="4">
+            <TextBlock Classes="muted" Text="Текущая ветка" />
+            <TextBlock Classes="value mono" Text="{Binding CurrentBranch}" />
+            <TextBlock Classes="secondary" Text="{Binding DivergenceText}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <WrapPanel IsVisible="{Binding CanPull}">
+        <Button Classes="accent" Margin="0,0,10,10" Command="{Binding PullCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Pull" />
+            <TextBlock Text="Pull с DEST" />
+          </StackPanel>
+        </Button>
+        <Button Classes="outline" Margin="0,0,10,10" Command="{Binding FetchCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Download" />
+            <TextBlock Text="Fetch" />
+          </StackPanel>
+        </Button>
+      </WrapPanel>
+      <TextBlock Classes="muted" IsVisible="{Binding !CanPull}" TextWrapping="Wrap"
+                 Text="Этот узел отдаёт ветки через git-upload-pack; получение веток выполняется на узле Source." />
+
+      <StackPanel IsVisible="{Binding HasOutput}">
+        <TextBlock Classes="section" Text="Вывод Git" />
+        <TextBox Classes="mono" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="160" MaxHeight="360"
+                 Text="{Binding Output}" VerticalContentAlignment="Top" FontSize="12.5" />
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

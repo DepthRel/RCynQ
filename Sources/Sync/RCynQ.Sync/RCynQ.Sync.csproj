@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\RCynQ.Core\RCynQ.Core.csproj" />
+    <ProjectReference Include="..\..\Core\RCynQ.Core.Data\RCynQ.Core.Data.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\RCynQ.Git\RCynQ.Git.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\RCynQ.Ssh\RCynQ.Ssh.csproj" />
+    <ProjectReference Include="..\..\Transports\RCynQ.Transports.Abstractions\RCynQ.Transports.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

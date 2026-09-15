@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.RoleAndNodesView"
+             x:DataType="pages:RoleAndNodesViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <StackPanel>
+        <TextBlock Classes="field-label" Text="Роль узла" />
+        <ComboBox ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
+      </StackPanel>
+
+      <StackPanel IsVisible="{Binding IsPathVisible}">
+        <TextBlock Classes="field-label" Text="{Binding PathLabel}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Classes="mono" Text="{Binding Path}" Watermark="/home/dev/projects/app" />
+          <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="Обзор..." Command="{Binding BrowseCommand}" />
+        </Grid>
+      </StackPanel>
+
+      <Border Classes="banner warning" IsVisible="{Binding IsDirty}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Роль и путь сохраняются в конфигурацию и применяются после перезапуска сервиса."
+                     TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="Сохранить" Command="{Binding ApplyRoleCommand}" />
+        </Grid>
+      </Border>
+
+      <StackPanel>
+        <TextBlock Classes="section" Text="Узлы цепочки" />
+        <Border Classes="card">
+          <Panel>
+            <TextBlock Classes="muted" Margin="16,14" TextWrapping="Wrap" IsVisible="{Binding HasNoNodes}"
+                       Text="Узлы не настроены. Импортируйте конфигурацию соседнего узла или добавьте узел вручную." />
+            <ItemsControl Classes="rows" ItemsSource="{Binding Nodes}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="items:ChainNodeItemViewModel">
+                  <Border Classes="row">
+                    <Grid ColumnDefinitions="1.2*,*,1.3*,110,Auto">
+                      <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding Role}" />
+                      <TextBlock Grid.Column="2" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="3" Classes="status"
+                                 Classes.online="{Binding IsOnline}"
+                                 Classes.degraded="{Binding IsDegraded}"
+                                 Classes.offline="{Binding IsOffline}"
+                                 Text="{Binding StatusText}" />
+                      <Button Grid.Column="4" Classes="icon hover-only" Padding="5" ToolTip.Tip="Удалить узел"
+                              Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).RemoveNodeCommand}"
+                              CommandParameter="{Binding}">
+                        <controls:IconView Classes="small" IconKey="Icon.Trash" />
+                      </Button>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Panel>
+        </Border>
+      </StackPanel>
+
+      <WrapPanel>
+        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="Экспортировать конфигурацию" Command="{Binding ExportCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Upload" />
+            <TextBlock Text="Экспортировать конфигурацию" />
+          </StackPanel>
+        </Button>
+        <Button Classes="outline" Margin="0,0,10,10" Command="{Binding ImportCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Download" />
+            <TextBlock Text="Импортировать конфигурацию" />
+          </StackPanel>
+        </Button>
+        <Button Classes="outline" Margin="0,0,10,10" Command="{Binding AddNodeCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Plus" />
+            <TextBlock Text="Добавить узел" />
+          </StackPanel>
+        </Button>
+        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="Разрешить подключения узлов"
+                ToolTip.Tip="Добавить ключи импортированных узлов в настройки SSH-сервера этого компьютера"
+                Command="{Binding AllowAccessCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Check" />
+            <TextBlock Text="Разрешить подключения узлов" />
+          </StackPanel>
+        </Button>
+      </WrapPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

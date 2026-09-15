@@ -1,0 +1,52 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:views="using:RCynQ.UI.Views.Pages"
+             xmlns:setupvm="using:RCynQ.UI.ViewModels.Setup"
+             xmlns:setupviews="using:RCynQ.UI.Views.Setup"
+             x:Class="RCynQ.UI.App"
+             Name="RCynQ"
+             RequestedThemeVariant="Dark">
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://RCynQ.UI/Themes/Colors.axaml" />
+        <ResourceInclude Source="avares://RCynQ.UI/Themes/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://RCynQ.UI/Themes/Controls.axaml" />
+  </Application.Styles>
+
+  <Application.DataTemplates>
+    <DataTemplate DataType="setupvm:SetupViewModel">
+      <setupviews:SetupView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:OverviewViewModel">
+      <views:OverviewView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:RoleAndNodesViewModel">
+      <views:RoleAndNodesView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:SyncViewModel">
+      <views:SyncView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:TunnelViewModel">
+      <views:TunnelView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:DiagnosticsViewModel">
+      <views:DiagnosticsView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:BranchViewModel">
+      <views:BranchView />
+    </DataTemplate>
+    <DataTemplate DataType="pages:LogsViewModel">
+      <views:LogsView />
+    </DataTemplate>
+  </Application.DataTemplates>
+
+</Application>

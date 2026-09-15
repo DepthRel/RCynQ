@@ -1,0 +1,101 @@
+{
+  // Pick a profile in "Run and Debug" and press F5. Every profile runs its own "build: <project>" task,
+  // which builds only that project and its references (not the whole solution).
+  // The local debug node lives in .vscode/dev (syncbridge.json, workdir/, data/).
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Service",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build: Service",
+      "program": "${workspaceFolder}/Sources/Apps/RCynQ.Service/bin/Debug/net8.0/RCynQ.Service.dll",
+      "args": [ "--config", "${workspaceFolder}/.vscode/dev/syncbridge.json" ],
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "env": { "DOTNET_ENVIRONMENT": "Development", "ASPNETCORE_ENVIRONMENT": "Development" },
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "justMyCode": true
+    },
+    {
+      "name": "UI",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build: Service + UI",
+      "program": "${workspaceFolder}/Sources/Apps/RCynQ.UI/bin/Debug/net8.0/RCynQ.UI.dll",
+      "args": [ "--config", "${workspaceFolder}/.vscode/dev/syncbridge.json" ],
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "justMyCode": true
+    },
+    {
+      "name": "CLI",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build: CLI",
+      "program": "${workspaceFolder}/Sources/Apps/RCynQ.Cli/bin/Debug/net8.0/rcynq.dll",
+      "args": "${input:cliArgs}",
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "env": { "RCYNQ_CONFIG": "${workspaceFolder}/.vscode/dev/syncbridge.json" },
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": true
+    },
+    {
+      "name": "DbMigrator",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build: DbMigrator",
+      "program": "${workspaceFolder}/Sources/Database/RCynQ.Dbs.SQLite.DbMigrator/bin/Debug/net8.0/RCynQ.Dbs.SQLite.DbMigrator.dll",
+      "args": "${input:migratorArgs}",
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": true
+    },
+    {
+      "name": "Service (no build)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/Sources/Apps/RCynQ.Service/bin/Debug/net8.0/RCynQ.Service.dll",
+      "args": [ "--config", "${workspaceFolder}/.vscode/dev/syncbridge.json" ],
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "env": { "DOTNET_ENVIRONMENT": "Development", "ASPNETCORE_ENVIRONMENT": "Development" },
+      "console": "internalConsole",
+      "presentation": { "hidden": true }
+    },
+    {
+      "name": "UI (no build)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/Sources/Apps/RCynQ.UI/bin/Debug/net8.0/RCynQ.UI.dll",
+      "args": [ "--config", "${workspaceFolder}/.vscode/dev/syncbridge.json" ],
+      "cwd": "${workspaceFolder}/.vscode/dev",
+      "console": "internalConsole",
+      "presentation": { "hidden": true }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Service + UI",
+      "configurations": [ "Service (no build)", "UI (no build)" ],
+      "preLaunchTask": "build: Service + UI",
+      "stopAll": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "rcynq arguments",
+      "default": "status"
+    },
+    {
+      "id": "migratorArgs",
+      "type": "promptString",
+      "description": "DbMigrator arguments (--database <file> | --connection <cs>, --list, --help)",
+      "default": "--database data/rcynq.db"
+    }
+  ]
+}

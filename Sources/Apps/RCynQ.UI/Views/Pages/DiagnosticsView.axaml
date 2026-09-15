@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Pages.DiagnosticsView"
+             x:DataType="pages:DiagnosticsViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel VerticalAlignment="Center" Spacing="2">
+          <TextBlock Classes="section" Margin="0" Text="Проверка узла" />
+          <TextBlock Classes="muted" Text="{Binding Summary}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="accent" VerticalAlignment="Center" Command="{Binding RunCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Stethoscope" />
+            <TextBlock Text="Запустить проверку" />
+          </StackPanel>
+        </Button>
+      </Grid>
+
+      <Border Classes="card">
+        <Panel>
+          <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoResults}"
+                     Text="Нажмите «Запустить проверку», чтобы проверить Git, SSH, порты, ключи и доступность звеньев." TextWrapping="Wrap" />
+          <ItemsControl Classes="rows" ItemsSource="{Binding Results}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="items:DiagnosticItemViewModel">
+                <Border Classes="row">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Panel VerticalAlignment="Top" Margin="0,1,12,0">
+                      <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding Passed}" />
+                      <controls:IconView IconKey="Icon.X" Foreground="{StaticResource DangerBrush}" IsVisible="{Binding !Passed}" />
+                    </Panel>
+                    <StackPanel Grid.Column="1" Spacing="3">
+                      <TextBlock Text="{Binding Name}" FontWeight="Medium" />
+                      <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />
+                      <TextBlock Classes="mono muted" FontSize="12" Text="{Binding SuggestedFix}" TextWrapping="Wrap" IsVisible="{Binding HasSuggestedFix}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Padding="10,5" MinHeight="28" VerticalAlignment="Top"
+                            IsVisible="{Binding CanFix}"
+                            Command="{Binding $parent[ItemsControl].((pages:DiagnosticsViewModel)DataContext).FixCommand}"
+                            CommandParameter="{Binding}">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <controls:IconView Classes="small" IconKey="Icon.Tool" />
+                        <TextBlock Text="Исправить" />
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Panel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

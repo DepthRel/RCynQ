@@ -1,0 +1,153 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using RCynQ.Core.Config;
+using RCynQ.Core.Enums;
+
+namespace RCynQ.UI.Services.Configuration;
+
+/// <summary>
+/// Reads and writes the basic settings of <c>syncbridge.json</c> for the first-run setup of the UI.
+/// </summary>
+/// <remarks>
+/// Unknown properties such as the chain, SSH and transport settings are preserved. The file is written atomically and
+/// only when the resulting configuration passes <see cref="SyncBridgeOptionsValidator"/>.
+/// </remarks>
+public static class LocalConfigFile
+{
+    /// <summary>JSON options of the configuration file.</summary>
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        WriteIndented = true
+    };
+
+    /// <summary>JSON document options of the configuration file.</summary>
+    private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+
+    /// <summary>
+    /// Loads the node options, ignoring a missing or malformed file.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <returns>The options, or <see langword="null"/>.</returns>
+    public static SyncBridgeOptions? TryLoad(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var root = JsonNode.Parse(File.ReadAllText(path), documentOptions: DocumentOptions);
+            return FindSection(root as JsonObject)?.Deserialize<SyncBridgeOptions>(Json);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Validates the values and writes them into the configuration file.
+    /// </summary>
+    /// <param name="path">The file path; the file and its directory are created when missing.</param>
+    /// <param name="values">The values.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The validation problems; empty when the file was written.</returns>
+    /// <exception cref="IOException">The file could not be written.</exception>
+    public static async Task<IReadOnlyList<string>> SaveAsync(string path, NodeSetupValues values, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(values);
+
+        JsonObject root;
+        try
+        {
+            root = File.Exists(path)
+                ? JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: DocumentOptions) as JsonObject ?? new JsonObject()
+                : new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+
+        var section = FindSection(root);
+        if (section is null)
+        {
+            section = new JsonObject();
+            root[SyncBridgeOptions.SectionName] = section;
+        }
+
+        Set(section, nameof(SyncBridgeOptions.NodeId), values.NodeId.Trim());
+        Set(section, nameof(SyncBridgeOptions.Name), values.Name.Trim());
+        Set(section, nameof(SyncBridgeOptions.Role), values.Role.ToString());
+        Set(section, nameof(SyncBridgeOptions.ListenPort), values.ListenPort);
+        Set(section, nameof(SyncBridgeOptions.RepoPath), values.Role == NodeRole.Dest ? values.Path.Trim() : null);
+        Set(section, nameof(SyncBridgeOptions.WorkdirPath), values.Role == NodeRole.Source ? values.Path.Trim() : null);
+        Set(section, nameof(SyncBridgeOptions.LinkToken), values.Role == NodeRole.Mediator || string.IsNullOrWhiteSpace(values.LinkToken) ? null : values.LinkToken.Trim());
+
+        var options = section.Deserialize<SyncBridgeOptions>(Json) ?? new SyncBridgeOptions();
+        var errors = SyncBridgeOptionsValidator.Validate(options);
+        if (errors.Count > 0)
+        {
+            return errors;
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        Directory.CreateDirectory(directory);
+        var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temp, root.ToJsonString(Json), cancellationToken);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temp))
+            {
+                File.Delete(temp);
+            }
+        }
+
+        return Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Finds the <c>SyncBridge</c> section regardless of the key casing.
+    /// </summary>
+    /// <param name="root">The root object.</param>
+    /// <returns>The section, or <see langword="null"/>.</returns>
+    private static JsonObject? FindSection(JsonObject? root)
+    {
+        var key = root?.Select(pair => pair.Key).FirstOrDefault(name => name.Equals(SyncBridgeOptions.SectionName, StringComparison.OrdinalIgnoreCase));
+        return key is null ? null : root![key] as JsonObject;
+    }
+
+    /// <summary>
+    /// Sets or removes a property, replacing an existing property with different casing.
+    /// </summary>
+    /// <param name="section">The section.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The value, or <see langword="null"/> to remove the property.</param>
+    private static void Set(JsonObject section, string name, object? value)
+    {
+        foreach (var existing in section.Select(pair => pair.Key).Where(key => key.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray())
+        {
+            section.Remove(existing);
+        }
+
+        switch (value)
+        {
+            case null:
+                break;
+            case int number:
+                section[name] = number;
+                break;
+            default:
+                section[name] = value.ToString();
+                break;
+        }
+    }
+}

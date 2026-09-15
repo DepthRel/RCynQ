@@ -1,0 +1,48 @@
+using CliFx;
+using CliFx.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace RCynQ.Cli.Hosting;
+
+/// <summary>
+/// Builds the CliFx application with all commands.
+/// </summary>
+public static class CliHost
+{
+    /// <summary>
+    /// The executable name shown in help.
+    /// </summary>
+    public const string ExecutableName = "rcynq";
+
+    /// <summary>
+    /// Creates the application.
+    /// </summary>
+    /// <param name="contexts">The node context factory handed to commands.</param>
+    /// <param name="console">The console, or <see langword="null"/> for the system console.</param>
+    /// <returns>The application.</returns>
+    public static CliApplication CreateApplication(INodeContextFactory contexts, IConsole? console = null)
+    {
+        ArgumentNullException.ThrowIfNull(contexts);
+        var services = new ServiceCollection();
+        services.AddSingleton(contexts);
+        foreach (var command in typeof(CliHost).Assembly.GetTypes().Where(type => typeof(ICommand).IsAssignableFrom(type) && type is { IsAbstract: false, IsInterface: false }))
+        {
+            services.AddTransient(command);
+        }
+
+        var provider = services.BuildServiceProvider();
+        var builder = new CliApplicationBuilder()
+            .AddCommandsFromThisAssembly()
+            .SetExecutableName(ExecutableName)
+            .SetTitle("RCynQ")
+            .SetDescription("Headless management of an RCynQ (SyncBridge) node: role, links, transports, live patches, Git channel and diagnostics.")
+            .UseTypeActivator(type => provider.GetRequiredService(type));
+
+        if (console is not null)
+        {
+            builder.UseConsole(console);
+        }
+
+        return builder.Build();
+    }
+}

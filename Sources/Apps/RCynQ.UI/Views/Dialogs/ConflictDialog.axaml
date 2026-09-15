@@ -1,0 +1,68 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:patches="using:RCynQ.Core.Patches"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.ConflictDialog"
+                     x:DataType="vm:ConflictDialogViewModel"
+                     Title="Конфликт синхронизации"
+                     Width="640" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <dialogs:DialogWindow.Styles>
+    <Style Selector="Button.choice">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="14,10" />
+    </Style>
+  </dialogs:DialogWindow.Styles>
+
+  <StackPanel Margin="22" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <controls:IconView IconKey="Icon.Alert" Width="22" Height="22" Foreground="{StaticResource WarningBrush}" />
+      <TextBlock Classes="page-title" Text="Конфликт при применении патча" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock Classes="secondary" Text="{Binding Header}" TextWrapping="Wrap" />
+
+    <Border Classes="card" MaxHeight="220" IsVisible="{Binding Files.Count}">
+      <ScrollViewer>
+        <ItemsControl Classes="rows" ItemsSource="{Binding Files}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="patches:ConflictFile">
+              <Border Classes="row" Padding="14,7">
+                <StackPanel Spacing="2">
+                  <TextBlock Classes="mono" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="muted" FontSize="12" Text="{Binding Detail}" TextWrapping="Wrap"
+                             IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Spacing="8">
+      <Button Classes="outline choice" Command="{Binding KeepLocalCommand}">
+        <StackPanel Spacing="2">
+          <TextBlock Text="Оставить локальные изменения" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Патч будет отклонён, рабочая копия не изменится." />
+        </StackPanel>
+      </Button>
+      <Button Classes="outline choice" Command="{Binding ApplyIncomingCommand}">
+        <StackPanel Spacing="2">
+          <TextBlock Text="Применить входящие поверх локальных" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Конфликтующие файлы будут сохранены в резервную копию и перезаписаны." />
+        </StackPanel>
+      </Button>
+      <Button Classes="outline choice" Command="{Binding UseGitCommand}">
+        <StackPanel Spacing="2">
+          <TextBlock Text="Использовать Git" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="git apply --3way; неразрешённые фрагменты останутся для ручного разрешения." />
+        </StackPanel>
+      </Button>
+    </StackPanel>
+
+    <Button Classes="outline" HorizontalAlignment="Right" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
+  </StackPanel>
+</dialogs:DialogWindow>
