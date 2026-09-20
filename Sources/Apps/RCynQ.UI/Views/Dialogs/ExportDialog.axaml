@@ -101,10 +101,16 @@
               </Button>
             </Grid>
 
-            <StackPanel Spacing="2">
+            <StackPanel Spacing="2" IsVisible="{Binding IsSshEndpoint}">
               <CheckBox IsChecked="{Binding IncludeHostKey}" IsEnabled="{Binding HasHostKey}" Content="Включить отпечаток ключа хоста sshd" />
               <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap"
                          Text="{Binding HostKeyFingerprint, FallbackValue='не определён', TargetNullValue='не определён'}" />
+            </StackPanel>
+
+            <StackPanel Spacing="2" IsVisible="{Binding IsDirectEndpoint}">
+              <TextBlock Text="Отпечаток TLS-сертификата узла (попадёт в файл, сосед проверит его при подключении)" TextWrapping="Wrap" />
+              <SelectableTextBlock Classes="mono muted" FontSize="11.5" TextWrapping="Wrap"
+                                   Text="{Binding TlsFingerprint, FallbackValue='не определён', TargetNullValue='не определён'}" />
             </StackPanel>
           </StackPanel>
         </Border>

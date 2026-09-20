@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using RCynQ.Core.Enums;
@@ -30,6 +31,29 @@ public static class SyncBridgeOptionsValidator
         if (options.ListenPort is < 1 or > 65535)
         {
             errors.Add($"ListenPort {options.ListenPort} must be in range 1..65535.");
+        }
+
+        if (options.Endpoint.Port is < 1 or > 65535)
+        {
+            errors.Add($"Endpoint.Port {options.Endpoint.Port} must be in range 1..65535.");
+        }
+
+        if (options.Endpoint.Mode == EndpointMode.Direct)
+        {
+            if (options.Role == NodeRole.Mediator)
+            {
+                errors.Add("A Mediator relays its neighbours through its SSH server, so Endpoint.Mode must be SshTunnel.");
+            }
+
+            if (options.Endpoint.Port == options.ListenPort)
+            {
+                errors.Add("Endpoint.Port must differ from ListenPort: the local API keeps its own loopback port.");
+            }
+
+            if (!IPAddress.TryParse(options.Endpoint.BindAddress, out _))
+            {
+                errors.Add($"Endpoint.BindAddress '{options.Endpoint.BindAddress}' is not a valid IP address.");
+            }
         }
 
         if (options.PatchMaxAgeMinutes < 1)

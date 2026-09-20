@@ -56,6 +56,20 @@
           </StackPanel>
         </Grid>
 
+        <Grid ColumnDefinitions="*,14,140" IsVisible="{Binding IsEndpointModeVisible}">
+          <StackPanel>
+            <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
+            <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" IsVisible="{Binding IsEndpointPortVisible}">
+            <TextBlock Classes="field-label" Text="Порт подключений" />
+            <NumericUpDown Value="{Binding EndpointPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
+          </StackPanel>
+        </Grid>
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding EndpointHint}" IsVisible="{Binding IsEndpointModeVisible}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !IsEndpointModeVisible}"
+                   Text="Посредник всегда работает через SSH-сервер этого компьютера: через него проходят соединения соседей. Включите SSH-сервер (шаг 0.2 инструкции)." />
+
         <Border Classes="banner error" IsVisible="{Binding HasError}">
           <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
         </Border>

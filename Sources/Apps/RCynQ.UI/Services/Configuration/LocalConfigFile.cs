@@ -88,6 +88,11 @@ public static class LocalConfigFile
         Set(section, nameof(SyncBridgeOptions.WorkdirPath), values.Role == NodeRole.Source ? values.Path.Trim() : null);
         Set(section, nameof(SyncBridgeOptions.LinkToken), values.Role == NodeRole.Mediator || string.IsNullOrWhiteSpace(values.LinkToken) ? null : values.LinkToken.Trim());
 
+        var endpoint = Nested(section, nameof(SyncBridgeOptions.Endpoint));
+        Set(endpoint, nameof(EndpointOptions.Mode), values.EndpointMode.ToString());
+        Set(endpoint, nameof(EndpointOptions.BindAddress), values.EndpointBindAddress.Trim());
+        Set(endpoint, nameof(EndpointOptions.Port), values.EndpointPort);
+
         var options = section.Deserialize<SyncBridgeOptions>(Json) ?? new SyncBridgeOptions();
         var errors = SyncBridgeOptionsValidator.Validate(options);
         if (errors.Count > 0)
@@ -129,6 +134,36 @@ public static class LocalConfigFile
     /// Sets or removes a property, replacing an existing property with different casing.
     /// </summary>
     /// <param name="section">The section.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The value, or <see langword="null"/> to remove the property.</param>
+    /// <summary>
+    /// Gets a nested object of the section, creating it when it is missing or holds something else.
+    /// </summary>
+    /// <param name="section">The section.</param>
+    /// <param name="name">The property name.</param>
+    /// <returns>The nested object, with any settings the user wrote by hand preserved.</returns>
+    private static JsonObject Nested(JsonObject section, string name)
+    {
+        var key = section.Select(pair => pair.Key).FirstOrDefault(existing => existing.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (key is not null && section[key] is JsonObject existingObject)
+        {
+            return existingObject;
+        }
+
+        if (key is not null)
+        {
+            section.Remove(key);
+        }
+
+        var created = new JsonObject();
+        section[name] = created;
+        return created;
+    }
+
+    /// <summary>
+    /// Sets or removes one property, replacing a property whose name differs only in case.
+    /// </summary>
+    /// <param name="section">The object to change.</param>
     /// <param name="name">The property name.</param>
     /// <param name="value">The value, or <see langword="null"/> to remove the property.</param>
     private static void Set(JsonObject section, string name, object? value)

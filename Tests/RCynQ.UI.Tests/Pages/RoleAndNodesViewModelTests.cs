@@ -1,7 +1,10 @@
 using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Api;
+using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.UI.Services.Configuration;
+using RCynQ.UI.ViewModels.Items;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Hosting;
@@ -95,6 +98,96 @@ public sealed class RoleAndNodesViewModelTests
         await _api.Received(1).DeleteLinkAsync(link.Id, Arg.Any<CancellationToken>());
         page.HasNoNodes.Should().BeTrue();
     }
+
+    /// <summary>
+    /// Verifies that the shared token is shown hidden, can be revealed and copied, and that a Mediator has none.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Link_Token_Is_Shown_And_Copied()
+    {
+        var settings = Substitute.For<ILocalNodeSettings>();
+        settings.Read().Returns(new SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = "/srv/repo", LinkToken = "secret-token" });
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
+        _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
+        _dialogs.CopyToClipboardAsync(Arg.Any<string>()).Returns(true);
+        var page = new RoleAndNodesViewModel(_api, _dialogs, null, settings);
+
+        await page.RefreshAsync();
+
+        page.AreSettingsVisible.Should().BeTrue();
+        page.NodeId.Should().Be("dest-1");
+        page.LinkToken.Should().Be("secret-token");
+        page.HasLinkToken.Should().BeTrue();
+        page.IsTokenRevealed.Should().BeFalse("the token starts hidden");
+        page.TokenMaskChar.Should().Be('•');
+        page.AreSettingsDirty.Should().BeFalse();
+
+        page.RevealTokenCommand.Execute(null);
+        page.IsTokenRevealed.Should().BeTrue();
+        page.TokenMaskChar.Should().Be('\0');
+        page.RevealTokenText.Should().Be("Скрыть");
+
+        await page.CopyTokenCommand.ExecuteAsync(null);
+        await _dialogs.Received(1).CopyToClipboardAsync("secret-token");
+        page.InfoMessage.Should().Contain("совпадать");
+
+        page.SelectedRole = NodeRole.Mediator;
+        page.HasLinkToken.Should().BeFalse("a Mediator has no shared token");
+    }
+
+    /// <summary>
+    /// Verifies that a new token is created only after confirmation and that saving restarts the service.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Settings_Are_Saved_And_Service_Restarted()
+    {
+        var settings = Substitute.For<ILocalNodeSettings>();
+        settings.Read().Returns(new SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = "/srv/repo", ListenPort = 18443, LinkToken = "old-token" });
+        settings.SaveAsync(Arg.Any<NodeSetupValues>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
+        _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
+        var page = new RoleAndNodesViewModel(_api, _dialogs, null, settings);
+        await page.RefreshAsync();
+        var restarts = 0;
+        page.RestartRequested += (_, _) => restarts++;
+
+        _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        await page.NewTokenCommand.ExecuteAsync(null);
+        page.LinkToken.Should().Be("old-token", "a refused confirmation keeps the token");
+
+        _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        await page.NewTokenCommand.ExecuteAsync(null);
+        page.LinkToken.Should().NotBe("old-token").And.NotBeEmpty();
+        page.AreSettingsDirty.Should().BeTrue();
+
+        page.SelectedEndpointMode = EndpointModeOption.For(EndpointMode.Direct);
+        page.EndpointPort = 18444;
+        await page.SaveSettingsCommand.ExecuteAsync(null);
+
+        await settings.Received(1).SaveAsync(
+            Arg.Is<NodeSetupValues>(values => values.LinkToken == page.LinkToken
+                && values.EndpointMode == EndpointMode.Direct
+                && values.EndpointPort == 18444
+                && values.NodeId == "dest-1"
+                && values.Role == NodeRole.Dest
+                && values.Path == "/srv/repo"),
+            Arg.Any<CancellationToken>());
+        page.AreSettingsDirty.Should().BeFalse();
+        restarts.Should().Be(1);
+
+        settings.SaveAsync(Arg.Any<NodeSetupValues>(), Arg.Any<CancellationToken>()).Returns(new[] { "Endpoint.Port 18443 …" });
+        await page.SaveSettingsCommand.ExecuteAsync(null);
+        page.ErrorMessage.Should().Contain("Endpoint.Port");
+    }
+
+    /// <summary>
+    /// Verifies that the settings card stays hidden when the configuration file is unavailable.
+    /// </summary>
+    [Fact]
+    public void Settings_Card_Needs_The_Config_File()
+        => new RoleAndNodesViewModel(_api, _dialogs).AreSettingsVisible.Should().BeFalse();
 
     /// <summary>
     /// Verifies that neighbour access asks for administrator rights only after confirmation.

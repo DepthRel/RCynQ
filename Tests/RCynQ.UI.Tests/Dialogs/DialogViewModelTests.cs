@@ -4,6 +4,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Dialogs;
+using RCynQ.UI.ViewModels.Items;
 using Xunit;
 
 namespace RCynQ.UI.Tests.Dialogs;
@@ -77,9 +78,13 @@ public sealed class DialogViewModelTests
             Role = NodeRole.Dest,
             Host = "10.8.0.2",
             SshUser = "rcynq",
-            Transport = TransportKind.AmneziaWG,
+            SelectedTransport = TransportOption.For(TransportKind.AmneziaWG),
             ConfigPath = "/etc/amnezia/amneziawg/awg0.conf"
         };
+
+        dialog.Transport.Should().Be(TransportKind.AmneziaWG);
+        dialog.NeedsConfigPath.Should().BeTrue();
+        TransportOption.For(TransportKind.Direct).Title.Should().Be("Обычная сеть (без VPN)", "'Direct' means no VPN tunnel, not 'no SSH'");
 
         dialog.ConfirmCommand.Execute(null);
 

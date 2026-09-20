@@ -4,6 +4,7 @@ using NSubstitute;
 using RCynQ.Core.Enums;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.ViewModels.Items;
 using RCynQ.UI.ViewModels.Setup;
 using Xunit;
 
@@ -65,6 +66,69 @@ public sealed class SetupViewModelTests : IDisposable
         options.LinkToken.Should().Be("token-123");
         options.Ssh.IdentityFile.Should().Be("/keys/id");
         options.Chain.Select(link => link.Name).Should().Equal("relay", "laptop");
+    }
+
+    /// <summary>
+    /// Verifies that the connection mode chosen in the setup reaches the configuration file and comes back.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Endpoint_Mode_Is_Written_And_Loaded()
+    {
+        var path = Path.Combine(_root, "syncbridge.json");
+        var setup = new SetupViewModel(path, Substitute.For<IDialogService>());
+        setup.Load(null, null);
+
+        setup.SelectedEndpointMode.Value.Should().Be(EndpointMode.SshTunnel, "the tunnel stays the default");
+        setup.IsEndpointPortVisible.Should().BeFalse();
+
+        setup.SelectedRole = NodeRole.Dest;
+        setup.Path = "/srv/repo";
+        setup.SelectedEndpointMode = EndpointModeOption.For(EndpointMode.Direct);
+        setup.IsEndpointPortVisible.Should().BeTrue();
+        setup.EndpointPort = 18999;
+        await setup.SaveCommand.ExecuteAsync(null);
+
+        setup.HasError.Should().BeFalse(setup.Error);
+        var written = LocalConfigFile.TryLoad(path)!;
+        written.Endpoint.Mode.Should().Be(EndpointMode.Direct);
+        written.Endpoint.Port.Should().Be(18999);
+        written.Endpoint.BindAddress.Should().Be("0.0.0.0");
+
+        var reopened = new SetupViewModel(path, Substitute.For<IDialogService>());
+        reopened.Load(written, null);
+        reopened.SelectedEndpointMode.Value.Should().Be(EndpointMode.Direct);
+        reopened.EndpointPort.Should().Be(18999);
+
+        // A Mediator relays through its SSH server: the choice is hidden and never saved as Direct.
+        reopened.SelectedRole = NodeRole.Mediator;
+        reopened.IsEndpointModeVisible.Should().BeFalse();
+        reopened.IsEndpointPortVisible.Should().BeFalse();
+        await reopened.SaveCommand.ExecuteAsync(null);
+        reopened.HasError.Should().BeFalse(reopened.Error);
+        LocalConfigFile.TryLoad(path)!.Endpoint.Mode.Should().Be(EndpointMode.SshTunnel);
+
+        var mediatorDirect = await LocalConfigFile.SaveAsync(
+            Path.Combine(_root, "mediator.json"),
+            new NodeSetupValues("mediator-1", "M", NodeRole.Mediator, string.Empty, 18443, string.Empty, EndpointMode.Direct, 18444));
+        mediatorDirect.Should().Contain(error => error.Contains("Mediator"), "the configuration check refuses a Mediator without SSH");
+    }
+
+    /// <summary>
+    /// Verifies that a direct endpoint port colliding with the service port is refused.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Endpoint_Port_Must_Differ_From_Service_Port()
+    {
+        var path = Path.Combine(_root, "clash.json");
+
+        var errors = await LocalConfigFile.SaveAsync(
+            path,
+            new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18443, "token", EndpointMode.Direct, 18443));
+
+        errors.Should().ContainSingle().Which.Should().Contain("Endpoint.Port");
+        File.Exists(path).Should().BeFalse();
     }
 
     /// <summary>

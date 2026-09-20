@@ -18,9 +18,11 @@ using RCynQ.Service.Pipelines;
 using RCynQ.Service.Security;
 using RCynQ.Service.Startup;
 using RCynQ.Ssh.DependencyInjection;
+using RCynQ.Core.Enums;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.DependencyInjection;
 using RCynQ.Sync.Diagnostics.Endpoint;
+using RCynQ.Sync.Endpoint;
 using RCynQ.Transports.Abstractions.DependencyInjection;
 using RCynQ.Transports.AmneziaWG.DependencyInjection;
 using RCynQ.Transports.Direct.DependencyInjection;
@@ -146,9 +148,23 @@ public static class ServiceHostBuilder
             .WriteTo.File(Path.Combine(paths.LogsDirectory, "rcynq-service-.log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
             .WriteTo.Sink(provider.GetRequiredService<InMemoryLogSink>()));
 
+        // In direct mode neighbours have no SSH tunnel to this node, so a second listener is opened on the network
+        // with the node's own certificate; the local API stays on loopback and keeps its token.
+        var endpointCertificate = options.Endpoint.Mode == EndpointMode.Direct
+            ? NodeCertificateStore.GetOrCreate(paths, options.NodeId)
+            : null;
+
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.Listen(IPAddress.Loopback, options.ListenPort);
+            if (endpointCertificate is not null)
+            {
+                kestrel.Listen(
+                    IPAddress.Parse(options.Endpoint.BindAddress),
+                    options.Endpoint.Port,
+                    listen => listen.UseHttps(endpointCertificate));
+            }
+
             kestrel.Limits.MaxRequestBodySize = MaxRequestBodyBytes;
         });
 
@@ -158,6 +174,11 @@ public static class ServiceHostBuilder
 
         // Create the local API token eagerly so the UI and other local clients can read it before the first request.
         app.Services.GetRequiredService<ApiTokenStore>().GetOrCreate();
+        if (endpointCertificate is not null)
+        {
+            app.UseMiddleware<PublicEndpointMiddleware>(new PublicEndpointOptions(options.Endpoint.Port));
+        }
+
         app.UseMiddleware<ApiTokenMiddleware>();
         app.MapRCynQApi();
         app.MapHub<SyncBridgeHub>(ApiRoutes.Hub);

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
+using RCynQ.UI.ViewModels.Items;
 
 namespace RCynQ.UI.ViewModels.Dialogs;
 
@@ -39,10 +40,10 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
     [ObservableProperty]
     private decimal _priority = 10;
 
-    /// <summary>The transport.</summary>
+    /// <summary>The transport: how the neighbour is reachable over the network.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(NeedsConfigPath))]
-    private TransportKind _transport = TransportKind.Direct;
+    [NotifyPropertyChangedFor(nameof(NeedsConfigPath), nameof(Transport))]
+    private TransportOption _selectedTransport = TransportOption.All[0];
 
     /// <summary>The AmneziaWG configuration path.</summary>
     [ObservableProperty]
@@ -56,7 +57,10 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
     public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
 
     /// <summary>Gets the selectable transports.</summary>
-    public IReadOnlyList<TransportKind> Transports { get; } = new[] { TransportKind.Direct, TransportKind.AmneziaWG };
+    public IReadOnlyList<TransportOption> Transports { get; } = TransportOption.All;
+
+    /// <summary>Gets the selected transport.</summary>
+    public TransportKind Transport => SelectedTransport.Value;
 
     /// <summary>Gets a value indicating whether the AmneziaWG configuration path is needed.</summary>
     public bool NeedsConfigPath => Transport == TransportKind.AmneziaWG;

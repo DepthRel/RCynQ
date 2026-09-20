@@ -18,6 +18,7 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>The transport currently in use.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveTransportText))]
     private TransportKind _activeTransport;
 
     /// <summary>The last status message.</summary>
@@ -37,7 +38,9 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
         Address = $"{link.SshUser}@{link.Host}:{link.SshPort}";
         Transport = link.Transport;
         _activeTransport = link.Transport;
-        FallbackText = link.FallbackTransports.Count == 0 ? "без резерва" : "резерв: " + string.Join(", ", link.FallbackTransports);
+        FallbackText = link.FallbackTransports.Count == 0
+            ? "без резерва"
+            : "резерв: " + string.Join(", ", link.FallbackTransports.Select(DisplayText.Transport));
     }
 
     /// <summary>Gets the link identifier.</summary>
@@ -57,6 +60,9 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>Gets the fallback description.</summary>
     public string FallbackText { get; }
+
+    /// <summary>Gets the label of the active transport.</summary>
+    public string ActiveTransportText => DisplayText.Transport(ActiveTransport);
 
     /// <summary>Gets a value indicating whether the tunnel can be started or stopped (not for Direct).</summary>
     public bool CanToggle => Transport != TransportKind.Direct;

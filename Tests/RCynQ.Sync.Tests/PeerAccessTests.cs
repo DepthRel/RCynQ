@@ -85,6 +85,47 @@ public sealed class PeerAccessTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a mediator lets Source reach the TLS port of a Dest that runs no SSH server.
+    /// </summary>
+    [Fact]
+    public void Mediator_Forwards_To_The_Tls_Port_Of_A_Dest_Without_Ssh()
+    {
+        var mediator = new NodeConfig(new NodeId("mediator-1"), "Mediator", NodeRole.Mediator, null, null);
+        var source = Peer("source-1", NodeRole.Source, "10.8.1.3", SourceKey);
+        var dest = new PeerDescriptor(
+            new NodeId("dest-1"), "dest-1", NodeRole.Dest, "192.168.10.20", 22, "user", sshPublicKey: DestKey,
+            endpointMode: EndpointMode.Direct, tlsFingerprint: "SHA256:" + new string('A', 64), endpointPort: 18444);
+
+        var plan = PeerAccessPlanner.Plan(mediator, 18443, new[] { source, dest }, allowGitCommand: true);
+
+        plan.Entries.Single(entry => entry.Peer.Id == source.Id).Line.Should()
+            .Contain("permitopen=\"192.168.10.20:18444\"", "the Dest has no SSH server, only its TLS port")
+            .And.NotContain("192.168.10.20:22");
+    }
+
+    /// <summary>
+    /// Verifies that a node without an SSH server does not touch authorized_keys.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Node_Without_Ssh_Server_Needs_No_Authorized_Keys()
+    {
+        var dest = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, "/srv/repo", null);
+        var peers = Substitute.For<IPeerRepository>();
+        peers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { Peer("source-1", NodeRole.Source, "10.8.1.3", SourceKey) });
+        var options = new SyncBridgeOptions { Endpoint = new EndpointOptions { Mode = EndpointMode.Direct } };
+        var adminPath = Path.Combine(_root, "admin", AuthorizedKeysLocation.AdministratorsFileName);
+        var service = new PeerAccessService(dest, options, peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
+
+        var result = await service.ApplyAsync();
+
+        result.RequiresElevation.Should().BeFalse("no UAC prompt for a file nobody reads");
+        result.EntryCount.Should().Be(0);
+        result.Message.Should().Contain("not needed");
+        File.Exists(adminPath).Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that the service writes the lines and does not touch the administrators file without elevation.
     /// </summary>
     /// <returns>A task representing the test.</returns>

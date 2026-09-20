@@ -88,6 +88,30 @@ public sealed class TransportTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a peer without an SSH server is checked on its TLS port, with an advice that does not mention sshd.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Direct_Checks_The_Tls_Port_Of_A_Peer_Without_Ssh()
+    {
+        var peer = new PeerDescriptor(
+            new NodeId("dest"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq",
+            endpointMode: EndpointMode.Direct, tlsFingerprint: "SHA256:" + new string('B', 64), endpointPort: 18444);
+        var config = new ChainLinkConfig(Guid.NewGuid(), "to-dest", TransportKind.Direct, peer, 0, 18444, 0);
+        _probe.CanConnectAsync("dest.internal", 18444, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var link = new DirectLink(config, _probe, TimeProvider.System);
+        await link.StartAsync();
+
+        link.CurrentState.Status.Should().Be(LinkStatus.Ready);
+        await _probe.DidNotReceive().CanConnectAsync("dest.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+
+        _probe.CanConnectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false);
+        var diagnosis = await link.DiagnoseAsync();
+        diagnosis.SuggestedFix.Should().Contain("18444").And.NotContain("sshd");
+    }
+
+    /// <summary>
     /// Verifies the AmneziaWG CLI commands and status parsing on Linux-style tools.
     /// </summary>
     /// <returns>A task representing the test.</returns>

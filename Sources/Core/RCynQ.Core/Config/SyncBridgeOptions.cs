@@ -84,6 +84,11 @@ public sealed class SyncBridgeOptions
     public SshClientOptions Ssh { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets how neighbours reach the patch endpoint of this node.
+    /// </summary>
+    public EndpointOptions Endpoint { get; set; } = new();
+
+    /// <summary>
     /// Gets or sets the chain links.
     /// </summary>
     public List<ChainLinkOptions> Chain { get; set; } = new();

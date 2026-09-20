@@ -12,10 +12,14 @@ public sealed class AddressOptionViewModel
     /// Initializes a new instance of the <see cref="AddressOptionViewModel"/> class.
     /// </summary>
     /// <param name="info">The detected address.</param>
-    public AddressOptionViewModel(NetworkAddressInfo info)
+    public AddressOptionViewModel(NetworkAddressInfo info, bool checkedOnOwnPort = false)
     {
         Info = info ?? throw new ArgumentNullException(nameof(info));
+        _checkedOnOwnPort = checkedOnOwnPort;
     }
+
+    /// <summary>Whether reachability was checked on the node's TLS port rather than on its SSH server.</summary>
+    private readonly bool _checkedOnOwnPort;
 
     /// <summary>Gets the detected address.</summary>
     public NetworkAddressInfo Info { get; }
@@ -33,5 +37,11 @@ public sealed class AddressOptionViewModel
     public bool SshReachable => Info.SshReachable;
 
     /// <summary>Gets the SSH status label.</summary>
-    public string StatusText => Info.SshReachable ? "SSH отвечает" : "SSH не отвечает";
+    public string StatusText => (_checkedOnOwnPort, Info.SshReachable) switch
+    {
+        (true, true) => "порт RCynQ отвечает",
+        (true, false) => "порт RCynQ не отвечает",
+        (false, true) => "SSH отвечает",
+        _ => "SSH не отвечает"
+    };
 }

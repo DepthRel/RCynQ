@@ -128,8 +128,15 @@ public sealed class GitChannelService
             throw new SyncBridgeException(ex.Message, ex);
         }
 
+        if (route.Endpoint.Peer.EndpointMode != EndpointMode.SshTunnel)
+        {
+            throw new SyncBridgeException(
+                $"Dest peer {route.Endpoint.Peer.Id} accepts connections on its own port and runs no SSH server, and branches are fetched over git-over-ssh. "
+                + "Sending and receiving changes works; to fetch branches too, install an SSH server on the Dest node.");
+        }
+
         var repoPath = route.Endpoint.Peer.GitRepoPath
             ?? throw new SyncBridgeException($"Dest peer {route.Endpoint.Peer.Id} has no repository path; import its exported configuration.");
-        return (_node.EffectiveWorkdir!, GitRepositoryService.BuildSshUrl(route.Target, repoPath), _ssh.BuildGitSshCommand(route.Jumps));
+        return (_node.EffectiveWorkdir!, GitRepositoryService.BuildSshUrl(route.Target!, repoPath), _ssh.BuildGitSshCommand(route.Jumps));
     }
 }

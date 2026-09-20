@@ -71,6 +71,25 @@ public static class DisplayText
     };
 
     /// <summary>
+    /// Gets the label of a transport: how the neighbour becomes reachable over the network.
+    /// </summary>
+    /// <remarks>
+    /// The transport is not the same thing as <see cref="EndpointMode"/>, which says how a node accepts
+    /// connections. The word "Direct" in <see cref="TransportKind"/> means "no VPN tunnel", not "no SSH".
+    /// </remarks>
+    /// <param name="kind">The transport.</param>
+    /// <returns>The label.</returns>
+    public static string Transport(TransportKind kind) => kind switch
+    {
+        TransportKind.Direct => "Обычная сеть (без VPN)",
+        TransportKind.AmneziaWG => "AmneziaWG (VPN)",
+        TransportKind.WireGuard => "WireGuard (VPN)",
+        TransportKind.OpenConnect => "OpenConnect (VPN)",
+        TransportKind.Tailscale => "Tailscale (VPN)",
+        _ => kind.ToString()
+    };
+
+    /// <summary>
     /// Gets the label of a network address kind.
     /// </summary>
     /// <param name="kind">The kind.</param>
@@ -95,7 +114,9 @@ public static class DisplayText
         EnvironmentWarning.NoReachableAddress => "Ни на одном сетевом адресе SSH не отвечает. Проверьте, что sshd запущен и слушает внешние интерфейсы; файрвол и NAT между узлами отсюда не проверить.",
         EnvironmentWarning.NoSshPublicKey => "SSH-ключ узла не найден — создайте его кнопкой «Создать ключ».",
         EnvironmentWarning.ServicePortNotListening => "Порт сервиса RCynQ не отвечает.",
-        _ => "Не удалось прочитать ключи хоста sshd (ssh-keyscan)."
+        EnvironmentWarning.HostKeysUnavailable => "Не удалось прочитать ключи хоста sshd (ssh-keyscan).",
+        EnvironmentWarning.EndpointNotListening => "Порт RCynQ для соседей не отвечает ни на одном адресе. Проверьте, что сервис запущен в режиме «Без SSH-сервера», и разрешите порт во входящих правилах брандмауэра.",
+        _ => warning.ToString()
     };
 
     /// <summary>

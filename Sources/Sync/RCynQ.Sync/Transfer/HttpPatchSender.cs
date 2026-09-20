@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
@@ -12,6 +14,7 @@ using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
+using RCynQ.Sync.Endpoint;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
 
@@ -84,6 +87,16 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     private readonly HttpPatchSenderOptions _options;
 
     /// <summary>
+    /// Creates a handler that accepts only the certificate with the given pinned fingerprint.
+    /// </summary>
+    private readonly Func<string, HttpMessageHandler> _pinnedHandlers;
+
+    /// <summary>
+    /// The clients per pinned fingerprint.
+    /// </summary>
+    private readonly Dictionary<string, HttpClient> _pinnedClients = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="HttpPatchSender"/> class.
     /// </summary>
     /// <param name="handler">The HTTP handler; production code uses a handler with the system proxy disabled.</param>
@@ -93,6 +106,10 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <param name="tokens">The link token provider.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The options.</param>
+    /// <param name="pinnedHandlers">
+    /// Creates the handler used for a peer that accepts connections on its own TLS port, given its pinned
+    /// fingerprint; <see langword="null"/> uses a handler that trusts that certificate and no other.
+    /// </param>
     public HttpPatchSender(
         HttpMessageHandler handler,
         ILocalForwardManager forwards,
@@ -100,8 +117,10 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         PatchEnvelopeSerializer serializer,
         LinkTokenProvider tokens,
         NodeConfig node,
-        HttpPatchSenderOptions options)
+        HttpPatchSenderOptions options,
+        Func<string, HttpMessageHandler>? pinnedHandlers = null)
     {
+        _pinnedHandlers = pinnedHandlers ?? PinnedHandler;
         _http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
         _forwards = forwards;
         _signatures = signatures;
@@ -110,6 +129,51 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         _node = node;
         _options = options;
     }
+
+    /// <summary>
+    /// Gets the client for a destination: the shared one for loopback endpoints, a pinned one per fingerprint.
+    /// </summary>
+    /// <param name="tlsFingerprint">The pinned fingerprint, or <see langword="null"/>.</param>
+    /// <returns>The client.</returns>
+    private HttpClient Client(string? tlsFingerprint)
+    {
+        if (tlsFingerprint is null)
+        {
+            return _http;
+        }
+
+        lock (_pinnedClients)
+        {
+            if (!_pinnedClients.TryGetValue(tlsFingerprint, out var client))
+            {
+                client = new HttpClient(_pinnedHandlers(tlsFingerprint)) { Timeout = Timeout.InfiniteTimeSpan };
+                _pinnedClients[tlsFingerprint] = client;
+            }
+
+            return client;
+        }
+    }
+
+    /// <summary>
+    /// Creates a handler that accepts exactly one certificate and ignores the certificate authorities of the system.
+    /// </summary>
+    /// <param name="tlsFingerprint">The pinned fingerprint.</param>
+    /// <returns>The handler.</returns>
+    /// <remarks>
+    /// The peer signs its own certificate, so the usual chain and name checks say nothing. What matters is that the
+    /// certificate is the one published in the peer's export file, which is what this check compares.
+    /// </remarks>
+    private static HttpMessageHandler PinnedHandler(string tlsFingerprint)
+        => new SocketsHttpHandler
+        {
+            UseProxy = false,
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                    certificate is not null
+                    && NodeCertificateStore.Matches(new X509Certificate2(certificate), tlsFingerprint)
+            }
+        };
 
     /// <inheritdoc />
     public async Task<PatchApplyResult> SendAsync(PatchEnvelope envelope, IReadOnlyList<ChainLinkConfig> chain, CancellationToken cancellationToken = default)
@@ -139,14 +203,20 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         }
 
         var body = _serializer.Serialize(envelope);
-        var port = await _forwards.StartAsync(route.Target, route.Jumps, route.Endpoint.LocalPort, "127.0.0.1", route.Endpoint.RemotePort, cancellationToken);
+
+        // A peer without an SSH server is reached on its own TLS port: through a forward that stops at the mediator,
+        // or straight over the network when there is no mediator.
+        var port = route.UsesSsh
+            ? await _forwards.StartAsync(route.Target!, route.Jumps, route.Endpoint.LocalPort, route.RemoteHost, route.RemotePort, cancellationToken)
+            : route.RemotePort;
+        var host = route.UsesSsh ? "127.0.0.1" : route.RemoteHost;
         try
         {
             for (var attempt = 1; ; attempt++)
             {
                 try
                 {
-                    return await PostAsync(port, body, token, attempt, envelope.Id, cancellationToken);
+                    return await PostAsync(host, port, route.TlsFingerprint, body, token, attempt, envelope.Id, cancellationToken);
                 }
                 catch (Exception ex) when (attempt == 1 && IsTransient(ex, cancellationToken))
                 {
@@ -156,18 +226,37 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         }
         catch (Exception ex) when (IsTransient(ex, cancellationToken))
         {
-            throw new SyncBridgeException($"Patch {envelope.Id} could not be delivered to {route.Target}: {ex.Message}", ex);
+            var destination = route.UsesTls ? $"{route.Endpoint.Peer.Id} ({route.RemoteHost}:{route.RemotePort})" : $"{route.Target}";
+            var hint = route.UsesTls && ex.GetBaseException() is System.Security.Authentication.AuthenticationException
+                ? " The certificate presented by the peer does not match the fingerprint from its export file; import the peer's current export."
+                : string.Empty;
+            throw new SyncBridgeException($"Patch {envelope.Id} could not be delivered to {destination}: {ex.Message}{hint}", ex);
         }
         finally
         {
-            await _forwards.StopAsync(port, CancellationToken.None);
+            if (route.UsesSsh)
+            {
+                await _forwards.StopAsync(port, CancellationToken.None);
+            }
         }
     }
 
     /// <summary>
     /// Disposes the HTTP client.
     /// </summary>
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        lock (_pinnedClients)
+        {
+            foreach (var client in _pinnedClients.Values)
+            {
+                client.Dispose();
+            }
+
+            _pinnedClients.Clear();
+        }
+    }
 
     /// <summary>
     /// Performs one POST attempt.
@@ -180,16 +269,26 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The peer's result.</returns>
     /// <exception cref="SyncBridgeException">The peer refused the patch or answered with an invalid body.</exception>
-    private async Task<PatchApplyResult> PostAsync(int port, byte[] body, string token, int attempt, Guid patchId, CancellationToken cancellationToken)
+    private async Task<PatchApplyResult> PostAsync(
+        string host,
+        int port,
+        string? tlsFingerprint,
+        byte[] body,
+        string token,
+        int attempt,
+        Guid patchId,
+        CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.RequestTimeout);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/patch") { Content = new ByteArrayContent(body) };
+        var scheme = tlsFingerprint is null ? "http" : "https";
+        var authority = host.Contains(':', StringComparison.Ordinal) && !host.StartsWith('[') ? $"[{host}]" : host;
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{scheme}://{authority}:{port}/patch") { Content = new ByteArrayContent(body) };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Headers.Add(NodeIdHeader, _node.Id.Value);
         request.Headers.Add(LinkTokenHeader, token);
 
-        using var response = await _http.SendAsync(request, timeout.Token);
+        using var response = await Client(tlsFingerprint).SendAsync(request, timeout.Token);
         var text = await response.Content.ReadAsStringAsync(timeout.Token);
         if (response.IsSuccessStatusCode)
         {

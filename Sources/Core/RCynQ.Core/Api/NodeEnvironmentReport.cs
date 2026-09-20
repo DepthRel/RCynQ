@@ -14,7 +14,10 @@ namespace RCynQ.Core.Api;
 /// <param name="SshPort">The port of the local SSH server that was probed.</param>
 /// <param name="SshdListening">Whether the local SSH server accepts connections.</param>
 /// <param name="ServicePortListening">Whether the RCynQ service port accepts connections.</param>
-/// <param name="Addresses">The usable local addresses, best candidates first.</param>
+/// <param name="Addresses">
+/// The usable local addresses, best candidates first. Their reachability is checked on the SSH port, or on the TLS
+/// endpoint port when <paramref name="EndpointMode"/> is <see cref="Enums.EndpointMode.Direct"/>.
+/// </param>
 /// <param name="SuggestedHost">The recommended host for the export, or <see langword="null"/>.</param>
 /// <param name="SshPublicKey">The SSH public key line of this node, or <see langword="null"/>.</param>
 /// <param name="SshPublicKeyPath">The file the public key was read from, or <see langword="null"/>.</param>
@@ -22,6 +25,9 @@ namespace RCynQ.Core.Api;
 /// <param name="HostKeyFingerprints">The SHA-256 fingerprints of the local SSH server host keys.</param>
 /// <param name="Warnings">The problems found.</param>
 /// <param name="ProbedAtUtc">The probe time.</param>
+/// <param name="EndpointMode">How the node accepts connections.</param>
+/// <param name="EndpointPort">The TLS endpoint port; <c>0</c> when the node uses its SSH server.</param>
+/// <param name="TlsFingerprint">The fingerprint of the node's TLS certificate, or <see langword="null"/>.</param>
 public sealed record NodeEnvironmentReport(
     string MachineName,
     string SshUser,
@@ -35,4 +41,7 @@ public sealed record NodeEnvironmentReport(
     string? SshKeyFingerprint,
     IReadOnlyList<string> HostKeyFingerprints,
     IReadOnlyList<EnvironmentWarning> Warnings,
-    DateTimeOffset ProbedAtUtc);
+    DateTimeOffset ProbedAtUtc,
+    EndpointMode EndpointMode = EndpointMode.SshTunnel,
+    int EndpointPort = 0,
+    string? TlsFingerprint = null);

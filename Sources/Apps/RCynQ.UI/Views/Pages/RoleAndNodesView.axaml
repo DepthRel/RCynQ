@@ -29,6 +29,65 @@
         </Grid>
       </Border>
 
+      <StackPanel IsVisible="{Binding AreSettingsVisible}">
+        <TextBlock Classes="section" Text="Параметры узла" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="14">
+
+            <StackPanel>
+              <TextBlock Classes="field-label" Text="Идентификатор узла" />
+              <TextBox Classes="mono" Text="{Binding NodeId}" IsReadOnly="True" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding HasLinkToken}">
+              <TextBlock Classes="field-label" Text="Общий ключ (link-токен)" />
+              <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <TextBox Classes="mono" Text="{Binding LinkToken}" PasswordChar="{Binding TokenMaskChar}"
+                         AutomationProperties.Name="Общий ключ" />
+                <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="{Binding RevealTokenText}"
+                        Command="{Binding RevealTokenCommand}" />
+                <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Content="Копировать"
+                        Command="{Binding CopyTokenCommand}" />
+                <Button Grid.Column="3" Classes="outline" Margin="8,0,0,0" Content="Создать новый"
+                        ToolTip.Tip="Создать новый ключ; его придётся прописать и на противоположном узле"
+                        Command="{Binding NewTokenCommand}" />
+              </Grid>
+              <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0"
+                         Text="Ключ должен совпадать на SOURCE и DEST: именно по нему принимающий узел решает, что изменения пришли от своей пары. Посреднику ключ не нужен." />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsEndpointModeVisible}">
+              <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
+              <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding EndpointHint}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding !IsEndpointModeVisible}">
+              <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
+              <TextBlock TextWrapping="Wrap"
+                         Text="Через SSH-сервер этого компьютера. Посредник всегда работает так: через его SSH-сервер соседи доходят друг до друга — и до SSH-сервера, и до порта RCynQ противоположного узла." />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsEndpointPortVisible}">
+              <TextBlock Classes="field-label" Text="Порт для прямых подключений" />
+              <NumericUpDown Value="{Binding EndpointPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0"
+                         Text="Порт нужно открыть во входящих правилах брандмауэра. Отпечаток сертификата попадёт в файл экспорта — сосед проверит его при подключении." />
+            </StackPanel>
+
+            <Border Classes="banner warning" IsVisible="{Binding AreSettingsDirty}">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Настройки применяются после перезапуска сервиса." TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="Сохранить"
+                        Command="{Binding SaveSettingsCommand}" />
+              </Grid>
+            </Border>
+
+            <TextBlock Classes="muted mono" TextWrapping="Wrap" Text="{Binding ConfigPath}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <StackPanel>
         <TextBlock Classes="section" Text="Узлы цепочки" />
         <Border Classes="card">

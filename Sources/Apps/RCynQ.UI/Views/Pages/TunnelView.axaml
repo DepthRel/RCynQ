@@ -18,7 +18,7 @@
               <Grid ColumnDefinitions="1.3*,1.4*,1.1*,110,Auto">
                 <TextBlock Text="Звено" />
                 <TextBlock Grid.Column="1" Text="SSH" />
-                <TextBlock Grid.Column="2" Text="Транспорт" />
+                <TextBlock Grid.Column="2" Text="Сеть до узла" />
                 <TextBlock Grid.Column="3" Text="Статус" />
               </Grid>
             </Border>
@@ -34,7 +34,7 @@
                       </StackPanel>
                       <TextBlock Grid.Column="1" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
                       <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="secondary" Text="{Binding ActiveTransport}" />
+                        <TextBlock Classes="secondary" Text="{Binding ActiveTransportText}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Classes="muted" FontSize="12" Text="{Binding FallbackText}" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
                       <TextBlock Grid.Column="3" Classes="status"

@@ -4,7 +4,9 @@ using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Security;
+using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Config;
+using RCynQ.Core.Enums;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
 using RCynQ.Sync.Baseline;
@@ -64,11 +66,32 @@ public static class SyncServiceCollectionExtensions
             new SocketsHttpHandler { UseProxy = false }));
         services.TryAddSingleton<IPatchReceiver, DefaultPatchReceiver>();
         services.TryAddSingleton<IPatchService, PatchService>();
-        services.TryAddSingleton<Configuration.NodeConfigurationTransfer>();
+        services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<Configuration.NodeConfigurationTransfer>(
+            provider,
+            NodeCertificateFingerprint(provider)));
         services.TryAddSingleton<INetworkInterfaceSource, SystemNetworkInterfaceSource>();
         services.TryAddSingleton<INodeEnvironmentProbe, NodeEnvironmentProbe>();
         services.TryAddSingleton<Configuration.Access.PeerAccessService>();
         services.TryAddSingleton<GitChannel.GitChannelService>();
         return services;
     }
+
+    /// <summary>
+    /// Builds the accessor of this node's TLS certificate fingerprint, published in its export file.
+    /// </summary>
+    /// <param name="provider">The service provider.</param>
+    /// <returns>A function returning the fingerprint, or <see langword="null"/> when the node uses its SSH server.</returns>
+    private static Func<string?> NodeCertificateFingerprint(IServiceProvider provider) => () =>
+    {
+        var options = provider.GetRequiredService<SyncBridgeOptions>();
+        if (options.Endpoint.Mode != EndpointMode.Direct)
+        {
+            return null;
+        }
+
+        using var certificate = Endpoint.NodeCertificateStore.GetOrCreate(
+            provider.GetRequiredService<IAppDataFactory>().Create(),
+            options.NodeId);
+        return Endpoint.NodeCertificateStore.Fingerprint(certificate);
+    };
 }

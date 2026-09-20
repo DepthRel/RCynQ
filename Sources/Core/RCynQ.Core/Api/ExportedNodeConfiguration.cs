@@ -25,6 +25,14 @@ namespace RCynQ.Core.Api;
 /// <param name="HostKeyFingerprint">
 /// The SHA-256 fingerprint of the node's sshd host key, pinned by the importing neighbour, or <see langword="null"/>.
 /// </param>
+/// <param name="EndpointMode">
+/// How the node accepts connections: through its SSH server, or on its own TLS port when no SSH server can be installed.
+/// </param>
+/// <param name="EndpointPort">The TCP port of the TLS endpoint; meaningful only in <see cref="Enums.EndpointMode.Direct"/>.</param>
+/// <param name="TlsFingerprint">
+/// The SHA-256 fingerprint of the node's TLS certificate, pinned by the importing neighbour; required in
+/// <see cref="Enums.EndpointMode.Direct"/>.
+/// </param>
 public sealed record ExportedNodeConfiguration(
     int FormatVersion,
     NodeId NodeId,
@@ -38,7 +46,10 @@ public sealed record ExportedNodeConfiguration(
     int ListenPort,
     string? SshPublicKey,
     DateTimeOffset ExportedAtUtc,
-    string? HostKeyFingerprint = null)
+    string? HostKeyFingerprint = null,
+    EndpointMode EndpointMode = EndpointMode.SshTunnel,
+    int EndpointPort = 0,
+    string? TlsFingerprint = null)
 {
     /// <summary>
     /// The current format version.

@@ -35,5 +35,11 @@ public enum EnvironmentWarning
     /// The host keys of the local SSH server could not be read.
     /// </summary>
     [Description("The sshd host keys could not be read.")]
-    HostKeysUnavailable = 5
+    HostKeysUnavailable = 5,
+
+    /// <summary>
+    /// The node accepts connections on its own TLS port, but no local address answers on it.
+    /// </summary>
+    [Description("No local address accepts connections on the node's TLS port.")]
+    EndpointNotListening = 6
 }

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using RCynQ.UI.Services.Api;
+using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Connection;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Dispatching;
@@ -55,7 +56,7 @@ public sealed class App : Application
                 controller,
                 new SetupViewModel(settings.ConfigPath, dialogs),
                 new OverviewViewModel(api),
-                new RoleAndNodesViewModel(api, dialogs, new ElevatedCliRunner(settings.ConfigPath, cli)),
+                new RoleAndNodesViewModel(api, dialogs, new ElevatedCliRunner(settings.ConfigPath, cli), new LocalNodeSettings(settings.ConfigPath)),
                 new SyncViewModel(api, dialogs),
                 new TunnelViewModel(api),
                 new DiagnosticsViewModel(api, dialogs),

@@ -1,6 +1,7 @@
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Enums;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
 
 namespace RCynQ.Sync.Configuration.Access;
@@ -47,6 +48,14 @@ public sealed class PeerAccessService
     /// <exception cref="UnauthorizedAccessException">The file is not writable.</exception>
     public async Task<PeerAccessResult> ApplyAsync(CancellationToken cancellationToken = default)
     {
+        // Neighbours of a node without an SSH server connect to its TLS port; no SSH server reads authorized_keys here.
+        if (_options.Endpoint.Mode == EndpointMode.Direct)
+        {
+            return new PeerAccessResult(
+                false, false, _keys.FilePath, 0, Array.Empty<string>(), Array.Empty<string>(),
+                "This node accepts connections on its own port and runs no SSH server; authorized_keys is not needed.");
+        }
+
         var plan = PeerAccessPlanner.Plan(_node, _options.ListenPort, await _peers.GetAllAsync(cancellationToken), allowGitCommand: !OperatingSystem.IsWindows());
         var missing = plan.MissingKeys.Select(peer => peer.Id.Value).ToArray();
         var waiting = plan.WaitingForCounterpart.Select(peer => peer.Id.Value).ToArray();

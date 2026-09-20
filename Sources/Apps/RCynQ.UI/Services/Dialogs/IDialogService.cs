@@ -66,4 +66,11 @@ public interface IDialogService
     /// <param name="suggestedName">The suggested file name.</param>
     /// <returns>The file path, or <see langword="null"/>.</returns>
     Task<string?> PickSaveFileAsync(string title, string suggestedName);
+
+    /// <summary>
+    /// Copies text to the clipboard of the desktop.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <returns><see langword="true"/> when the clipboard accepted the text.</returns>
+    Task<bool> CopyToClipboardAsync(string text);
 }

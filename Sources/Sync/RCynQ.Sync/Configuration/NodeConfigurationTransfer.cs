@@ -5,8 +5,10 @@ using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Exceptions;
 using RCynQ.Core.Validation;
 using RCynQ.Ssh.Keys;
+using RCynQ.Sync.Endpoint;
 
 namespace RCynQ.Sync.Configuration;
 
@@ -56,7 +58,14 @@ public sealed class NodeConfigurationTransfer
     /// <param name="peers">The peer repository.</param>
     /// <param name="links">The link repository.</param>
     /// <param name="timeProvider">The clock.</param>
-    public NodeConfigurationTransfer(NodeConfig node, SyncBridgeOptions options, ISignatureService signatures, IPeerRepository peers, IChainLinkRepository links, TimeProvider timeProvider)
+    public NodeConfigurationTransfer(
+        NodeConfig node,
+        SyncBridgeOptions options,
+        ISignatureService signatures,
+        IPeerRepository peers,
+        IChainLinkRepository links,
+        TimeProvider timeProvider,
+        Func<string?>? tlsFingerprint = null)
     {
         _node = node;
         _options = options;
@@ -64,7 +73,13 @@ public sealed class NodeConfigurationTransfer
         _peers = peers;
         _links = links;
         _timeProvider = timeProvider;
+        _tlsFingerprint = tlsFingerprint ?? (() => null);
     }
+
+    /// <summary>
+    /// Reads the fingerprint of this node's TLS certificate, or <see langword="null"/> when it does not exist.
+    /// </summary>
+    private readonly Func<string?> _tlsFingerprint;
 
     /// <summary>
     /// Exports the public configuration of the local node.
@@ -123,7 +138,10 @@ public sealed class NodeConfigurationTransfer
             _options.ListenPort,
             normalizedSshKey,
             _timeProvider.GetUtcNow(),
-            normalizedFingerprint);
+            normalizedFingerprint,
+            _options.Endpoint.Mode,
+            _options.Endpoint.Mode == EndpointMode.Direct ? _options.Endpoint.Port : 0,
+            _options.Endpoint.Mode == EndpointMode.Direct ? EndpointCertificateFingerprint() : null);
     }
 
     /// <summary>
@@ -133,6 +151,16 @@ public sealed class NodeConfigurationTransfer
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The import result.</returns>
     /// <exception cref="FormatException">The configuration is invalid or incomplete.</exception>
+    /// <summary>
+    /// Gets the fingerprint of the node's TLS certificate for the export.
+    /// </summary>
+    /// <returns>The fingerprint.</returns>
+    /// <exception cref="SyncBridgeException">The certificate does not exist yet.</exception>
+    private string EndpointCertificateFingerprint()
+        => _tlsFingerprint()
+            ?? throw new SyncBridgeException(
+                "This node accepts connections on its own port, but its TLS certificate has not been created yet. Start the service once and export again.");
+
     public async Task<ImportResult> ImportAsync(ExportedNodeConfiguration imported, CancellationToken cancellationToken = default)
     {
         Validate(imported);
@@ -156,7 +184,12 @@ public sealed class NodeConfigurationTransfer
                 NormalizeHostKeyFingerprint(imported.HostKeyFingerprint) ?? existing?.HostKeyFingerprint,
                 imported.SigningPublicKey ?? existing?.SigningPublicKey,
                 imported.GitRepoPath ?? existing?.GitRepoPath,
-                imported.SshPublicKey is null ? existing?.SshPublicKey : SshPublicKey.Parse(imported.SshPublicKey).ToLine());
+                imported.SshPublicKey is null ? existing?.SshPublicKey : SshPublicKey.Parse(imported.SshPublicKey).ToLine(),
+                imported.EndpointMode,
+                imported.TlsFingerprint is null
+                    ? imported.EndpointMode == existing?.EndpointMode ? existing.TlsFingerprint : null
+                    : NodeCertificateStore.NormalizeFingerprint(imported.TlsFingerprint),
+                imported.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : 0);
         }
         catch (ArgumentException ex)
         {
@@ -195,7 +228,9 @@ public sealed class NodeConfigurationTransfer
         else if (peer.Role == counterpart)
         {
             priority = links.Select(link => link.Priority + 10).Append(EndpointPriority).Max();
-            remotePort = imported.ListenPort;
+
+            // A peer without an SSH server is reached on its TLS port instead of its loopback endpoint.
+            remotePort = peer.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : imported.ListenPort;
         }
         else
         {
@@ -262,6 +297,24 @@ public sealed class NodeConfigurationTransfer
         if (configuration.ListenPort is < 1 or > 65535)
         {
             throw new FormatException($"Listen port {configuration.ListenPort} is invalid.");
+        }
+
+        if (!Enum.IsDefined(configuration.EndpointMode))
+        {
+            throw new FormatException($"Endpoint mode '{configuration.EndpointMode}' is unknown.");
+        }
+
+        if (configuration.EndpointMode == EndpointMode.Direct)
+        {
+            if (configuration.EndpointPort is < 1 or > 65535)
+            {
+                throw new FormatException($"Endpoint port {configuration.EndpointPort} is invalid.");
+            }
+
+            if (NodeCertificateStore.NormalizeFingerprint(configuration.TlsFingerprint) is null)
+            {
+                throw new FormatException("A node that accepts connections on its own port must publish its TLS certificate fingerprint.");
+            }
         }
 
         if (configuration.SigningPublicKey is not null)

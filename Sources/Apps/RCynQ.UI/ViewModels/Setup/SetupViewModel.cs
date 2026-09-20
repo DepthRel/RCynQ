@@ -7,6 +7,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.ViewModels.Items;
 
 namespace RCynQ.UI.ViewModels.Setup;
 
@@ -28,7 +29,7 @@ public sealed partial class SetupViewModel : ObservableObject
 
     /// <summary>The role.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PathLabel), nameof(IsPathVisible), nameof(IsTokenVisible), nameof(RoleHint))]
+    [NotifyPropertyChangedFor(nameof(PathLabel), nameof(IsPathVisible), nameof(IsTokenVisible), nameof(RoleHint), nameof(IsEndpointModeVisible), nameof(IsEndpointPortVisible))]
     private NodeRole _selectedRole = NodeRole.Source;
 
     /// <summary>The working copy or repository path.</summary>
@@ -42,6 +43,15 @@ public sealed partial class SetupViewModel : ObservableObject
     /// <summary>The shared link token.</summary>
     [ObservableProperty]
     private string _linkToken = string.Empty;
+
+    /// <summary>How neighbours reach this node.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEndpointPortVisible), nameof(EndpointHint))]
+    private EndpointModeOption _selectedEndpointMode = EndpointModeOption.All[0];
+
+    /// <summary>The TCP port of the direct endpoint.</summary>
+    [ObservableProperty]
+    private decimal _endpointPort = 18444;
 
     /// <summary>The problem to show.</summary>
     [ObservableProperty]
@@ -82,6 +92,21 @@ public sealed partial class SetupViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the link token applies to the role.</summary>
     public bool IsTokenVisible => SelectedRole != NodeRole.Mediator;
+
+    /// <summary>Gets the connection modes offered.</summary>
+    public IReadOnlyList<EndpointModeOption> EndpointModes { get; } = EndpointModeOption.All;
+
+    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Mediator always uses its SSH server.</summary>
+    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Mediator;
+
+    /// <summary>Gets a value indicating whether the port of the direct endpoint is shown.</summary>
+    public bool IsEndpointPortVisible => IsEndpointModeVisible && SelectedEndpointMode.Value == EndpointMode.Direct;
+
+    /// <summary>Gets the connection mode that is saved: a Mediator always uses its SSH server.</summary>
+    private EndpointMode EffectiveEndpointMode => IsEndpointModeVisible ? SelectedEndpointMode.Value : EndpointMode.SshTunnel;
+
+    /// <summary>Gets the explanation of the selected connection mode.</summary>
+    public string EndpointHint => SelectedEndpointMode.Hint;
 
     /// <summary>Gets a value indicating whether a problem is shown.</summary>
     public bool HasError => !string.IsNullOrEmpty(Error);
@@ -138,6 +163,8 @@ public sealed partial class SetupViewModel : ObservableObject
             Path = string.Empty;
             ListenPort = 18443;
             LinkToken = CreateToken();
+            SelectedEndpointMode = EndpointModeOption.All[0];
+            EndpointPort = 18444;
         }
         else
         {
@@ -147,6 +174,8 @@ public sealed partial class SetupViewModel : ObservableObject
             Path = (existing.Role == NodeRole.Dest ? existing.RepoPath : existing.WorkdirPath) ?? string.Empty;
             ListenPort = existing.ListenPort is >= 1 and <= 65535 ? existing.ListenPort : 18443;
             LinkToken = existing.LinkToken ?? string.Empty;
+            SelectedEndpointMode = EndpointModeOption.For(existing.Endpoint.Mode);
+            EndpointPort = existing.Endpoint.Port is >= 1 and <= 65535 ? existing.Endpoint.Port : 18444;
         }
 
         Error = error;
@@ -194,7 +223,9 @@ public sealed partial class SetupViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var errors = await LocalConfigFile.SaveAsync(ConfigPath, new NodeSetupValues(NodeId, Name, SelectedRole, Path, (int)ListenPort, LinkToken));
+            var errors = await LocalConfigFile.SaveAsync(
+                ConfigPath,
+                new NodeSetupValues(NodeId, Name, SelectedRole, Path, (int)ListenPort, LinkToken, EffectiveEndpointMode, (int)EndpointPort));
             if (errors.Count > 0)
             {
                 Error = string.Join(Environment.NewLine, errors);

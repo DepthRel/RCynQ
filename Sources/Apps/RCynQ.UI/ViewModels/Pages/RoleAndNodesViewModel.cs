@@ -7,10 +7,12 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
 using RCynQ.UI.Services.Api;
+using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Hosting;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Items;
+using RCynQ.UI.ViewModels.Setup;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
@@ -31,8 +33,37 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>Runs the SSH access update with administrator rights, or <see langword="null"/>.</summary>
     private readonly IPeerAccessElevation? _elevation;
 
+    /// <summary>The settings stored in the configuration file, or <see langword="null"/> when it is unavailable.</summary>
+    private readonly ILocalNodeSettings? _settings;
+
     /// <summary>The loaded configuration.</summary>
     private NodeConfigurationDto? _loaded;
+
+    /// <summary>The node identifier, shown next to the shared token.</summary>
+    [ObservableProperty]
+    private string _nodeId = string.Empty;
+
+    /// <summary>The shared token of Source and Dest.</summary>
+    [ObservableProperty]
+    private string _linkToken = string.Empty;
+
+    /// <summary>Whether the shared token is shown as text.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TokenMaskChar), nameof(RevealTokenText))]
+    private bool _isTokenRevealed;
+
+    /// <summary>How neighbours reach this node.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEndpointPortVisible), nameof(EndpointHint))]
+    private EndpointModeOption _selectedEndpointMode = EndpointModeOption.All[0];
+
+    /// <summary>The TCP port of the direct endpoint.</summary>
+    [ObservableProperty]
+    private decimal _endpointPort = 18444;
+
+    /// <summary>Whether the settings differ from the configuration file.</summary>
+    [ObservableProperty]
+    private bool _areSettingsDirty;
 
     /// <summary>The selected role.</summary>
     [ObservableProperty]
@@ -53,11 +84,16 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="elevation">Runs the SSH access update with administrator rights, or <see langword="null"/> when unavailable.</param>
-    public RoleAndNodesViewModel(IServiceApiClient api, IDialogService dialogs, IPeerAccessElevation? elevation = null)
+    public RoleAndNodesViewModel(
+        IServiceApiClient api,
+        IDialogService dialogs,
+        IPeerAccessElevation? elevation = null,
+        ILocalNodeSettings? settings = null)
     {
         _api = api;
         _dialogs = dialogs;
         _elevation = elevation;
+        _settings = settings;
         Nodes.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoNodes));
     }
 
@@ -81,6 +117,33 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>Gets a value indicating whether the path field applies.</summary>
     public bool IsPathVisible => SelectedRole != NodeRole.Mediator;
 
+    /// <summary>Gets a value indicating whether the node settings card is shown.</summary>
+    public bool AreSettingsVisible => _settings is not null;
+
+    /// <summary>Gets a value indicating whether this node uses a shared token: a Mediator never does.</summary>
+    public bool HasLinkToken => SelectedRole != NodeRole.Mediator;
+
+    /// <summary>Gets the connection modes offered.</summary>
+    public IReadOnlyList<EndpointModeOption> EndpointModes { get; } = EndpointModeOption.All;
+
+    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Mediator always uses its SSH server.</summary>
+    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Mediator;
+
+    /// <summary>Gets a value indicating whether the port of the direct endpoint is shown.</summary>
+    public bool IsEndpointPortVisible => IsEndpointModeVisible && SelectedEndpointMode.Value == EndpointMode.Direct;
+
+    /// <summary>Gets the explanation of the selected connection mode.</summary>
+    public string EndpointHint => SelectedEndpointMode.Hint;
+
+    /// <summary>Gets the character hiding the token, or <c>'\0'</c> when it is revealed.</summary>
+    public char TokenMaskChar => IsTokenRevealed ? '\0' : '•';
+
+    /// <summary>Gets the caption of the reveal button.</summary>
+    public string RevealTokenText => IsTokenRevealed ? "Скрыть" : "Показать";
+
+    /// <summary>Gets the path of the configuration file, shown under the settings.</summary>
+    public string ConfigPath => _settings?.ConfigPath ?? string.Empty;
+
     /// <inheritdoc />
     public override Task RefreshAsync() => RunSafeAsync(async () =>
     {
@@ -88,6 +151,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         SelectedRole = _loaded.Role;
         Path = (_loaded.Role == NodeRole.Dest ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
         IsDirty = false;
+        LoadSettings();
 
         Nodes.Clear();
         foreach (var link in await _api.GetLinksAsync())
@@ -115,7 +179,109 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// Tracks unsaved role changes.
     /// </summary>
     /// <param name="value">The new role.</param>
-    partial void OnSelectedRoleChanged(NodeRole value) => UpdateDirty();
+    partial void OnSelectedRoleChanged(NodeRole value)
+    {
+        UpdateDirty();
+        OnPropertyChanged(nameof(HasLinkToken));
+        OnPropertyChanged(nameof(IsEndpointModeVisible));
+        OnPropertyChanged(nameof(IsEndpointPortVisible));
+    }
+
+    partial void OnLinkTokenChanged(string value) => AreSettingsDirty = true;
+
+    partial void OnSelectedEndpointModeChanged(EndpointModeOption value) => AreSettingsDirty = true;
+
+    partial void OnEndpointPortChanged(decimal value) => AreSettingsDirty = true;
+
+    /// <summary>
+    /// Reads the settings that live in the configuration file rather than in the service API.
+    /// </summary>
+    private void LoadSettings()
+    {
+        if (_settings?.Read() is not { } options)
+        {
+            return;
+        }
+
+        NodeId = options.NodeId;
+        LinkToken = options.LinkToken ?? string.Empty;
+        SelectedEndpointMode = EndpointModeOption.For(options.Endpoint.Mode);
+        EndpointPort = options.Endpoint.Port is >= 1 and <= 65535 ? options.Endpoint.Port : 18444;
+        IsTokenRevealed = false;
+        AreSettingsDirty = false;
+    }
+
+    /// <summary>
+    /// Shows or hides the shared token.
+    /// </summary>
+    [RelayCommand]
+    private void RevealToken() => IsTokenRevealed = !IsTokenRevealed;
+
+    /// <summary>
+    /// Copies the shared token to the clipboard.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task CopyTokenAsync()
+        => InfoMessage = await _dialogs.CopyToClipboardAsync(LinkToken)
+            ? "Общий ключ скопирован. Вставьте его на противоположном узле (SOURCE или DEST) — он должен совпадать."
+            : "Не удалось скопировать ключ. Нажмите «Показать» и скопируйте его вручную.";
+
+    /// <summary>
+    /// Replaces the shared token with a new one after confirmation.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task NewTokenAsync()
+    {
+        var confirmed = await _dialogs.ConfirmAsync(
+            "Создать новый общий ключ",
+            "Старый ключ перестанет действовать. Пока новый ключ не прописан на противоположном узле, обмен изменениями работать не будет. Продолжить?");
+        if (confirmed)
+        {
+            LinkToken = SetupViewModel.CreateToken();
+            IsTokenRevealed = true;
+            InfoMessage = "Новый ключ создан. Сохраните настройки и перенесите ключ на противоположный узел.";
+        }
+    }
+
+    /// <summary>
+    /// Writes the node settings and restarts the service.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task SaveSettingsAsync()
+    {
+        if (_settings?.Read() is not { } options)
+        {
+            ErrorMessage = "Файл конфигурации недоступен.";
+            return;
+        }
+
+        await RunSafeAsync(async () =>
+        {
+            var values = new NodeSetupValues(
+                options.NodeId,
+                options.Name,
+                options.Role,
+                (options.Role == NodeRole.Dest ? options.RepoPath : options.WorkdirPath) ?? string.Empty,
+                options.ListenPort,
+                LinkToken,
+                options.Role == NodeRole.Mediator ? EndpointMode.SshTunnel : SelectedEndpointMode.Value,
+                (int)EndpointPort,
+                options.Endpoint.BindAddress);
+            var errors = await _settings.SaveAsync(values);
+            if (errors.Count > 0)
+            {
+                ErrorMessage = string.Join(Environment.NewLine, errors);
+                return;
+            }
+
+            AreSettingsDirty = false;
+            InfoMessage = "Настройки сохранены, сервис перезапускается…";
+            RestartRequested?.Invoke(this, EventArgs.Empty);
+        });
+    }
 
     /// <summary>
     /// Tracks unsaved path changes.

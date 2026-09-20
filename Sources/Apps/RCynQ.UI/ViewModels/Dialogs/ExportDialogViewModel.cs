@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
@@ -121,6 +122,18 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     /// <summary>Gets a value indicating whether a host key fingerprint was found.</summary>
     public bool HasHostKey => !string.IsNullOrEmpty(HostKeyFingerprint);
 
+    /// <summary>Gets a value indicating whether the node accepts connections on its own TLS port.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSshEndpoint))]
+    private bool _isDirectEndpoint;
+
+    /// <summary>Gets the fingerprint of the node's TLS certificate that neighbours will pin.</summary>
+    [ObservableProperty]
+    private string? _tlsFingerprint;
+
+    /// <summary>Gets a value indicating whether the node accepts connections through its SSH server.</summary>
+    public bool IsSshEndpoint => !IsDirectEndpoint;
+
     /// <summary>Gets a value indicating whether the export can be confirmed.</summary>
     public bool CanConfirm => !IsProbing;
 
@@ -137,10 +150,12 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     public void Apply(NodeEnvironmentReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
+        IsDirectEndpoint = report.EndpointMode == EndpointMode.Direct;
+        TlsFingerprint = report.TlsFingerprint;
         Addresses.Clear();
         foreach (var address in report.Addresses)
         {
-            Addresses.Add(new AddressOptionViewModel(address));
+            Addresses.Add(new AddressOptionViewModel(address, IsDirectEndpoint));
         }
 
         SelectedAddress = Addresses.FirstOrDefault(option => option.Address == report.SuggestedHost) ?? Addresses.FirstOrDefault();
@@ -150,10 +165,20 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         }
 
         SshPort = report.SshPort;
-        SshdOk = report.SshdListening;
-        SshdStatus = report.SshdListening
-            ? $"SSH-сервер принимает подключения на порту {report.SshPort}"
-            : $"SSH-сервер не отвечает на порту {report.SshPort}";
+        if (IsDirectEndpoint)
+        {
+            SshdOk = report.Addresses.Any(address => address.SshReachable);
+            SshdStatus = SshdOk
+                ? $"Узел без SSH-сервера: соседи подключаются к порту RCynQ {report.EndpointPort} (TLS)"
+                : $"Узел без SSH-сервера, но порт RCynQ {report.EndpointPort} не отвечает — проверьте брандмауэр";
+        }
+        else
+        {
+            SshdOk = report.SshdListening;
+            SshdStatus = report.SshdListening
+                ? $"SSH-сервер принимает подключения на порту {report.SshPort}"
+                : $"SSH-сервер не отвечает на порту {report.SshPort}";
+        }
         ServicePortOk = report.ServicePortListening;
         ServicePortStatus = report.ServicePortListening ? "Порт сервиса RCynQ отвечает" : "Порт сервиса RCynQ не отвечает";
 

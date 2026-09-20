@@ -58,7 +58,10 @@ internal static class EntityMapper
             entity.HostKeyFingerprint,
             entity.SigningPublicKey,
             entity.GitRepoPath,
-            entity.SshPublicKey);
+            entity.SshPublicKey,
+            entity.EndpointMode,
+            entity.TlsFingerprint,
+            entity.EndpointPort);
 
     /// <summary>
     /// Copies a peer into an entity.
@@ -78,6 +81,9 @@ internal static class EntityMapper
         entity.SigningPublicKey = peer.SigningPublicKey;
         entity.GitRepoPath = peer.GitRepoPath;
         entity.SshPublicKey = peer.SshPublicKey;
+        entity.EndpointMode = peer.EndpointMode;
+        entity.TlsFingerprint = peer.TlsFingerprint;
+        entity.EndpointPort = peer.EndpointPort;
         entity.UpdatedAtUtc = now;
     }
 

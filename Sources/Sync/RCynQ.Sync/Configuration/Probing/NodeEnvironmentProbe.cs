@@ -8,6 +8,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.HostKeys;
+using RCynQ.Sync.Endpoint;
 
 namespace RCynQ.Sync.Configuration.Probing;
 
@@ -80,6 +81,10 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
     public async Task<NodeEnvironmentReport> ProbeAsync(CancellationToken cancellationToken = default)
     {
         var sshPort = _options.Ssh.LocalSshdPort;
+
+        // A node without an SSH server is reached on its own TLS port, so that is the port worth checking.
+        var direct = _options.Endpoint.Mode == EndpointMode.Direct;
+        var reachablePort = direct ? _options.Endpoint.Port : sshPort;
         var candidates = _interfaces.GetAddresses()
             .Select(address => (address, kind: NetworkAddressClassifier.Classify(address.Address, address.IsTunnelInterface)))
             .Where(item => item.kind is not (NetworkAddressKind.Loopback or NetworkAddressKind.LinkLocal))
@@ -90,26 +95,36 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
             item.address.Address,
             item.address.InterfaceName,
             item.kind,
-            await _tcp.CanConnectAsync(item.address.Address, sshPort, ConnectTimeout, cancellationToken))));
+            await _tcp.CanConnectAsync(item.address.Address, reachablePort, ConnectTimeout, cancellationToken))));
         var addresses = probed.OrderBy(NetworkAddressClassifier.Rank).ThenBy(info => info.Address, StringComparer.Ordinal).ToArray();
 
-        var loopbackSsh = _tcp.CanConnectAsync("127.0.0.1", sshPort, ConnectTimeout, cancellationToken);
+        var loopbackSsh = direct ? Task.FromResult(false) : _tcp.CanConnectAsync("127.0.0.1", sshPort, ConnectTimeout, cancellationToken);
         var servicePort = _tcp.CanConnectAsync("127.0.0.1", _options.ListenPort, ConnectTimeout, cancellationToken);
-        var sshdListening = await loopbackSsh || addresses.Any(info => info.SshReachable);
+        var sshdListening = !direct && (await loopbackSsh || addresses.Any(info => info.SshReachable));
         var servicePortListening = await servicePort;
 
         var (publicKey, publicKeyPath) = await FindPublicKeyAsync(cancellationToken);
         var hostKeys = sshdListening ? await ReadHostKeysAsync(sshPort, cancellationToken) : Array.Empty<string>();
 
         var warnings = new List<EnvironmentWarning>();
-        if (!sshdListening)
+        if (direct)
         {
-            warnings.Add(EnvironmentWarning.SshdNotListening);
+            if (!addresses.Any(info => info.SshReachable))
+            {
+                warnings.Add(EnvironmentWarning.EndpointNotListening);
+            }
         }
-
-        if (!addresses.Any(info => info.SshReachable))
+        else
         {
-            warnings.Add(EnvironmentWarning.NoReachableAddress);
+            if (!sshdListening)
+            {
+                warnings.Add(EnvironmentWarning.SshdNotListening);
+            }
+
+            if (!addresses.Any(info => info.SshReachable))
+            {
+                warnings.Add(EnvironmentWarning.NoReachableAddress);
+            }
         }
 
         if (publicKey is null)
@@ -141,7 +156,20 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
             publicKey?.Fingerprint,
             hostKeys,
             warnings,
-            _timeProvider.GetUtcNow());
+            _timeProvider.GetUtcNow(),
+            _options.Endpoint.Mode,
+            direct ? _options.Endpoint.Port : 0,
+            direct ? ReadTlsFingerprint() : null);
+    }
+
+    /// <summary>
+    /// Reads the fingerprint of the node's TLS certificate, creating the certificate when it is missing.
+    /// </summary>
+    /// <returns>The fingerprint.</returns>
+    private string ReadTlsFingerprint()
+    {
+        using var certificate = NodeCertificateStore.GetOrCreate(_appData.Create(), _options.NodeId);
+        return NodeCertificateStore.Fingerprint(certificate);
     }
 
     /// <inheritdoc />

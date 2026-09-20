@@ -86,6 +86,18 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> CopyToClipboardAsync(string text)
+    {
+        if (_owner()?.Clipboard is not { } clipboard)
+        {
+            return false;
+        }
+
+        await clipboard.SetTextAsync(text);
+        return true;
+    }
+
     public async Task<string?> PickSaveFileAsync(string title, string suggestedName)
     {
         if (_owner() is not { } owner)

@@ -36,6 +36,15 @@ public sealed record PeerDescriptor
     /// <param name="sshPublicKey">
     /// The OpenSSH public key line of the peer, allowed in the local <c>authorized_keys</c>, or <see langword="null"/>.
     /// </param>
+    /// <param name="endpointMode">How the peer accepts connections.</param>
+    /// <param name="tlsFingerprint">
+    /// The pinned SHA-256 fingerprint of the peer's TLS certificate, required when
+    /// <paramref name="endpointMode"/> is <see cref="EndpointMode.Direct"/>.
+    /// </param>
+    /// <param name="endpointPort">
+    /// The TCP port of the peer's TLS endpoint, required when <paramref name="endpointMode"/> is
+    /// <see cref="EndpointMode.Direct"/>; <c>0</c> otherwise.
+    /// </param>
     /// <exception cref="ArgumentException">A required value is blank, invalid or the identifier is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sshPort"/> is outside 1..65535.</exception>
     public PeerDescriptor(
@@ -48,9 +57,27 @@ public sealed record PeerDescriptor
         string? hostKeyFingerprint = null,
         string? signingPublicKey = null,
         string? gitRepoPath = null,
-        string? sshPublicKey = null)
+        string? sshPublicKey = null,
+        EndpointMode endpointMode = EndpointMode.SshTunnel,
+        string? tlsFingerprint = null,
+        int endpointPort = 0)
     {
         SshPublicKey = Guard.OptionalNotBlank(sshPublicKey, nameof(sshPublicKey));
+        EndpointMode = Guard.Defined(endpointMode, nameof(endpointMode));
+        TlsFingerprint = Guard.OptionalNotBlank(tlsFingerprint, nameof(tlsFingerprint));
+        EndpointPort = Guard.Port(endpointPort, nameof(endpointPort), allowZero: true);
+        if (EndpointMode == EndpointMode.Direct)
+        {
+            if (TlsFingerprint is null)
+            {
+                throw new ArgumentException("A peer that accepts connections on its own port must publish its TLS certificate fingerprint.", nameof(tlsFingerprint));
+            }
+
+            if (EndpointPort == 0)
+            {
+                throw new ArgumentException("A peer that accepts connections on its own port must publish that port.", nameof(endpointPort));
+            }
+        }
         if (id.IsEmpty)
         {
             throw new ArgumentException("Peer identifier must not be empty.", nameof(id));
@@ -74,6 +101,26 @@ public sealed record PeerDescriptor
     /// Gets the OpenSSH public key line of the peer, or <see langword="null"/>.
     /// </summary>
     public string? SshPublicKey { get; }
+
+    /// <summary>
+    /// Gets how the peer accepts connections.
+    /// </summary>
+    public EndpointMode EndpointMode { get; }
+
+    /// <summary>
+    /// Gets the pinned SHA-256 fingerprint of the peer's TLS certificate, or <see langword="null"/>.
+    /// </summary>
+    public string? TlsFingerprint { get; }
+
+    /// <summary>
+    /// Gets the TCP port of the peer's TLS endpoint, or <c>0</c> when the peer uses its SSH server.
+    /// </summary>
+    public int EndpointPort { get; }
+
+    /// <summary>
+    /// Gets the port a neighbour connects to: the TLS endpoint of a peer without an SSH server, its SSH port otherwise.
+    /// </summary>
+    public int ReachablePort => EndpointMode == EndpointMode.Direct ? EndpointPort : SshPort;
 
     /// <summary>
     /// Gets the display name of the peer.

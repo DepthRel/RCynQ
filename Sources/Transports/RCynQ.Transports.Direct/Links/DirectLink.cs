@@ -47,10 +47,11 @@ public sealed class DirectLink : TransportLinkBase
     /// <inheritdoc />
     protected override async Task<LinkState> ProbeCoreAsync(CancellationToken cancellationToken)
     {
+        // A peer without an SSH server is checked on its own TLS port.
         var peer = Config.Peer;
-        return await _probe.CanConnectAsync(peer.Host, peer.SshPort, ProbeTimeout, cancellationToken)
-            ? CreateState(LinkStatus.Ready, $"{peer.Host}:{peer.SshPort} is reachable.")
-            : CreateState(LinkStatus.Failed, $"{peer.Host}:{peer.SshPort} is not reachable.");
+        return await _probe.CanConnectAsync(peer.Host, peer.ReachablePort, ProbeTimeout, cancellationToken)
+            ? CreateState(LinkStatus.Ready, $"{peer.Host}:{peer.ReachablePort} is reachable.")
+            : CreateState(LinkStatus.Failed, $"{peer.Host}:{peer.ReachablePort} is not reachable.");
     }
 
     /// <inheritdoc />
@@ -60,6 +61,8 @@ public sealed class DirectLink : TransportLinkBase
         return state.IsUsable
             ? DiagnosticResult.Pass(CheckName, state.Message)
             : DiagnosticResult.Fail(CheckName, state.Message ?? "Peer is not reachable.",
-                $"Check that {Config.Peer.Host} resolves, that sshd listens on port {Config.Peer.SshPort} and that no firewall blocks it, or configure a tunnel transport for this link.");
+                Config.Peer.EndpointMode == EndpointMode.Direct
+                    ? $"Check that {Config.Peer.Host} resolves, that RCynQ runs there and listens on port {Config.Peer.EndpointPort}, and that no firewall blocks it."
+                    : $"Check that {Config.Peer.Host} resolves, that sshd listens on port {Config.Peer.SshPort} and that no firewall blocks it, or configure a tunnel transport for this link.");
     }
 }

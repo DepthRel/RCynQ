@@ -53,8 +53,9 @@ public static class PeerAccessPlanner
                     break;
                 case NodeRole.Mediator when peer.Role is NodeRole.Source or NodeRole.Dest:
                     var opposite = peer.Role == NodeRole.Source ? NodeRole.Dest : NodeRole.Source;
+                    // The opposite endpoint is reached on its SSH server, or on its own TLS port when it runs none.
                     targets = peers.Where(other => other.Role == opposite)
-                        .Select(other => FormatTarget(other.Host, other.SshPort))
+                        .Select(other => FormatTarget(other.Host, other.ReachablePort))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
                     break;

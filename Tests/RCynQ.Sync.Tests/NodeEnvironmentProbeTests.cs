@@ -106,6 +106,32 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a node without an SSH server is checked on its TLS port and reports its certificate fingerprint.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Node_Without_Ssh_Server_Is_Checked_On_Its_Tls_Port()
+    {
+        _options.Endpoint = new EndpointOptions { Mode = EndpointMode.Direct, Port = 18444 };
+        _tcp.CanConnectAsync("10.8.0.3", 18444, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var report = await Create().ProbeAsync();
+
+        report.EndpointMode.Should().Be(EndpointMode.Direct);
+        report.EndpointPort.Should().Be(18444);
+        report.TlsFingerprint.Should().StartWith("SHA256:").And.HaveLength(71);
+        report.Addresses.Single(address => address.Address == "10.8.0.3").SshReachable.Should().BeTrue("reachability is checked on the TLS port");
+        report.SshdListening.Should().BeFalse("no SSH server is expected on this node");
+        report.HostKeyFingerprints.Should().BeEmpty();
+        report.Warnings.Should().NotContain(new[] { EnvironmentWarning.SshdNotListening, EnvironmentWarning.NoReachableAddress, EnvironmentWarning.EndpointNotListening });
+        await _tcp.DidNotReceive().CanConnectAsync("127.0.0.1", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+
+        _tcp.CanConnectAsync(default!, default, default, default).ReturnsForAnyArgs(false);
+        (await Create().ProbeAsync()).Warnings.Should().Contain(EnvironmentWarning.EndpointNotListening)
+            .And.NotContain(EnvironmentWarning.SshdNotListening);
+    }
+
+    /// <summary>
     /// Verifies that the key is generated inside the data directory and recorded as <c>Ssh.IdentityFile</c>.
     /// </summary>
     /// <returns>A task representing the test.</returns>

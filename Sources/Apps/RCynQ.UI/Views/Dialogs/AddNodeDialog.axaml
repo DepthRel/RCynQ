@@ -43,8 +43,8 @@
         <NumericUpDown Value="{Binding Priority}" Minimum="0" Maximum="100000" Increment="10" FormatString="0" />
       </StackPanel>
       <StackPanel Grid.Row="6" Grid.Column="2">
-        <TextBlock Classes="field-label" Text="Транспорт" />
-        <ComboBox ItemsSource="{Binding Transports}" SelectedItem="{Binding Transport}" />
+        <TextBlock Classes="field-label" Text="Сеть, через которую доступен узел" />
+        <ComboBox ItemsSource="{Binding Transports}" SelectedItem="{Binding SelectedTransport}" />
       </StackPanel>
     </Grid>
 

@@ -91,6 +91,33 @@ public sealed class ExportDialogViewModelTests
     }
 
     /// <summary>
+    /// Verifies that a node without an SSH server shows its port and certificate instead of sshd details.
+    /// </summary>
+    [Fact]
+    public void Node_Without_Ssh_Server_Shows_Tls_Details()
+    {
+        const string Tls = "SHA256:59CE0A214994CBC386DF73DA0F07AF6B19138641408A65ED2330C7FEA1BBFDF4";
+        var dialog = new ExportDialogViewModel(_api);
+
+        dialog.Apply(Report(sshKey: null) with
+        {
+            SshdListening = false,
+            HostKeyFingerprints = Array.Empty<string>(),
+            EndpointMode = EndpointMode.Direct,
+            EndpointPort = 18444,
+            TlsFingerprint = Tls
+        });
+
+        dialog.IsDirectEndpoint.Should().BeTrue();
+        dialog.IsSshEndpoint.Should().BeFalse("the sshd host key section is hidden");
+        dialog.TlsFingerprint.Should().Be(Tls);
+        dialog.SshdOk.Should().BeTrue("the TLS port answers on 10.8.0.3");
+        dialog.SshdStatus.Should().Contain("18444").And.Contain("без SSH-сервера");
+        dialog.Addresses[0].StatusText.Should().Be("порт RCynQ отвечает");
+        dialog.Addresses[1].StatusText.Should().Be("порт RCynQ не отвечает");
+    }
+
+    /// <summary>
     /// Creates a probe report.
     /// </summary>
     /// <param name="sshKey">The SSH public key line, or <see langword="null"/>.</param>

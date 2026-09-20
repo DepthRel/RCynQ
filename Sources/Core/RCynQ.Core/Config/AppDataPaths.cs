@@ -96,6 +96,11 @@ public sealed record AppDataPaths
     public string KnownHostsPath => Path.Combine(KeysDirectory, "known_hosts");
 
     /// <summary>
+    /// Gets the directory holding the node's TLS certificate for the direct endpoint.
+    /// </summary>
+    public string TlsDirectory => Path.Combine(KeysDirectory, "tls");
+
+    /// <summary>
     /// Gets the directory for temporary files (diff staging, patch files handed to Git).
     /// </summary>
     public string TempDirectory => Path.Combine(Root, "tmp");
