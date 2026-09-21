@@ -1,12 +1,13 @@
 <dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      xmlns:patches="using:RCynQ.Core.Patches"
                      xmlns:controls="using:RCynQ.UI.Controls"
                      x:Class="RCynQ.UI.Views.Dialogs.ConflictDialog"
                      x:DataType="vm:ConflictDialogViewModel"
-                     Title="Конфликт синхронизации"
+                     Title="{loc:Loc Conflict.WindowTitle}"
                      Width="640" SizeToContent="Height" CanResize="False"
                      WindowStartupLocation="CenterOwner">
   <dialogs:DialogWindow.Styles>
@@ -20,7 +21,7 @@
   <StackPanel Margin="22" Spacing="14">
     <StackPanel Orientation="Horizontal" Spacing="10">
       <controls:IconView IconKey="Icon.Alert" Width="22" Height="22" Foreground="{StaticResource WarningBrush}" />
-      <TextBlock Classes="page-title" Text="Конфликт при применении патча" VerticalAlignment="Center" />
+      <TextBlock Classes="page-title" Text="{loc:Loc Conflict.Title}" VerticalAlignment="Center" />
     </StackPanel>
     <TextBlock Classes="secondary" Text="{Binding Header}" TextWrapping="Wrap" />
 
@@ -45,24 +46,24 @@
     <StackPanel Spacing="8">
       <Button Classes="outline choice" Command="{Binding KeepLocalCommand}">
         <StackPanel Spacing="2">
-          <TextBlock Text="Оставить локальные изменения" FontWeight="Medium" />
-          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Патч будет отклонён, рабочая копия не изменится." />
+          <TextBlock Text="{loc:Loc Conflict.KeepLocal}" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.KeepLocal.Hint}" />
         </StackPanel>
       </Button>
       <Button Classes="outline choice" Command="{Binding ApplyIncomingCommand}">
         <StackPanel Spacing="2">
-          <TextBlock Text="Применить входящие поверх локальных" FontWeight="Medium" />
-          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Конфликтующие файлы будут сохранены в резервную копию и перезаписаны." />
+          <TextBlock Text="{loc:Loc Conflict.ApplyIncoming}" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.ApplyIncoming.Hint}" />
         </StackPanel>
       </Button>
       <Button Classes="outline choice" Command="{Binding UseGitCommand}">
         <StackPanel Spacing="2">
-          <TextBlock Text="Использовать Git" FontWeight="Medium" />
-          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="git apply --3way; неразрешённые фрагменты останутся для ручного разрешения." />
+          <TextBlock Text="{loc:Loc Conflict.UseGit}" FontWeight="Medium" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.UseGit.Hint}" />
         </StackPanel>
       </Button>
     </StackPanel>
 
-    <Button Classes="outline" HorizontalAlignment="Right" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
+    <Button Classes="outline" HorizontalAlignment="Right" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
   </StackPanel>
 </dialogs:DialogWindow>

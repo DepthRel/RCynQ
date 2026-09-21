@@ -1,10 +1,10 @@
 using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
 using RCynQ.Core.Validation;
 using RCynQ.Git.Commands;
+using RCynQ.Localization;
 
 namespace RCynQ.Git.Repository;
 
@@ -62,7 +62,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var info = await GetBranchInfoAsync(directory, remoteName, cancellationToken);
         if (info.Branch is null || info.TrackingRef is null)
         {
-            throw new GitExecutionException($"Current branch has no fetched counterpart under refs/remotes/{remoteName}; run fetch first.");
+            throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
         }
 
         var result = await _git.RunAsync(new[] { "merge", "--ff-only", info.TrackingRef }, directory, cancellationToken: cancellationToken);
@@ -98,7 +98,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var parts = counts.StandardOutput.Split(new[] { '\t', ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 2 || !int.TryParse(parts[0], out var ahead) || !int.TryParse(parts[1], out var behind))
         {
-            throw new GitExecutionException($"Unexpected git rev-list output: '{counts.StandardOutput.Trim()}'.");
+            throw new GitExecutionException(Texts.Format("Git.RevListOutput", counts.StandardOutput.Trim()));
         }
 
         return new GitBranchInfo(true, branch, tracking, ahead, behind);

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Config;
 
@@ -83,7 +84,7 @@ public sealed partial record SshEndpoint
         if (!IsValidUser(trimmed))
         {
             throw new ArgumentException(
-                $"SSH user '{trimmed}' contains forbidden characters. Allowed: letters, digits, '.', '_', '-' (not leading).",
+                Texts.Format("Ssh.UserForbidden", trimmed),
                 nameof(user));
         }
 
@@ -106,7 +107,7 @@ public sealed partial record SshEndpoint
         if (!IsValidHost(trimmed))
         {
             throw new ArgumentException(
-                $"SSH host '{trimmed}' contains forbidden characters. Allowed: letters, digits, '.', '-', ':' (not leading '-').",
+                Texts.Format("Ssh.HostForbidden", trimmed),
                 nameof(host));
         }
 

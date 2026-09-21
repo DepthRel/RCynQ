@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Paths;
+using RCynQ.Localization;
 
 namespace RCynQ.Git.Paths;
 
@@ -32,18 +32,18 @@ public sealed partial class PathUtility : IPathUtility
         ArgumentNullException.ThrowIfNull(relativePath);
         if (string.IsNullOrWhiteSpace(relativePath))
         {
-            throw new ArgumentException("Relative path must not be blank.", nameof(relativePath));
+            throw new ArgumentException(Texts.Get("Path.Blank"), nameof(relativePath));
         }
 
         if (relativePath.Any(char.IsControl))
         {
-            throw new ArgumentException($"Relative path '{Printable(relativePath)}' contains control characters.", nameof(relativePath));
+            throw new ArgumentException(Texts.Format("Path.Control", Printable(relativePath)), nameof(relativePath));
         }
 
         var unified = relativePath.Replace('\\', '/');
         if (unified.StartsWith('/') || unified.Contains(':') || Path.IsPathRooted(relativePath))
         {
-            throw new ArgumentException($"Path '{relativePath}' must be relative.", nameof(relativePath));
+            throw new ArgumentException(Texts.Format("Path.MustBeRelative", relativePath), nameof(relativePath));
         }
 
         var segments = new List<string>();
@@ -56,17 +56,17 @@ public sealed partial class PathUtility : IPathUtility
 
             if (segment == "..")
             {
-                throw new ArgumentException($"Path '{relativePath}' escapes the working tree.", nameof(relativePath));
+                throw new ArgumentException(Texts.Format("Path.EscapesTree", relativePath), nameof(relativePath));
             }
 
             if (segment.EndsWith('.') || segment.EndsWith(' '))
             {
-                throw new ArgumentException($"Path '{relativePath}' has a segment ending with a dot or space.", nameof(relativePath));
+                throw new ArgumentException(Texts.Format("Path.SegmentEnd", relativePath), nameof(relativePath));
             }
 
             if (IsGitMetadataName(segment))
             {
-                throw new ArgumentException($"Path '{relativePath}' addresses Git metadata.", nameof(relativePath));
+                throw new ArgumentException(Texts.Format("Path.GitMetadata", relativePath), nameof(relativePath));
             }
 
             segments.Add(segment);
@@ -74,7 +74,7 @@ public sealed partial class PathUtility : IPathUtility
 
         if (segments.Count == 0)
         {
-            throw new ArgumentException($"Path '{relativePath}' does not name a file.", nameof(relativePath));
+            throw new ArgumentException(Texts.Format("Path.NotFile", relativePath), nameof(relativePath));
         }
 
         return string.Join('/', segments);
@@ -107,7 +107,7 @@ public sealed partial class PathUtility : IPathUtility
         var full = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsWithinRoot(root, full) || Path.TrimEndingDirectorySeparator(full).Equals(Path.TrimEndingDirectorySeparator(root), PlatformComparison))
         {
-            throw new ArgumentException($"Path '{relativePath}' escapes the root '{rootPath}'.", nameof(relativePath));
+            throw new ArgumentException(Texts.Format("Path.EscapesRoot", relativePath, rootPath), nameof(relativePath));
         }
 
         return full;

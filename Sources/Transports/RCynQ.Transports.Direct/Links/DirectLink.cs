@@ -1,13 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Links;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.Direct.Links;
 
@@ -50,8 +47,8 @@ public sealed class DirectLink : TransportLinkBase
         // A peer without an SSH server is checked on its own TLS port.
         var peer = Config.Peer;
         return await _probe.CanConnectAsync(peer.Host, peer.ReachablePort, ProbeTimeout, cancellationToken)
-            ? CreateState(LinkStatus.Ready, $"{peer.Host}:{peer.ReachablePort} is reachable.")
-            : CreateState(LinkStatus.Failed, $"{peer.Host}:{peer.ReachablePort} is not reachable.");
+            ? CreateState(LinkStatus.Ready, Texts.Format("Direct.Reachable", peer.Host, peer.ReachablePort))
+            : CreateState(LinkStatus.Failed, Texts.Format("Direct.NotReachable", peer.Host, peer.ReachablePort));
     }
 
     /// <inheritdoc />
@@ -60,9 +57,9 @@ public sealed class DirectLink : TransportLinkBase
         var state = await ProbeCoreAsync(cancellationToken);
         return state.IsUsable
             ? DiagnosticResult.Pass(CheckName, state.Message)
-            : DiagnosticResult.Fail(CheckName, state.Message ?? "Peer is not reachable.",
+            : DiagnosticResult.Fail(CheckName, state.Message ?? Texts.Get("Direct.PeerNotReachable"),
                 Config.Peer.EndpointMode == EndpointMode.Direct
-                    ? $"Check that {Config.Peer.Host} resolves, that RCynQ runs there and listens on port {Config.Peer.EndpointPort}, and that no firewall blocks it."
-                    : $"Check that {Config.Peer.Host} resolves, that sshd listens on port {Config.Peer.SshPort} and that no firewall blocks it, or configure a tunnel transport for this link.");
+                    ? Texts.Format("Direct.CheckOwnPort", Config.Peer.Host, Config.Peer.EndpointPort)
+                    : Texts.Format("Direct.CheckSsh", Config.Peer.Host, Config.Peer.SshPort));
     }
 }

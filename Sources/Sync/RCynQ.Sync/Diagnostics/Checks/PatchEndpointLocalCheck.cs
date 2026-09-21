@@ -1,15 +1,6 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
 using RCynQ.Sync.Diagnostics.Endpoint;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -36,10 +27,10 @@ public sealed class PatchEndpointLocalCheck : DiagnosticCheckBase
     {
         var port = context.Options.ListenPort;
         return await _probe.IsHealthyAsync(port, cancellationToken)
-            ? Pass($"Patch endpoint answers on 127.0.0.1:{port}.")
+            ? Pass(Texts.Format("Diag.Endpoint.Ok", port))
             : Fail(
-                $"No RCynQ service answers on 127.0.0.1:{port}.",
-                "Start RCynQ.Service with the same configuration.",
-                new DiagnosticFix(DiagnosticFixKind.RestartLocalEndpoint, "Restart the local RCynQ endpoint.", new Dictionary<string, string> { ["port"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+                Texts.Format("Diag.Endpoint.Down", port),
+                Texts.Get("Diag.Endpoint.Fix"),
+                new DiagnosticFix(DiagnosticFixKind.RestartLocalEndpoint, Texts.Get("Diag.Endpoint.Restart"), new Dictionary<string, string> { ["port"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
     }
 }

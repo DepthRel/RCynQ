@@ -2,7 +2,6 @@ using FluentAssertions;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Service.Endpoints;
-using Xunit;
 
 namespace RCynQ.Service.Tests;
 

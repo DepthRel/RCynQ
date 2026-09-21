@@ -1,16 +1,12 @@
-using System.Globalization;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
-using RCynQ.Git.Commands;
-using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Paths;
-using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Apply;
 
@@ -56,7 +52,7 @@ public sealed class BundleOverwriteApplier : IPatchApplier
         }
         catch (FormatException ex)
         {
-            throw new PatchApplyException($"Bundle of patch {envelope.Id} is invalid: {ex.Message}", ex);
+            throw new PatchApplyException(Texts.Format("Apply.BundleInvalid", envelope.Id, ex.Message), ex);
         }
 
         Directory.CreateDirectory(root);
@@ -88,7 +84,7 @@ public sealed class BundleOverwriteApplier : IPatchApplier
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new PatchApplyException($"Applying '{change.Path}' failed: {ex.Message}", ex);
+                throw new PatchApplyException(Texts.Format("Apply.FileFailed", change.Path, ex.Message), ex);
             }
 
             count++;
@@ -115,7 +111,7 @@ public sealed class BundleOverwriteApplier : IPatchApplier
         {
             if (directory.LinkTarget is null)
             {
-                throw new IOException("A directory exists where a file was expected.");
+                throw new IOException(Texts.Get("Apply.DirectoryInPlaceOfFile"));
             }
 
             Directory.Delete(full);
@@ -133,7 +129,7 @@ public sealed class BundleOverwriteApplier : IPatchApplier
     {
         if (Directory.Exists(full) && new DirectoryInfo(full).LinkTarget is null)
         {
-            throw new IOException("A directory exists where a file is expected.");
+            throw new IOException(Texts.Get("Apply.DirectoryInPlaceOfFileTarget"));
         }
 
         var directory = Path.GetDirectoryName(full)!;
@@ -175,7 +171,7 @@ public sealed class BundleOverwriteApplier : IPatchApplier
         var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(full)!, target));
         if (Path.IsPathRooted(target) || !_paths.IsWithinRoot(root, resolved))
         {
-            throw new PatchApplyException($"Symbolic link '{full}' → '{target}' would point outside the working tree.");
+            throw new PatchApplyException(Texts.Format("Apply.SymlinkOutside", full, target));
         }
 
         DeleteEntry(full);

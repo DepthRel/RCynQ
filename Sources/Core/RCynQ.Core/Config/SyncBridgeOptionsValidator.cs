@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Config;
 
@@ -30,40 +31,40 @@ public static class SyncBridgeOptionsValidator
 
         if (options.ListenPort is < 1 or > 65535)
         {
-            errors.Add($"ListenPort {options.ListenPort} must be in range 1..65535.");
+            errors.Add(Texts.Format("Config.ListenPortRange", options.ListenPort));
         }
 
         if (options.Endpoint.Port is < 1 or > 65535)
         {
-            errors.Add($"Endpoint.Port {options.Endpoint.Port} must be in range 1..65535.");
+            errors.Add(Texts.Format("Config.EndpointPortRange", options.Endpoint.Port));
         }
 
         if (options.Endpoint.Mode == EndpointMode.Direct)
         {
             if (options.Role == NodeRole.Mediator)
             {
-                errors.Add("A Mediator relays its neighbours through its SSH server, so Endpoint.Mode must be SshTunnel.");
+                errors.Add(Texts.Get("Config.MediatorNeedsSsh"));
             }
 
             if (options.Endpoint.Port == options.ListenPort)
             {
-                errors.Add("Endpoint.Port must differ from ListenPort: the local API keeps its own loopback port.");
+                errors.Add(Texts.Get("Config.PortsMustDiffer"));
             }
 
             if (!IPAddress.TryParse(options.Endpoint.BindAddress, out _))
             {
-                errors.Add($"Endpoint.BindAddress '{options.Endpoint.BindAddress}' is not a valid IP address.");
+                errors.Add(Texts.Format("Config.BindAddressInvalid", options.Endpoint.BindAddress));
             }
         }
 
         if (options.PatchMaxAgeMinutes < 1)
         {
-            errors.Add("PatchMaxAgeMinutes must be positive.");
+            errors.Add(Texts.Get("Config.PatchMaxAge"));
         }
 
         if (options.Ssh.ConnectTimeoutSeconds < 1)
         {
-            errors.Add("Ssh.ConnectTimeoutSeconds must be positive.");
+            errors.Add(Texts.Get("Config.SshTimeout"));
         }
 
         var ids = new HashSet<Guid>();
@@ -74,7 +75,7 @@ public static class SyncBridgeOptionsValidator
             TryAdd(errors, () => link = ToChainLink(options.Chain[index]), $"Chain[{index}]");
             if (link is not null && !ids.Add(link.Id))
             {
-                errors.Add($"Chain[{index}]: duplicate link identifier {link.Id}.");
+                errors.Add(Texts.Format("Config.DuplicateLinkId", index, link.Id));
             }
         }
 
@@ -85,14 +86,14 @@ public static class SyncBridgeOptionsValidator
             var expected = options.Role == NodeRole.Source ? NodeRole.Dest : NodeRole.Source;
             if (endpoint.Peer.Role != expected)
             {
-                errors.Add($"The last chain link must point to a {expected} peer, but '{endpoint.Name}' points to {endpoint.Peer.Role}.");
+                errors.Add(Texts.Format("Config.LastLinkRole", expected, endpoint.Name, endpoint.Peer.Role));
             }
 
             foreach (var hop in chain.Take(chain.Count - 1))
             {
                 if (hop.Peer.Role != NodeRole.Mediator)
                 {
-                    errors.Add($"Intermediate chain link '{hop.Name}' must point to a Mediator peer, but points to {hop.Peer.Role}.");
+                    errors.Add(Texts.Format("Config.IntermediateLinkRole", hop.Name, hop.Peer.Role));
                 }
             }
         }

@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using RCynQ.Service.Security;
-using Xunit;
 
 namespace RCynQ.Service.Tests;
 

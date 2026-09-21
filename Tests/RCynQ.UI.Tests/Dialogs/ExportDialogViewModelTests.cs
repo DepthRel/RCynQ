@@ -4,7 +4,6 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Dialogs;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Dialogs;
 

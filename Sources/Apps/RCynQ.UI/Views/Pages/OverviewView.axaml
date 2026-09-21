@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Controls"
@@ -11,32 +12,32 @@
       <Grid ColumnDefinitions="*,12,*,12,*">
         <Border Classes="card padded">
           <StackPanel Spacing="4">
-            <TextBlock Classes="muted" Text="Роль" />
+            <TextBlock Classes="muted" Text="{loc:Loc Field.Role}" />
             <TextBlock Classes="value" Text="{Binding RoleText}" />
           </StackPanel>
         </Border>
         <Border Grid.Column="2" Classes="card padded">
           <StackPanel Spacing="4">
-            <TextBlock Classes="muted" Text="Узел" />
+            <TextBlock Classes="muted" Text="{loc:Loc Overview.Node}" />
             <TextBlock Classes="value" Text="{Binding NodeName}" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </Border>
         <Border Grid.Column="4" Classes="card padded">
           <StackPanel Spacing="4">
-            <TextBlock Classes="muted" Text="Последняя синхронизация" />
+            <TextBlock Classes="muted" Text="{loc:Loc Overview.LastSync}" />
             <TextBlock Classes="value mono" Text="{Binding LastSyncText}" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </Border>
       </Grid>
 
       <StackPanel>
-        <TextBlock Classes="section" Text="Проблемы" />
+        <TextBlock Classes="section" Text="{loc:Loc Overview.Problems}" />
         <Border Classes="card">
           <Panel>
             <Border Classes="row" IsVisible="{Binding !HasProblems}">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" />
-                <TextBlock Classes="secondary" Text="Проблем не обнаружено" />
+                <TextBlock Classes="secondary" Text="{loc:Loc Overview.NoProblems}" />
               </StackPanel>
             </Border>
             <ItemsControl Classes="rows" ItemsSource="{Binding Problems}">
@@ -50,7 +51,7 @@
                               Command="{Binding $parent[ItemsControl].((pages:OverviewViewModel)DataContext).NavigateCommand}"
                               CommandParameter="{Binding}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                          <TextBlock Text="Перейти" />
+                          <TextBlock Text="{loc:Loc Overview.Go}" />
                           <controls:IconView Classes="small" IconKey="Icon.ChevronRight" />
                         </StackPanel>
                       </Button>
@@ -64,10 +65,10 @@
       </StackPanel>
 
       <StackPanel>
-        <TextBlock Classes="section" Text="Звенья цепочки" />
+        <TextBlock Classes="section" Text="{loc:Loc Overview.Links}" />
         <Border Classes="card">
           <Panel>
-            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoLinks}" Text="Звенья не настроены." />
+            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoLinks}" Text="{loc:Loc Overview.NoLinks}" />
             <ItemsControl Classes="rows" ItemsSource="{Binding Links}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:TunnelLinkItemViewModel">

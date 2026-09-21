@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 
 namespace RCynQ.Git.Processes;
 
@@ -44,7 +44,7 @@ public sealed class SystemProcessRunner : IProcessRunner
             KillQuietly(process);
             if (!cancellationToken.IsCancellationRequested)
             {
-                throw new SyncBridgeException($"Process '{spec.FileName}' timed out after {spec.Timeout}.");
+                throw new SyncBridgeException(Texts.Format("Process.TimedOut", spec.FileName, spec.Timeout));
             }
 
             throw;
@@ -128,16 +128,16 @@ public sealed class SystemProcessRunner : IProcessRunner
         {
             if (!process.Start())
             {
-                throw new SyncBridgeException($"Process '{spec.FileName}' could not be started.");
+                throw new SyncBridgeException(Texts.Format("Process.NotStarted", spec.FileName));
             }
         }
         catch (Win32Exception ex)
         {
-            throw new SyncBridgeException($"Process '{spec.FileName}' could not be started: {ex.Message}", ex);
+            throw new SyncBridgeException(Texts.Format("Process.NotStartedBecause", spec.FileName, ex.Message), ex);
         }
         catch (InvalidOperationException ex)
         {
-            throw new SyncBridgeException($"Process '{spec.FileName}' could not be started: {ex.Message}", ex);
+            throw new SyncBridgeException(Texts.Format("Process.NotStartedBecause", spec.FileName, ex.Message), ex);
         }
     }
 

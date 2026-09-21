@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 
 namespace RCynQ.UI.ViewModels;
@@ -32,6 +33,12 @@ public abstract partial class PageViewModelBase : ObservableObject
     /// Gets a value indicating whether an informational message is shown.
     /// </summary>
     public bool HasInfo => !string.IsNullOrEmpty(InfoMessage);
+
+    /// <summary>
+    /// Tells the bindings that the texts computed from the language changed; pages that keep rows with computed texts
+    /// refresh them too.
+    /// </summary>
+    public virtual void RefreshTexts() => OnPropertyChanged(string.Empty);
 
     /// <summary>
     /// Reloads the page data from the service.
@@ -69,7 +76,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         catch (HttpRequestException ex)
         {
-            ErrorMessage = $"Сервис RCynQ недоступен: {ex.Message}";
+            ErrorMessage = Texts.Format("Common.ServiceUnavailable", ex.Message);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or FormatException)
         {

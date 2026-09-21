@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:RCynQ.UI.Localization"
         xmlns:vm="using:RCynQ.UI.ViewModels"
         xmlns:nav="using:RCynQ.UI.ViewModels.Navigation"
         xmlns:controls="using:RCynQ.UI.Controls"
@@ -67,8 +68,8 @@
                 Classes="nav"
                 IsVisible="False"
                 MinWidth="56"
-                ToolTip.Tip="Вкладки, которые не поместились"
-                AutomationProperties.Name="Ещё"
+                ToolTip.Tip="{loc:Loc Nav.OverflowTip}"
+                AutomationProperties.Name="{loc:Loc Nav.More}"
                 Click="OnOverflowClick">
           <Grid RowDefinitions="*,Auto">
             <TextBlock Text="…" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="14,0,14,4" />
@@ -80,8 +81,8 @@
                 Classes="icon"
                 VerticalAlignment="Center"
                 Margin="4,0,0,6"
-                ToolTip.Tip="Обновить"
-                AutomationProperties.Name="Обновить"
+                ToolTip.Tip="{loc:Loc Common.Refresh}"
+                AutomationProperties.Name="{loc:Loc Common.Refresh}"
                 Command="{Binding RefreshCommand}">
           <controls:IconView IconKey="Icon.Refresh" />
         </Button>
@@ -95,21 +96,21 @@
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" VerticalAlignment="Top" />
           <TextBlock Grid.Column="1" Text="{Binding InstallationWarning}" TextWrapping="Wrap" VerticalAlignment="Center" />
           <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" VerticalAlignment="Center"
-                  Content="Это тот же узел" Command="{Binding AcceptInstallationCommand}" />
+                  Content="{loc:Loc Main.SameNode}" Command="{Binding AcceptInstallationCommand}" />
         </Grid>
       </Border>
       <Border Classes="banner error" Margin="28,14,28,0" IsVisible="{Binding HasStartupError}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource DangerBrush}" Margin="0,0,10,0" />
           <SelectableTextBlock Grid.Column="1" Text="{Binding StartupError}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" Content="Повторить" Command="{Binding RefreshCommand}" />
+          <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" Content="{loc:Loc Common.Retry}" Command="{Binding RefreshCommand}" />
         </Grid>
       </Border>
       <Border Classes="banner error" Margin="28,14,28,0" IsVisible="{Binding CurrentPage.HasError, FallbackValue=False}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource DangerBrush}" Margin="0,0,10,0" />
           <SelectableTextBlock Grid.Column="1" Text="{Binding CurrentPage.ErrorMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="Скрыть">
+          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="{loc:Loc Common.Hide}">
             <controls:IconView Classes="small" IconKey="Icon.X" />
           </Button>
         </Grid>
@@ -118,7 +119,7 @@
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
           <SelectableTextBlock Grid.Column="1" Text="{Binding CurrentPage.InfoMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="Скрыть">
+          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="{loc:Loc Common.Hide}">
             <controls:IconView Classes="small" IconKey="Icon.X" />
           </Button>
         </Grid>

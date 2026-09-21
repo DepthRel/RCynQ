@@ -9,6 +9,7 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.Validation;
 using RCynQ.Ssh.Keys;
 using RCynQ.Sync.Endpoint;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Configuration;
 
@@ -95,16 +96,16 @@ public sealed class NodeConfigurationTransfer
     public async Task<ExportedNodeConfiguration> ExportAsync(string? host, string? sshUser, int sshPort = 22, string? sshPublicKey = null, string? hostKeyFingerprint = null, CancellationToken cancellationToken = default)
     {
         var normalizedFingerprint = NormalizeHostKeyFingerprint(hostKeyFingerprint)
-            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException($"Host key fingerprint '{hostKeyFingerprint}' is not a SHA256 fingerprint.", nameof(hostKeyFingerprint)));
+            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException(Texts.Format("Transfer.HostKeyFingerprintValue", hostKeyFingerprint), nameof(hostKeyFingerprint)));
 
         if (host is not null && !SshEndpoint.IsValidHost(host))
         {
-            throw new ArgumentException($"Host '{host}' is invalid.", nameof(host));
+            throw new ArgumentException(Texts.Format("Transfer.HostInvalid", host), nameof(host));
         }
 
         if (sshUser is not null && !SshEndpoint.IsValidUser(sshUser))
         {
-            throw new ArgumentException($"SSH user '{sshUser}' is invalid.", nameof(sshUser));
+            throw new ArgumentException(Texts.Format("Transfer.UserInvalid", sshUser), nameof(sshUser));
         }
 
         Guard.Port(sshPort, nameof(sshPort));
@@ -145,13 +146,6 @@ public sealed class NodeConfigurationTransfer
     }
 
     /// <summary>
-    /// Imports the configuration of a peer.
-    /// </summary>
-    /// <param name="imported">The peer configuration.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The import result.</returns>
-    /// <exception cref="FormatException">The configuration is invalid or incomplete.</exception>
-    /// <summary>
     /// Gets the fingerprint of the node's TLS certificate for the export.
     /// </summary>
     /// <returns>The fingerprint.</returns>
@@ -159,21 +153,28 @@ public sealed class NodeConfigurationTransfer
     private string EndpointCertificateFingerprint()
         => _tlsFingerprint()
             ?? throw new SyncBridgeException(
-                "This node accepts connections on its own port, but its TLS certificate has not been created yet. Start the service once and export again.");
+                Texts.Get("Transfer.NoCertificate"));
 
+    /// <summary>
+    /// Imports the configuration of a peer.
+    /// </summary>
+    /// <param name="imported">The peer configuration.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The import result.</returns>
+    /// <exception cref="FormatException">The configuration is invalid or incomplete.</exception>
     public async Task<ImportResult> ImportAsync(ExportedNodeConfiguration imported, CancellationToken cancellationToken = default)
     {
         Validate(imported);
         if (imported.NodeId == _node.Id)
         {
-            throw new FormatException("The file describes this node itself; import the peer's export instead.");
+            throw new FormatException(Texts.Get("Transfer.ThisNode"));
         }
 
         var existing = await _peers.GetAsync(imported.NodeId, cancellationToken);
         var host = imported.Host ?? existing?.Host
-            ?? throw new FormatException($"The export of {imported.NodeId} has no host; export it again with a host.");
+            ?? throw new FormatException(Texts.Format("Transfer.NoHost", imported.NodeId));
         var user = imported.SshUser ?? existing?.SshUser
-            ?? throw new FormatException($"The export of {imported.NodeId} has no SSH user; export it again with a user.");
+            ?? throw new FormatException(Texts.Format("Transfer.NoUser", imported.NodeId));
         var port = imported.SshPort > 0 ? imported.SshPort : existing?.SshPort ?? 22;
 
         PeerDescriptor peer;
@@ -193,7 +194,7 @@ public sealed class NodeConfigurationTransfer
         }
         catch (ArgumentException ex)
         {
-            throw new FormatException($"The export of {imported.NodeId} is invalid: {ex.Message}", ex);
+            throw new FormatException(Texts.Format("Transfer.Invalid", imported.NodeId, ex.Message), ex);
         }
 
         await _peers.UpsertAsync(peer, cancellationToken);
@@ -208,7 +209,7 @@ public sealed class NodeConfigurationTransfer
 
         if (linked.Count > 0)
         {
-            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, $"Updated peer {peer.Id} and {linked.Count} link(s).");
+            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, Texts.Format("Transfer.Updated", peer.Id, linked.Count));
         }
 
         var counterpart = _node.Role switch
@@ -234,13 +235,13 @@ public sealed class NodeConfigurationTransfer
         }
         else
         {
-            return new ImportResult(peer.Id, peer.Role, false, null, $"Stored peer {peer.Id}; a {_node.Role} node does not link to a {peer.Role} node directly.");
+            return new ImportResult(peer.Id, peer.Role, false, null, Texts.Format("Transfer.StoredOnly", peer.Id, _node.Role, peer.Role));
         }
 
         var name = UniqueName(peer.Id.Value, links);
         var created = new ChainLinkConfig(Guid.NewGuid(), name, TransportKind.Direct, peer, 0, remotePort, priority);
         await _links.UpsertAsync(created, cancellationToken);
-        return new ImportResult(peer.Id, peer.Role, true, created.Id, $"Imported {peer.Role} {peer.Id} and added link '{name}'.");
+        return new ImportResult(peer.Id, peer.Role, true, created.Id, Texts.Format("Transfer.Imported", peer.Role, peer.Id, name));
     }
 
     /// <summary>
@@ -265,7 +266,7 @@ public sealed class NodeConfigurationTransfer
         }
         catch (JsonException ex)
         {
-            throw new FormatException($"The configuration file is not valid: {ex.Message}", ex);
+            throw new FormatException(Texts.Format("Transfer.FileInvalid", ex.Message), ex);
         }
 
         Validate(configuration);
@@ -281,56 +282,59 @@ public sealed class NodeConfigurationTransfer
     {
         if (configuration is null)
         {
-            throw new FormatException("The configuration file is empty.");
+            throw new FormatException(Texts.Get("Transfer.FileEmpty"));
         }
 
         if (configuration.FormatVersion != ExportedNodeConfiguration.CurrentFormatVersion)
         {
-            throw new FormatException($"Unsupported configuration format version {configuration.FormatVersion}.");
+            throw new FormatException(Texts.Format("Transfer.Version", configuration.FormatVersion));
         }
 
         if (configuration.NodeId.IsEmpty || string.IsNullOrWhiteSpace(configuration.Name) || !Enum.IsDefined(configuration.Role))
         {
-            throw new FormatException("The configuration must contain a node identifier, a name and a valid role.");
+            throw new FormatException(Texts.Get("Transfer.MissingFields"));
         }
 
         if (configuration.ListenPort is < 1 or > 65535)
         {
-            throw new FormatException($"Listen port {configuration.ListenPort} is invalid.");
+            throw new FormatException(Texts.Format("Transfer.ListenPort", configuration.ListenPort));
         }
 
         if (!Enum.IsDefined(configuration.EndpointMode))
         {
-            throw new FormatException($"Endpoint mode '{configuration.EndpointMode}' is unknown.");
+            throw new FormatException(Texts.Format("Transfer.EndpointMode", configuration.EndpointMode));
         }
 
         if (configuration.EndpointMode == EndpointMode.Direct)
         {
             if (configuration.EndpointPort is < 1 or > 65535)
             {
-                throw new FormatException($"Endpoint port {configuration.EndpointPort} is invalid.");
+                throw new FormatException(Texts.Format("Transfer.EndpointPort", configuration.EndpointPort));
             }
 
             if (NodeCertificateStore.NormalizeFingerprint(configuration.TlsFingerprint) is null)
             {
-                throw new FormatException("A node that accepts connections on its own port must publish its TLS certificate fingerprint.");
+                throw new FormatException(Texts.Get("Transfer.NeedsFingerprint"));
             }
         }
 
         if (configuration.SigningPublicKey is not null)
         {
+            bool isP256;
             try
             {
                 using var key = ECDsa.Create();
                 key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(configuration.SigningPublicKey), out _);
-                if (key.KeySize != 256)
-                {
-                    throw new FormatException("The signing public key must be an ECDSA P-256 key.");
-                }
+                isP256 = key.KeySize == 256;
             }
-            catch (Exception ex) when (ex is CryptographicException or FormatException and not { Message: "The signing public key must be an ECDSA P-256 key." })
+            catch (Exception ex) when (ex is CryptographicException or FormatException)
             {
-                throw new FormatException("The signing public key is not a valid ECDSA public key.", ex);
+                throw new FormatException(Texts.Get("Transfer.KeyNotValid"), ex);
+            }
+
+            if (!isP256)
+            {
+                throw new FormatException(Texts.Get("Transfer.KeyMustBeP256"));
             }
         }
 
@@ -341,7 +345,7 @@ public sealed class NodeConfigurationTransfer
 
         if (!string.IsNullOrWhiteSpace(configuration.HostKeyFingerprint) && NormalizeHostKeyFingerprint(configuration.HostKeyFingerprint) is null)
         {
-            throw new FormatException("The host key fingerprint must be an OpenSSH SHA256 fingerprint.");
+            throw new FormatException(Texts.Get("Transfer.HostKeyFingerprint"));
         }
     }
 

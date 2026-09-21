@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
@@ -12,7 +13,7 @@ using RCynQ.UI.ViewModels.Navigation;
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Обзор" tab: role, last synchronization, link statuses and problems with quick navigation.
+/// The overview tab: role, last synchronization, link statuses and problems with quick navigation.
 /// </summary>
 public sealed partial class OverviewViewModel : PageViewModelBase
 {
@@ -33,9 +34,8 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     [ObservableProperty]
     private string _nodeName = "—";
 
-    /// <summary>The last synchronization time.</summary>
-    [ObservableProperty]
-    private string _lastSyncText = "никогда";
+    /// <summary>The last synchronization time, or <see langword="null"/> when there was none.</summary>
+    private DateTimeOffset? _lastSync;
 
     /// <summary>Whether problems exist.</summary>
     [ObservableProperty]
@@ -50,6 +50,9 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         _api = api;
         Links.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoLinks));
     }
+
+    /// <summary>Gets the last synchronization time in the language of the user.</summary>
+    public string LastSyncText => DisplayText.Time(_lastSync);
 
     /// <summary>Gets a value indicating whether no links are configured.</summary>
     public bool HasNoLinks => Links.Count == 0;
@@ -74,7 +77,8 @@ public sealed partial class OverviewViewModel : PageViewModelBase
 
         _status = await _api.GetStateAsync();
         var last = new[] { _status.State.LastSentAtUtc, _status.State.LastReceivedAtUtc }.Max();
-        LastSyncText = DisplayText.Time(last);
+        _lastSync = last;
+        OnPropertyChanged(nameof(LastSyncText));
 
         var links = await _api.GetLinksAsync();
         Links.Clear();
@@ -90,6 +94,18 @@ public sealed partial class OverviewViewModel : PageViewModelBase
 
         RebuildProblems();
     });
+
+    /// <inheritdoc />
+    public override void RefreshTexts()
+    {
+        base.RefreshTexts();
+        foreach (var link in Links)
+        {
+            link.RefreshTexts();
+        }
+
+        RebuildProblems();
+    }
 
     /// <summary>
     /// Applies a link state pushed by the service.
@@ -124,23 +140,23 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         {
             if (!_status.BaselineInitialized)
             {
-                Problems.Add(new ProblemItemViewModel("Не создана базовая копия (baseline) — синхронизация недоступна.", TabKey.Sync));
+                Problems.Add(new ProblemItemViewModel(Texts.Get("Overview.Problem.NoBaseline"), TabKey.Sync));
             }
 
             if (_status.ConflictPendingCount > 0)
             {
-                Problems.Add(new ProblemItemViewModel($"Входящие патчи с конфликтами: {_status.ConflictPendingCount}.", TabKey.Sync));
+                Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Conflicts", _status.ConflictPendingCount), TabKey.Sync));
             }
         }
 
         foreach (var link in Links.Where(link => link.IsOffline))
         {
-            Problems.Add(new ProblemItemViewModel($"Нет связи со звеном «{link.Name}».", TabKey.Tunnel));
+            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.LinkOffline", link.Name), TabKey.Tunnel));
         }
 
         if (_diagnosticFailures.Count > 0)
         {
-            Problems.Add(new ProblemItemViewModel($"Не пройдены проверки: {string.Join(", ", _diagnosticFailures)}.", TabKey.Diagnostics));
+            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Diagnostics", string.Join(", ", _diagnosticFailures)), TabKey.Diagnostics));
         }
 
         HasProblems = Problems.Count > 0;

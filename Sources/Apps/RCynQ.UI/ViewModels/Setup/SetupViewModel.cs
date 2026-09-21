@@ -4,9 +4,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Ids;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
 
 namespace RCynQ.UI.ViewModels.Setup;
@@ -67,10 +68,12 @@ public sealed partial class SetupViewModel : ObservableObject
     /// </summary>
     /// <param name="configPath">The configuration file to create or update.</param>
     /// <param name="dialogs">The dialog service.</param>
-    public SetupViewModel(string configPath, IDialogService dialogs)
+    /// <param name="language">The language selector shown in the corner of the setup, or <see langword="null"/>.</param>
+    public SetupViewModel(string configPath, IDialogService dialogs, LanguageViewModel? language = null)
     {
         ConfigPath = configPath ?? throw new ArgumentNullException(nameof(configPath));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        Language = language;
     }
 
     /// <summary>
@@ -81,11 +84,17 @@ public sealed partial class SetupViewModel : ObservableObject
     /// <summary>Gets the configuration file.</summary>
     public string ConfigPath { get; }
 
+    /// <summary>Gets the language selector, or <see langword="null"/> when the setup is shown without one.</summary>
+    public LanguageViewModel? Language { get; }
+
+    /// <summary>Gets a value indicating whether the language selector is shown.</summary>
+    public bool HasLanguage => Language is not null;
+
     /// <summary>Gets the selectable roles.</summary>
     public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
 
     /// <summary>Gets the label of the path field.</summary>
-    public string PathLabel => SelectedRole == NodeRole.Dest ? "Путь к репозиторию" : "Рабочая копия";
+    public string PathLabel => DisplayText.PathLabel(SelectedRole);
 
     /// <summary>Gets a value indicating whether the path applies to the role.</summary>
     public bool IsPathVisible => SelectedRole != NodeRole.Mediator;
@@ -112,12 +121,12 @@ public sealed partial class SetupViewModel : ObservableObject
     public bool HasError => !string.IsNullOrEmpty(Error);
 
     /// <summary>Gets the description of the selected role.</summary>
-    public string RoleHint => SelectedRole switch
-    {
-        NodeRole.Source => "Рабочая копия разработчика: отправляет изменения на Dest, принимает их обратно и получает ветки Git.",
-        NodeRole.Dest => "Закрытый репозиторий: принимает изменения от Source, отправляет свои и отдаёт ветки через git-upload-pack.",
-        _ => "Ретранслятор: поднимает туннели и пропускает SSH-соединения соседей. Всё запускается вместе с приложением и останавливается при его закрытии."
-    };
+    public string RoleHint => Texts.Get($"Setup.RoleHint.{SelectedRole}");
+
+    /// <summary>
+    /// Tells the bindings that the texts computed from the language changed.
+    /// </summary>
+    public void RefreshTexts() => OnPropertyChanged(string.Empty);
 
     /// <summary>
     /// Creates a valid node identifier from a machine name.
@@ -210,13 +219,13 @@ public sealed partial class SetupViewModel : ObservableObject
     {
         if (!Core.Ids.NodeId.TryParse(NodeId.Trim(), out _))
         {
-            Error = "Идентификатор узла может содержать только латинские буквы, цифры, '-', '_' и '.'.";
+            Error = Texts.Get("Setup.NodeIdInvalid");
             return;
         }
 
         if (IsPathVisible && string.IsNullOrWhiteSpace(Path))
         {
-            Error = $"Укажите: {PathLabel.ToLowerInvariant()}.";
+            Error = Texts.Format("Setup.PathRequired", PathLabel.ToLower(Texts.Localizer.Culture));
             return;
         }
 
@@ -237,7 +246,7 @@ public sealed partial class SetupViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Error = $"Не удалось записать {ConfigPath}: {ex.Message}";
+            Error = Texts.Format("Setup.WriteFailed", ConfigPath, ex.Message);
         }
         finally
         {

@@ -1,8 +1,8 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Keys;
 
@@ -57,7 +57,7 @@ public sealed class SshKeyGenerator
         var publicPath = path + ".pub";
         if (File.Exists(path) || File.Exists(publicPath))
         {
-            throw new SyncBridgeException($"An SSH key already exists at '{path}'; refusing to overwrite it.");
+            throw new SyncBridgeException(Texts.Format("Keys.AlreadyExists", path));
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -66,7 +66,7 @@ public sealed class SshKeyGenerator
             cancellationToken);
         if (generate.ExitCode != 0 || !File.Exists(publicPath))
         {
-            throw new SshExecutionException($"ssh-keygen failed: {generate.StandardError.Trim()}", generate.ExitCode);
+            throw new SshExecutionException(Texts.Format("Keys.KeygenFailed", generate.StandardError.Trim()), generate.ExitCode);
         }
 
         var publicKey = SshPublicKey.Parse(await File.ReadAllTextAsync(publicPath, cancellationToken));
@@ -79,7 +79,7 @@ public sealed class SshKeyGenerator
 
         if (reported is not null && SshPublicKey.NormalizeFingerprint(reported) != publicKey.Fingerprint)
         {
-            throw new SshExecutionException($"ssh-keygen reported fingerprint {reported} but the public key hashes to {publicKey.Fingerprint}.");
+            throw new SshExecutionException(Texts.Format("Keys.FingerprintMismatch", reported, publicKey.Fingerprint));
         }
 
         return new SshKeyPair(path, publicPath, publicKey, publicKey.Fingerprint);

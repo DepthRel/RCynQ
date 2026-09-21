@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Keys;
 
@@ -34,7 +35,7 @@ public sealed record SshPublicKey
     {
         if (!AllowedTypes.Contains(type))
         {
-            throw new FormatException($"SSH key type '{type}' is not supported.");
+            throw new FormatException(Texts.Format("Keys.TypeUnsupported", type));
         }
 
         byte[] bytes;
@@ -44,18 +45,18 @@ public sealed record SshPublicKey
         }
         catch (FormatException ex)
         {
-            throw new FormatException("SSH key blob is not valid Base64.", ex);
+            throw new FormatException(Texts.Get("Keys.BlobBase64"), ex);
         }
 
         if (bytes.Length < 4)
         {
-            throw new FormatException("SSH key blob is too short.");
+            throw new FormatException(Texts.Get("Keys.BlobShort"));
         }
 
         var typeLength = BinaryPrimitives.ReadUInt32BigEndian(bytes);
         if (typeLength > bytes.Length - 4 || Encoding.ASCII.GetString(bytes, 4, (int)typeLength) != type)
         {
-            throw new FormatException("SSH key blob does not match its declared type.");
+            throw new FormatException(Texts.Get("Keys.BlobType"));
         }
 
         Type = type;
@@ -99,7 +100,7 @@ public sealed record SshPublicKey
         var parts = line.Trim().Split((char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2)
         {
-            throw new FormatException("SSH public key must have the form 'type base64 [comment]'.");
+            throw new FormatException(Texts.Get("Keys.Form"));
         }
 
         return new SshPublicKey(parts[0], parts[1], parts.Length == 3 ? parts[2] : null);

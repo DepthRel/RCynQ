@@ -1,18 +1,13 @@
-using System.Globalization;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
 using RCynQ.Git.Commands;
-using RCynQ.Git.Patches;
-using RCynQ.Git.Paths;
 using RCynQ.Git.Repository;
-using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Apply;
 
@@ -111,7 +106,7 @@ public sealed class GitPatchApplier : IPatchApplier
                     var hashes = envelope.Manifest.ToDictionary(change => change.Path, change => change.Sha256, StringComparer.Ordinal);
                     return PatchApplyResult.Conflict(
                         envelope.Id,
-                        unmerged.Select(path => new ConflictFile(path, null, hashes.GetValueOrDefault(path), "Resolve the conflict markers, then stage the file.")).ToArray());
+                        unmerged.Select(path => new ConflictFile(path, null, hashes.GetValueOrDefault(path), LocalizedText.Encode("Apply.ResolveMarkers"))).ToArray());
                 }
             }
 
@@ -128,7 +123,7 @@ public sealed class GitPatchApplier : IPatchApplier
                     var rejectFile = _paths.ResolveWithinRoot(root, change.Path) + ".rej";
                     return File.Exists(rejectFile) && File.GetLastWriteTimeUtc(rejectFile) >= started;
                 })
-                .Select(change => new ConflictFile(change.Path, null, change.Sha256, $"Rejected hunks were written to {change.Path}.rej."))
+                .Select(change => new ConflictFile(change.Path, null, change.Sha256, LocalizedText.Encode("Apply.RejectedHunks", change.Path)))
                 .ToArray();
 
             return rejected.Length > 0

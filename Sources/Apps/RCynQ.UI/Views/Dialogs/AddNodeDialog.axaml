@@ -1,67 +1,75 @@
 <dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:items="using:RCynQ.UI.ViewModels.Items"
                      x:Class="RCynQ.UI.Views.Dialogs.AddNodeDialog"
                      x:DataType="vm:AddNodeDialogViewModel"
-                     Title="Добавить узел"
+                     Title="{loc:Loc Nodes.AddNode}"
                      Width="560" SizeToContent="Height" CanResize="False"
                      WindowStartupLocation="CenterOwner">
   <StackPanel Margin="22" Spacing="14">
-    <TextBlock Classes="page-title" Text="Добавить узел" />
+    <TextBlock Classes="page-title" Text="{loc:Loc Nodes.AddNode}" />
 
     <Grid ColumnDefinitions="*,14,*" RowDefinitions="Auto,14,Auto,14,Auto,14,Auto">
       <StackPanel>
-        <TextBlock Classes="field-label" Text="Идентификатор узла" />
-        <TextBox Classes="mono" Text="{Binding NodeId}" Watermark="mediator-1" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />
+        <TextBox Classes="mono" Text="{Binding NodeId}" PlaceholderText="mediator-1" />
       </StackPanel>
       <StackPanel Grid.Column="2">
-        <TextBlock Classes="field-label" Text="Роль" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.Role}" />
         <ComboBox ItemsSource="{Binding Roles}" SelectedItem="{Binding Role}" />
       </StackPanel>
 
       <StackPanel Grid.Row="2">
-        <TextBlock Classes="field-label" Text="Адрес" />
-        <TextBox Classes="mono" Text="{Binding Host}" Watermark="203.0.113.4" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.Address}" />
+        <TextBox Classes="mono" Text="{Binding Host}" PlaceholderText="203.0.113.4" />
       </StackPanel>
       <StackPanel Grid.Row="2" Grid.Column="2">
-        <TextBlock Classes="field-label" Text="SSH-пользователь" />
-        <TextBox Classes="mono" Text="{Binding SshUser}" Watermark="rcynq" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.SshUser}" />
+        <TextBox Classes="mono" Text="{Binding SshUser}" PlaceholderText="rcynq" />
       </StackPanel>
 
       <StackPanel Grid.Row="4">
-        <TextBlock Classes="field-label" Text="SSH-порт" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.SshPort}" />
         <NumericUpDown Value="{Binding SshPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
       </StackPanel>
       <StackPanel Grid.Row="4" Grid.Column="2">
-        <TextBlock Classes="field-label" Text="Порт на узле" />
+        <TextBlock Classes="field-label" Text="{loc:Loc AddNode.RemotePort}" />
         <NumericUpDown Value="{Binding RemotePort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
       </StackPanel>
 
       <StackPanel Grid.Row="6">
-        <TextBlock Classes="field-label" Text="Позиция в цепочке" />
+        <TextBlock Classes="field-label" Text="{loc:Loc AddNode.Priority}" />
         <NumericUpDown Value="{Binding Priority}" Minimum="0" Maximum="100000" Increment="10" FormatString="0" />
       </StackPanel>
       <StackPanel Grid.Row="6" Grid.Column="2">
-        <TextBlock Classes="field-label" Text="Сеть, через которую доступен узел" />
-        <ComboBox ItemsSource="{Binding Transports}" SelectedItem="{Binding SelectedTransport}" />
+        <TextBlock Classes="field-label" Text="{loc:Loc AddNode.Network}" />
+        <ComboBox ItemsSource="{Binding Transports}" SelectedItem="{Binding SelectedTransport}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="items:TransportOption">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
       </StackPanel>
     </Grid>
 
     <StackPanel IsVisible="{Binding NeedsConfigPath}">
-      <TextBlock Classes="field-label" Text="Конфигурация AmneziaWG" />
-      <TextBox Classes="mono" Text="{Binding ConfigPath}" Watermark="/etc/amnezia/amneziawg/awg0.conf" />
+      <TextBlock Classes="field-label" Text="{loc:Loc AddNode.AmneziaConfig}" />
+      <TextBox Classes="mono" Text="{Binding ConfigPath}" PlaceholderText="/etc/amnezia/amneziawg/awg0.conf" />
     </StackPanel>
 
     <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
-               Text="Посредники (Mediator) используются как SSH jump-узлы в порядке позиции; конечный узел (Source или Dest) должен иметь наибольшую позицию." />
+               Text="{loc:Loc AddNode.Hint}" />
 
     <TextBlock Classes="danger" Text="{Binding Error}" TextWrapping="Wrap"
                IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-      <Button Classes="outline" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
-      <Button Classes="accent" Content="Добавить" IsDefault="True" Command="{Binding ConfirmCommand}" />
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="{loc:Loc Common.Add}" IsDefault="True" Command="{Binding ConfirmCommand}" />
     </StackPanel>
   </StackPanel>
 </dialogs:DialogWindow>

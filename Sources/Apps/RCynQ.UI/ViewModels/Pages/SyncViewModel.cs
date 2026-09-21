@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.ViewModels.Dialogs;
@@ -11,7 +12,7 @@ using RCynQ.UI.ViewModels.Items;
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Синхронизация" tab: pending files, sending, patch history, diff viewing and conflict resolution.
+/// The synchronization tab: pending files, sending, patch history, diff viewing and conflict resolution.
 /// </summary>
 public sealed partial class SyncViewModel : PageViewModelBase
 {
@@ -25,9 +26,8 @@ public sealed partial class SyncViewModel : PageViewModelBase
     [ObservableProperty]
     private string _roleText = "—";
 
-    /// <summary>The last synchronization time.</summary>
-    [ObservableProperty]
-    private string _lastSyncText = "никогда";
+    /// <summary>The last synchronization time, or <see langword="null"/> when there was none.</summary>
+    private DateTimeOffset? _lastSync;
 
     /// <summary>Whether the baseline exists.</summary>
     [ObservableProperty]
@@ -58,6 +58,9 @@ public sealed partial class SyncViewModel : PageViewModelBase
     /// <summary>Gets the patch history.</summary>
     public ObservableCollection<PatchHistoryItemViewModel> History { get; } = new();
 
+    /// <summary>Gets the last synchronization time in the language of the user.</summary>
+    public string LastSyncText => DisplayText.Time(_lastSync);
+
     /// <summary>Gets a value indicating whether there are no local changes.</summary>
     public bool HasNoPendingFiles => PendingFiles.Count == 0;
 
@@ -75,7 +78,8 @@ public sealed partial class SyncViewModel : PageViewModelBase
     {
         var status = await _api.GetStateAsync();
         RoleText = status.Role.ToString();
-        LastSyncText = DisplayText.Time(new[] { status.State.LastSentAtUtc, status.State.LastReceivedAtUtc }.Max());
+        _lastSync = new[] { status.State.LastSentAtUtc, status.State.LastReceivedAtUtc }.Max();
+        OnPropertyChanged(nameof(LastSyncText));
         BaselineInitialized = status.BaselineInitialized;
         ConflictCount = status.ConflictPendingCount;
 
@@ -91,6 +95,16 @@ public sealed partial class SyncViewModel : PageViewModelBase
             History.Add(new PatchHistoryItemViewModel(patch));
         }
     });
+
+    /// <inheritdoc />
+    public override void RefreshTexts()
+    {
+        base.RefreshTexts();
+        foreach (var item in History)
+        {
+            item.RefreshTexts();
+        }
+    }
 
     /// <summary>
     /// Sends the pending changes.
@@ -112,14 +126,14 @@ public sealed partial class SyncViewModel : PageViewModelBase
     [RelayCommand]
     private async Task CreateBaselineAsync()
     {
-        if (!await _dialogs.ConfirmAsync("Базовая копия", "Создать базовую копию из текущей рабочей копии? Делайте это на Source и Dest, когда их рабочие копии совпадают."))
+        if (!await _dialogs.ConfirmAsync(Texts.Get("Sync.BaselineTitle"), Texts.Get("Sync.BaselineConfirm")))
         {
             return;
         }
 
         if (await RunSafeAsync(async () => await _api.CreateBaselineAsync()))
         {
-            InfoMessage = "Базовая копия создана.";
+            InfoMessage = Texts.Get("Sync.BaselineCreated");
             await RefreshAsync();
         }
     }
@@ -149,10 +163,10 @@ public sealed partial class SyncViewModel : PageViewModelBase
             var result = await _api.ResolvePatchAsync(item.Id, policy.Value);
             InfoMessage = result.Status switch
             {
-                PatchStatus.ConflictResolved => "Конфликт разрешён.",
-                PatchStatus.Rejected => "Патч отклонён, локальное состояние сохранено.",
-                PatchStatus.ConflictPending => $"Остались конфликты ({result.Conflicts.Count}) — разрешите их вручную средствами Git.",
-                _ => result.Error ?? result.Status.ToString()
+                PatchStatus.ConflictResolved => Texts.Get("Sync.Resolved"),
+                PatchStatus.Rejected => Texts.Get("Sync.PatchRejected"),
+                PatchStatus.ConflictPending => Texts.Format("Sync.ConflictsLeft", result.Conflicts.Count),
+                _ => LocalizedText.Render(result.Error) ?? result.Status.ToString()
             };
         }))
         {
@@ -176,7 +190,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
         string? diff = null;
         if (await RunSafeAsync(async () => diff = await _api.GetPatchDiffAsync(item.Id)))
         {
-            await _dialogs.ShowTextAsync($"Диф патча {item.Id}", string.IsNullOrEmpty(diff) ? "(пустой диф)" : diff!);
+            await _dialogs.ShowTextAsync(Texts.Format("Sync.DiffTitle", item.Id), string.IsNullOrEmpty(diff) ? Texts.Get("Sync.EmptyDiff") : diff!);
         }
     }
 }

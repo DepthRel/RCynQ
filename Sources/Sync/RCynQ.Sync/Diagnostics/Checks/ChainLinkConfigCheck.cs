@@ -1,14 +1,8 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
 using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -39,14 +33,14 @@ public sealed class ChainLinkConfigCheck : DiagnosticCheckBase
         {
             if (chain.Count == 0)
             {
-                problems.Add("A Mediator should list the neighbour links whose transports it maintains.");
+                problems.Add(Texts.Get("Diag.Chain.MediatorLinks"));
             }
         }
         else
         {
             if (chain.Count == 0)
             {
-                problems.Add("No chain links are configured.");
+                problems.Add(Texts.Get("Diag.Chain.None"));
             }
             else
             {
@@ -54,31 +48,31 @@ public sealed class ChainLinkConfigCheck : DiagnosticCheckBase
                 var endpoint = chain[^1];
                 if (endpoint.Peer.Role != counterpart)
                 {
-                    problems.Add($"The last link '{endpoint.Name}' must point to a {counterpart} peer.");
+                    problems.Add(Texts.Format("Diag.Chain.LastLink", endpoint.Name, counterpart));
                 }
 
                 if (endpoint.Peer.SigningPublicKey is null)
                 {
-                    problems.Add($"Peer {endpoint.Peer.Id} has no signing public key; its patches cannot be verified. Import its exported configuration.");
+                    problems.Add(Texts.Format("Diag.Chain.NoSigningKey", endpoint.Peer.Id));
                 }
 
                 problems.AddRange(chain.Take(chain.Count - 1).Where(link => link.Peer.Role != NodeRole.Mediator)
-                    .Select(link => $"Intermediate link '{link.Name}' must point to a Mediator."));
+                    .Select(link => Texts.Format("Diag.Chain.Intermediate", link.Name)));
             }
 
             var token = await _tokens.GetTokenAsync(cancellationToken);
             if (string.IsNullOrEmpty(token))
             {
-                problems.Add("The link token is not configured.");
+                problems.Add(Texts.Get("Diag.Chain.NoToken"));
             }
             else if (token.Length < LinkTokenProvider.MinimumLength)
             {
-                problems.Add($"The link token is shorter than {LinkTokenProvider.MinimumLength} characters.");
+                problems.Add(Texts.Format("Diag.Chain.ShortToken", LinkTokenProvider.MinimumLength));
             }
         }
 
         return problems.Count == 0
             ? Pass($"{chain.Count} link(s) configured correctly.")
-            : Fail(string.Join(" ", problems), "Fix syncbridge.json or the stored links, then run diagnostics again.");
+            : Fail(string.Join(" ", problems), Texts.Get("Diag.Chain.Fix"));
     }
 }

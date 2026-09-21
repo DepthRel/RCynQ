@@ -1,6 +1,6 @@
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Routing;
 
@@ -77,8 +77,7 @@ public sealed record ChainRoute(
         if (relay.Peer.EndpointMode == EndpointMode.Direct)
         {
             throw new ArgumentException(
-                $"Node '{endpoint.Peer.Id}' accepts connections on its own port, so mediator '{relay.Peer.Id}' has to forward to it and needs an SSH server. "
-                + "Install one on the mediator, or connect the two endpoints without a mediator.",
+                Texts.Format("Route.MediatorNeedsSsh", endpoint.Peer.Id, relay.Peer.Id),
                 nameof(chain));
         }
 

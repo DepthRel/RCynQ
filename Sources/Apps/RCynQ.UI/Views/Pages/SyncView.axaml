@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:sys="using:System"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:items="using:RCynQ.UI.ViewModels.Items"
@@ -12,22 +13,22 @@
       <Grid ColumnDefinitions="*,Auto">
         <WrapPanel>
           <StackPanel Spacing="2" Margin="0,0,32,0">
-            <TextBlock Classes="muted" Text="Роль" />
+            <TextBlock Classes="muted" Text="{loc:Loc Field.Role}" />
             <TextBlock Classes="value" Text="{Binding RoleText}" />
           </StackPanel>
           <StackPanel Spacing="2" Margin="0,0,32,0">
-            <TextBlock Classes="muted" Text="Последняя синхронизация" />
+            <TextBlock Classes="muted" Text="{loc:Loc Overview.LastSync}" />
             <TextBlock Classes="value mono" Text="{Binding LastSyncText}" />
           </StackPanel>
           <StackPanel Spacing="2" IsVisible="{Binding HasConflicts}">
-            <TextBlock Classes="muted" Text="Конфликты" />
+            <TextBlock Classes="muted" Text="{loc:Loc Sync.Conflicts}" />
             <TextBlock Classes="value danger" Text="{Binding ConflictCount}" />
           </StackPanel>
         </WrapPanel>
         <Button Grid.Column="1" Classes="accent" VerticalAlignment="Center" Command="{Binding SendCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Send" />
-            <TextBlock Text="Отправить изменения" />
+            <TextBlock Text="{loc:Loc Sync.Send}" />
           </StackPanel>
         </Button>
       </Grid>
@@ -36,16 +37,16 @@
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" />
           <TextBlock Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
-                     Text="Базовая копия не создана. Создайте её на обоих узлах, когда рабочие копии совпадают." />
-          <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Content="Создать базовую копию" Command="{Binding CreateBaselineCommand}" />
+                     Text="{loc:Loc Sync.BaselineMissing}" />
+          <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Content="{loc:Loc Sync.CreateBaseline}" Command="{Binding CreateBaselineCommand}" />
         </Grid>
       </Border>
 
       <StackPanel>
-        <TextBlock Classes="section" Text="Изменения к отправке" />
+        <TextBlock Classes="section" Text="{loc:Loc Sync.Pending}" />
         <Border Classes="card">
           <Panel>
-            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoPendingFiles}" Text="Нет локальных изменений." />
+            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoPendingFiles}" Text="{loc:Loc Sync.NoPending}" />
             <ScrollViewer MaxHeight="240">
               <ItemsControl Classes="rows" ItemsSource="{Binding PendingFiles}">
                 <ItemsControl.ItemTemplate>
@@ -62,18 +63,18 @@
       </StackPanel>
 
       <StackPanel>
-        <TextBlock Classes="section" Text="История патчей" />
+        <TextBlock Classes="section" Text="{loc:Loc Sync.History}" />
         <Border Classes="card">
           <StackPanel>
             <Border Classes="header-row">
               <Grid ColumnDefinitions="160,110,70,*,Auto">
-                <TextBlock Text="Время" />
-                <TextBlock Grid.Column="1" Text="Направление" />
-                <TextBlock Grid.Column="2" Text="Файлов" />
-                <TextBlock Grid.Column="3" Text="Статус" />
+                <TextBlock Text="{loc:Loc Sync.Time}" />
+                <TextBlock Grid.Column="1" Text="{loc:Loc Sync.Direction}" />
+                <TextBlock Grid.Column="2" Text="{loc:Loc Sync.Files}" />
+                <TextBlock Grid.Column="3" Text="{loc:Loc Common.Status}" />
               </Grid>
             </Border>
-            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoHistory}" Text="Патчей пока не было." />
+            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoHistory}" Text="{loc:Loc Sync.NoHistory}" />
             <ItemsControl Classes="rows" ItemsSource="{Binding History}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:PatchHistoryItemViewModel">
@@ -86,12 +87,12 @@
                                  Classes.online="{Binding IsSuccess}"
                                  Classes.offline="{Binding IsProblem}"
                                  Text="{Binding StatusText}"
-                                 ToolTip.Tip="{Binding Patch.Error}" />
+                                 ToolTip.Tip="{Binding ErrorText}" />
                       <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
-                        <Button Classes="outline" Padding="10,4" MinHeight="28" Content="Разрешить" IsVisible="{Binding CanResolve}"
+                        <Button Classes="outline" Padding="10,4" MinHeight="28" Content="{loc:Loc Sync.Resolve}" IsVisible="{Binding CanResolve}"
                                 Command="{Binding $parent[ItemsControl].((pages:SyncViewModel)DataContext).ResolveCommand}"
                                 CommandParameter="{Binding}" />
-                        <Button Classes="icon" Padding="6" ToolTip.Tip="Показать диф"
+                        <Button Classes="icon" Padding="6" ToolTip.Tip="{loc:Loc Sync.ShowDiff}"
                                 Command="{Binding $parent[ItemsControl].((pages:SyncViewModel)DataContext).ViewDiffCommand}"
                                 CommandParameter="{Binding}">
                           <controls:IconView Classes="small" IconKey="Icon.Diff" />

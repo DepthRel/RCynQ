@@ -53,6 +53,11 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
     public bool IsOffline => Status == LinkStatusKind.Offline;
 
     /// <summary>
+    /// Tells the bindings that the texts of the row changed with the language.
+    /// </summary>
+    public void RefreshTexts() => OnPropertyChanged(string.Empty);
+
+    /// <summary>
     /// Applies a link state.
     /// </summary>
     /// <param name="state">The state.</param>

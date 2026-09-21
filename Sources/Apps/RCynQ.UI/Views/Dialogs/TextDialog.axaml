@@ -1,5 +1,6 @@
 <dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      x:Class="RCynQ.UI.Views.Dialogs.TextDialog"
@@ -14,6 +15,6 @@
              ScrollViewer.VerticalScrollBarVisibility="Auto"
              Text="{Binding Text}" />
     <Button Grid.Row="1" Classes="outline" HorizontalAlignment="Right" Margin="0,14,0,0"
-            Content="Закрыть" IsCancel="True" IsDefault="True" Click="OnCloseClick" />
+            Content="{loc:Loc Common.Close}" IsCancel="True" IsDefault="True" Click="OnCloseClick" />
   </Grid>
 </dialogs:DialogWindow>

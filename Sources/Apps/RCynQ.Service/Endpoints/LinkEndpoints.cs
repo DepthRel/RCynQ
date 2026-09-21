@@ -6,6 +6,7 @@ using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Transports.Abstractions.Management;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -25,7 +26,7 @@ public static class LinkEndpoints
             Results.Ok((await links.GetAllAsync(ct)).Select(LinkDto.FromConfig).ToArray()));
         app.MapPost(ApiRoutes.Links, UpsertAsync);
         app.MapDelete(ApiRoutes.LinkById, async (Guid id, IChainLinkRepository links, CancellationToken ct) =>
-            await links.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound(new ErrorResponse($"Link {id} was not found.")));
+            await links.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound(new ErrorResponse(Texts.Format("Api.LinkNotFound", id))));
         app.MapGet(ApiRoutes.LinkStatus, async (ILinkManager manager, CancellationToken ct) => Results.Ok(await manager.GetStatusAsync(ct)));
         app.MapPost(ApiRoutes.LinkUp, (Guid id, ILinkManager manager, CancellationToken ct) => RunAsync(() => manager.StartAsync(id, ct)));
         app.MapPost(ApiRoutes.LinkDown, (Guid id, ILinkManager manager, CancellationToken ct) => RunAsync(() => manager.StopAsync(id, ct)));
@@ -57,7 +58,7 @@ public static class LinkEndpoints
         }
         catch (DbUpdateException)
         {
-            return Results.Conflict(new ErrorResponse($"A link named '{link.Name}' already exists."));
+            return Results.Conflict(new ErrorResponse(Texts.Format("Api.LinkExists", link.Name)));
         }
     }
 

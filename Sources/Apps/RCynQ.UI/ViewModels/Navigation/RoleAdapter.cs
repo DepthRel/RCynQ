@@ -37,7 +37,7 @@ public sealed class RoleAdapter
         foreach (var item in items)
         {
             item.IsAvailable = IsAvailable(item.Key, role);
-            item.UnavailableReason = item.IsAvailable ? null : $"Недоступно для роли {role}";
+            item.UnavailableForRole = item.IsAvailable ? null : role;
         }
 
         return items.FirstOrDefault(item => item.IsSelected && item.IsAvailable) ?? items.FirstOrDefault(item => item.IsAvailable);

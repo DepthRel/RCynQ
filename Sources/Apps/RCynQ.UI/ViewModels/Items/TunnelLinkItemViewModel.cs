@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Formatting;
 
 namespace RCynQ.UI.ViewModels.Items;
@@ -25,6 +26,9 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
     [ObservableProperty]
     private string? _message;
 
+    /// <summary>The configured fallback transports.</summary>
+    private readonly IReadOnlyList<TransportKind> _fallbackTransports;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TunnelLinkItemViewModel"/> class.
     /// </summary>
@@ -38,9 +42,7 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
         Address = $"{link.SshUser}@{link.Host}:{link.SshPort}";
         Transport = link.Transport;
         _activeTransport = link.Transport;
-        FallbackText = link.FallbackTransports.Count == 0
-            ? "без резерва"
-            : "резерв: " + string.Join(", ", link.FallbackTransports.Select(DisplayText.Transport));
+        _fallbackTransports = [.. link.FallbackTransports];
     }
 
     /// <summary>Gets the link identifier.</summary>
@@ -59,7 +61,9 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
     public TransportKind Transport { get; }
 
     /// <summary>Gets the fallback description.</summary>
-    public string FallbackText { get; }
+    public string FallbackText => _fallbackTransports.Count == 0
+        ? Texts.Get("Tunnel.NoFallback")
+        : Texts.Format("Tunnel.Fallback", string.Join(", ", _fallbackTransports.Select(DisplayText.Transport)));
 
     /// <summary>Gets the label of the active transport.</summary>
     public string ActiveTransportText => DisplayText.Transport(ActiveTransport);
@@ -78,6 +82,11 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the link is offline.</summary>
     public bool IsOffline => Status == LinkStatusKind.Offline;
+
+    /// <summary>
+    /// Tells the bindings that the texts of the row changed with the language.
+    /// </summary>
+    public void RefreshTexts() => OnPropertyChanged(string.Empty);
 
     /// <summary>
     /// Applies a link state.

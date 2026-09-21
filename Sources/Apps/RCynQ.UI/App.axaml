@@ -47,6 +47,9 @@
     <DataTemplate DataType="pages:LogsViewModel">
       <views:LogsView />
     </DataTemplate>
+    <DataTemplate DataType="pages:SettingsViewModel">
+      <views:SettingsView />
+    </DataTemplate>
   </Application.DataTemplates>
 
 </Application>

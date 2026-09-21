@@ -1,7 +1,6 @@
 using FluentAssertions;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Validation;
-using Xunit;
 
 namespace RCynQ.Core.Tests;
 

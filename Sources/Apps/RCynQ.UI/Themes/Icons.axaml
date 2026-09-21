@@ -25,6 +25,7 @@
   <StreamGeometry x:Key="Icon.Diff">M12 3V17 M5 10H19 M5 21H19</StreamGeometry>
   <StreamGeometry x:Key="Icon.ChevronRight">M9 6L15 12L9 18</StreamGeometry>
   <StreamGeometry x:Key="Icon.Refresh">M20 11A8.1 8.1 0 0 0 4.5 9 M4 5V9H8 M4 13A8.1 8.1 0 0 0 19.5 15 M20 19V15H16</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Settings">M4 21V14 M4 10V3 M12 21V12 M12 8V3 M20 21V16 M20 12V3 M1 14H7 M9 8H15 M17 16H23</StreamGeometry>
   <StreamGeometry x:Key="Icon.Pull">M12 4V14 M8 10L12 14L16 10 M6 19H18</StreamGeometry>
 
 </ResourceDictionary>

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using RCynQ.UI.Services.Hosting;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Hosting;
 

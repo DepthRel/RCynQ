@@ -1,6 +1,4 @@
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Validation;
-using RCynQ.Git.Commands;
 
 namespace RCynQ.Git.Patches.Diff;
 

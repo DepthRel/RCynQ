@@ -1,16 +1,7 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -48,19 +39,19 @@ public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
         var syncBase = context.Paths.SyncBaseDirectory;
         if (!Directory.Exists(syncBase))
         {
-            return Fail("The sync base snapshot does not exist.", "Run 'patch baseline' on this node while Source and Dest working trees are identical.");
+            return Fail(Texts.Get("Diag.Snapshot.Missing"), Texts.Get("Diag.Snapshot.MissingFix"));
         }
 
         var recorded = (await _state.GetAsync(cancellationToken)).SyncBaseHash;
         var actual = _hasher.ComputeHash(await _manifest.ScanAsync(syncBase, cancellationToken));
         if (recorded is null)
         {
-            return Fail("No sync base hash is recorded.", "Run 'status' once to record the state, or recreate the baseline.");
+            return Fail(Texts.Get("Diag.Snapshot.NoHash"), Texts.Get("Diag.Snapshot.NoHashFix"));
         }
 
         return recorded == actual
-            ? Pass($"Sync base matches recorded hash {actual[..12]}.")
-            : Fail($"Sync base hash {actual[..12]} does not match the recorded {recorded[..Math.Min(12, recorded.Length)]}; the snapshot was modified outside RCynQ.",
-                "Recreate the baseline with 'patch baseline' after making both working trees identical.");
+            ? Pass(Texts.Format("Diag.Snapshot.Ok", actual[..12]))
+            : Fail(Texts.Format("Diag.Snapshot.Mismatch", actual[..12], recorded[..Math.Min(12, recorded.Length)]),
+                Texts.Get("Diag.Snapshot.MismatchFix"));
     }
 }

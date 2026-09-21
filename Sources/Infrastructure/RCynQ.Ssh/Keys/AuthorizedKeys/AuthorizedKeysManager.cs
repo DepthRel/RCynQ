@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 
@@ -270,7 +271,7 @@ public sealed partial class AuthorizedKeysManager
         var tokens = line.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0)
         {
-            throw new FormatException($"Line {lineNumber} is empty.");
+            throw new FormatException(Texts.Format("Keys.LineEmpty", lineNumber));
         }
 
         if (SshPublicKey.AllowedTypes.Contains(tokens[0]))
@@ -295,7 +296,7 @@ public sealed partial class AuthorizedKeysManager
 
         if (end < 0 || inQuotes)
         {
-            throw new FormatException($"Line {lineNumber} has no key after its options.");
+            throw new FormatException(Texts.Format("Keys.LineNoKey", lineNumber));
         }
 
         return new AuthorizedKeyEntry(line[..end], SshPublicKey.Parse(line[end..]), lineNumber);

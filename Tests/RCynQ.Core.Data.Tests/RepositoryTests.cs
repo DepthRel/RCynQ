@@ -1,16 +1,13 @@
 using FluentAssertions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Data.Repositories;
 using RCynQ.Core.Data.Tests.Support;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
-using Xunit;
 
 namespace RCynQ.Core.Data.Tests;
 

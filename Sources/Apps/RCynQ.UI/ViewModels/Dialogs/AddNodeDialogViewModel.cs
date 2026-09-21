@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Ids;
+using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Items;
 
 namespace RCynQ.UI.ViewModels.Dialogs;
@@ -112,7 +112,7 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
         {
             if (!Core.Ids.NodeId.TryParse(NodeId.Trim(), out _))
             {
-                throw new ArgumentException("Недопустимый идентификатор узла.");
+                throw new ArgumentException(Texts.Get("AddNode.InvalidNodeId"));
             }
 
             SyncBridgeOptionsValidator.ToChainLink(ToOptions());

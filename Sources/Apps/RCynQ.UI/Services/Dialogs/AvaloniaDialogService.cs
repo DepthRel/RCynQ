@@ -1,3 +1,4 @@
+using Avalonia.Input.Platform;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using RCynQ.Core.Enums;
@@ -86,7 +87,6 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
-    /// <inheritdoc />
     public async Task<bool> CopyToClipboardAsync(string text)
     {
         if (_owner()?.Clipboard is not { } clipboard)
@@ -98,6 +98,7 @@ public sealed class AvaloniaDialogService : IDialogService
         return true;
     }
 
+    /// <inheritdoc />
     public async Task<string?> PickSaveFileAsync(string title, string suggestedName)
     {
         if (_owner() is not { } owner)

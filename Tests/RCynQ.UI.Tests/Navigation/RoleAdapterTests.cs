@@ -3,7 +3,6 @@ using NSubstitute;
 using RCynQ.Core.Enums;
 using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Navigation;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Navigation;
 
@@ -36,8 +35,8 @@ public sealed class RoleAdapterTests
     public void Apply_Moves_Selection_Away_From_Hidden_Tab()
     {
         var page = Substitute.For<PageViewModelBase>();
-        var overview = new NavigationItemViewModel(TabKey.Overview, "Обзор", "Icon.Home", page);
-        var sync = new NavigationItemViewModel(TabKey.Sync, "Синхронизация", "Icon.Sync", page) { IsSelected = true };
+        var overview = new NavigationItemViewModel(TabKey.Overview, "Icon.Home", page);
+        var sync = new NavigationItemViewModel(TabKey.Sync, "Icon.Sync", page) { IsSelected = true };
 
         var selected = new RoleAdapter().Apply(new[] { overview, sync }, NodeRole.Mediator);
 

@@ -11,7 +11,6 @@ using RCynQ.Sync.Security;
 using RCynQ.Sync.Tests.Fakes;
 using RCynQ.Sync.Tests.Fixtures;
 using RCynQ.Sync.Transfer;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

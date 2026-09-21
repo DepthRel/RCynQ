@@ -1,14 +1,11 @@
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
 using RCynQ.Git.Commands;
 using RCynQ.Git.Repository;
 using RCynQ.Git.Tests.Support;
-using Xunit;
 
 namespace RCynQ.Git.Tests;
 

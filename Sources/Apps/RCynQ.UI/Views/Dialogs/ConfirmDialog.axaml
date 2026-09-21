@@ -1,5 +1,6 @@
 <dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      x:Class="RCynQ.UI.Views.Dialogs.ConfirmDialog"
@@ -11,8 +12,8 @@
     <TextBlock Classes="page-title" Text="{Binding Title}" />
     <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-      <Button Classes="outline" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
-      <Button Classes="accent" Content="Подтвердить" IsDefault="True" Command="{Binding ConfirmCommand}" />
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="{loc:Loc Common.Confirm}" IsDefault="True" Command="{Binding ConfirmCommand}" />
     </StackPanel>
   </StackPanel>
 </dialogs:DialogWindow>

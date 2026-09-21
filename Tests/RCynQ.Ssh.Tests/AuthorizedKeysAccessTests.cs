@@ -2,7 +2,6 @@ using FluentAssertions;
 using RCynQ.Core.Config;
 using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
-using Xunit;
 
 namespace RCynQ.Ssh.Tests;
 

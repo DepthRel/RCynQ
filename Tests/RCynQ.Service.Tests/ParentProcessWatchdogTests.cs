@@ -1,9 +1,7 @@
-using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using RCynQ.Service.Hosting;
-using Xunit;
 
 namespace RCynQ.Service.Tests;
 

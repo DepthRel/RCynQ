@@ -7,7 +7,6 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Sync.Configuration;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

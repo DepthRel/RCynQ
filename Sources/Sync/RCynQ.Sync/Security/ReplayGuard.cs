@@ -1,11 +1,8 @@
-using System.Security.Cryptography;
-using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Repositories;
-using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Security;
 
@@ -60,17 +57,17 @@ public sealed class ReplayGuard
         var now = _timeProvider.GetUtcNow();
         if (envelope.CreatedAtUtc > now + _options.MaxClockSkew)
         {
-            throw new PatchRejectedException(PatchRejectionReason.Expired, $"Patch {envelope.Id} was created in the future ({envelope.CreatedAtUtc:O}); check the clocks of both nodes.");
+            throw new PatchRejectedException(PatchRejectionReason.Expired, Texts.Format("Replay.Future", envelope.Id, envelope.CreatedAtUtc));
         }
 
         if (envelope.CreatedAtUtc < now - _options.MaxAge)
         {
-            throw new PatchRejectedException(PatchRejectionReason.Expired, $"Patch {envelope.Id} is older than {_options.MaxAge}.");
+            throw new PatchRejectedException(PatchRejectionReason.Expired, Texts.Format("Replay.Old", envelope.Id, _options.MaxAge));
         }
 
         if (await _patches.ExistsAsync(envelope.Id, cancellationToken))
         {
-            throw new PatchRejectedException(PatchRejectionReason.Replay, $"Patch {envelope.Id} was already processed.");
+            throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", envelope.Id));
         }
     }
 }

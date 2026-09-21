@@ -1,6 +1,5 @@
 using FluentAssertions;
 using RCynQ.Core.Config;
-using Xunit;
 
 namespace RCynQ.Core.Tests;
 

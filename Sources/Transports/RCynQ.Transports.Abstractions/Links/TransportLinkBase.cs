@@ -1,10 +1,10 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Transports;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.Abstractions.Links;
 
@@ -86,19 +86,19 @@ public abstract class TransportLinkBase : ITransportLink
         }
         catch (OperationCanceledException)
         {
-            SetState(CreateState(LinkStatus.Failed, "Start was cancelled."));
+            SetState(CreateState(LinkStatus.Failed, Texts.Get("Transport.StartCancelled")));
             throw;
         }
         catch (Exception ex)
         {
             SetState(CreateState(LinkStatus.Failed, ex.Message));
-            throw ex as SyncBridgeException ?? new SyncBridgeException($"Link '{Config.Name}' via {Kind} could not be started: {ex.Message}", ex);
+            throw ex as SyncBridgeException ?? new SyncBridgeException(Texts.Format("Transport.StartFailed", Config.Name, Kind, ex.Message), ex);
         }
 
         SetState(probed);
         if (!probed.IsUsable)
         {
-            throw new SyncBridgeException($"Link '{Config.Name}' via {Kind} is not usable: {probed.Message}");
+            throw new SyncBridgeException(Texts.Format("Transport.NotUsable", Config.Name, Kind, probed.Message));
         }
     }
 

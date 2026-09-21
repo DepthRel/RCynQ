@@ -7,6 +7,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Connection;
 
 namespace RCynQ.UI.Services.Api;
@@ -234,7 +235,7 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     {
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken)
-            ?? throw new ServiceApiException(response.StatusCode, "The service returned an empty response.");
+            ?? throw new ServiceApiException(response.StatusCode, Texts.Get("Api.EmptyResponse"));
     }
 
     /// <summary>

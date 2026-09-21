@@ -19,7 +19,6 @@ using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Access;
 using RCynQ.Sync.Services;
 using RCynQ.Transports.Abstractions.Management;
-using Xunit;
 
 namespace RCynQ.Cli.Tests;
 

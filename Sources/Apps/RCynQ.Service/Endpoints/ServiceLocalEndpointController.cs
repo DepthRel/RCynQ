@@ -1,6 +1,7 @@
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Sync.Diagnostics.Endpoint;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -33,6 +34,6 @@ public sealed class ServiceLocalEndpointController : ILocalEndpointController
     /// <inheritdoc />
     public async Task<AutoFixResult> RestartAsync(CancellationToken cancellationToken)
         => await _probe.IsHealthyAsync(_options.ListenPort, cancellationToken)
-            ? new AutoFixResult(true, $"The endpoint on 127.0.0.1:{_options.ListenPort} is running in this service.")
-            : new AutoFixResult(false, "The endpoint of this process does not answer; restart RCynQ.Service with your service manager.");
+            ? new AutoFixResult(true, Texts.Format("Fix.EndpointRunning", _options.ListenPort))
+            : new AutoFixResult(false, Texts.Get("Fix.EndpointNotAnswering"));
 }

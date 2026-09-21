@@ -1,17 +1,22 @@
 <#
 .SYNOPSIS
     Publishes RCynQ (Service, CLI, UI, DbMigrator) as self-contained Release builds for Windows and creates the
-    RCynQ shortcut in the artifact root.
+    RCynQ.exe launcher in the artifact root.
 
 .DESCRIPTION
-    The shortcut starts RCynQ.UI, which starts RCynQ.Service in the configured role and stops it on exit.
-    The shortcut stores absolute paths: run the script again after moving the artifact directory.
+    RCynQ.exe in the root is the application host with the RCynQ icon, pointing at ui\RCynQ.UI.dll. It starts the UI,
+    which starts RCynQ.Service in the configured role and stops it on exit. It holds no absolute paths, so the folder
+    can be moved or copied as a whole. Scripts/build-installer.ps1 packs the result into a setup program.
 
 .PARAMETER Runtime
     The runtime identifier. Default: win-x64.
 
 .PARAMETER Configuration
     The build configuration. Default: Release.
+
+.PARAMETER Sign
+    Signs the executables of the package with the certificate named in the environment (see sign-file.ps1), so the
+    .zip package and the installer built from it carry signed programs.
 
 .PARAMETER Output
     The output root. Each application is published to <Output>/<Runtime>/<app>. Default: <repository>/artifacts/publish.
@@ -24,7 +29,8 @@
 param(
     [string] $Runtime = 'win-x64',
     [string] $Configuration = 'Release',
-    [string] $Output
+    [string] $Output,
+    [switch] $Sign
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,11 +49,18 @@ $projects = [ordered]@{
     'dbmigrator' = 'Sources\Database\RCynQ.Dbs.SQLite.DbMigrator\RCynQ.Dbs.SQLite.DbMigrator.csproj'
 }
 
+# The launcher is created while the UI is published (see the RCynQRootLauncher target of RCynQ.UI.csproj).
+$launcher = [System.IO.Path]::GetFullPath((Join-Path $Output (Join-Path $Runtime 'RCynQ.exe')))
 foreach ($name in $projects.Keys) {
     $project = Join-Path $root $projects[$name]
     $target = Join-Path $Output (Join-Path $Runtime $name)
     Write-Host "==> $name ($Runtime, $Configuration) -> $target"
-    dotnet publish $project -c $Configuration -r $Runtime --self-contained true -o $target -nologo
+    [string[]] $extra = @()
+    if ($name -eq 'ui') {
+        $extra = @("-p:RCynQRootLauncherPath=$launcher")
+    }
+
+    dotnet publish $project -c $Configuration -r $Runtime --self-contained true -o $target -nologo -p:DebugType=none @extra
     if ($LASTEXITCODE -ne 0) {
         throw "Publishing '$name' failed with exit code $LASTEXITCODE."
     }
@@ -60,30 +73,25 @@ $marker = Join-Path $runtimeRoot 'rcynq.portable'
 if (-not (Test-Path $marker)) {
     Set-Content -Path $marker -Encoding ascii -Value 'RCynQ portable installation: configuration is stored in config\, all data in data\. Delete this file to use the user profile instead.'
 }
-$uiExe = Join-Path $runtimeRoot 'ui\RCynQ.UI.exe'
-if (Test-Path $uiExe) {
-    $shortcutPath = Join-Path $runtimeRoot 'RCynQ.lnk'
-    $shell = New-Object -ComObject WScript.Shell
-    try {
-        $shortcut = $shell.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = $uiExe
-        $shortcut.WorkingDirectory = Split-Path -Parent $uiExe
-        $shortcut.IconLocation = "$uiExe,0"
-        $shortcut.Description = 'RCynQ: starts the application and the node services'
-        $shortcut.Save()
-    }
-    finally {
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-    }
-
-    Write-Host "Shortcut: $shortcutPath"
+if (-not (Test-Path (Join-Path $runtimeRoot 'RCynQ.exe'))) {
+    throw 'The root launcher RCynQ.exe was not created.'
 }
 
-# Launcher that works from any location (the .lnk above stores absolute paths).
-Set-Content -Path (Join-Path $runtimeRoot 'RCynQ.cmd') -Encoding ascii -Value @('@echo off', 'start "" "%~dp0ui\RCynQ.UI.exe" %*')
+# Files of earlier versions of this script: the launcher was a .cmd file next to an absolute-path shortcut.
+foreach ($old in 'RCynQ.cmd', 'RCynQ.lnk') {
+    Remove-Item -LiteralPath (Join-Path $runtimeRoot $old) -Force -ErrorAction SilentlyContinue
+}
 
-# Clean package for other nodes: without config\ and data\ (settings, keys and database of this node) and without the
-# absolute-path shortcut.
+if ($Sign) {
+    foreach ($exe in Get-ChildItem $runtimeRoot -Recurse -Filter '*.exe' -File) {
+        & (Join-Path $scriptDir 'sign-file.ps1') -File $exe.FullName
+        if (-not $?) {
+            throw "Signing '$($exe.FullName)' failed."
+        }
+    }
+}
+
+# Clean package for other nodes: without config\ and data\ (settings, keys and database of this node).
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $package = Join-Path (Resolve-Path $Output).Path "RCynQ-$Runtime.zip"
 if (Test-Path $package) {
@@ -95,7 +103,7 @@ try {
     foreach ($file in Get-ChildItem $runtimeRoot -Recurse -File) {
         $relative = $file.FullName.Substring($runtimeRoot.Length).TrimStart([char[]]@('\', '/'))
         $top = $relative.Split([char[]]@('\', '/'))[0]
-        if ($top -eq 'config' -or $top -eq 'data' -or $relative -eq 'RCynQ.lnk') {
+        if ($top -eq 'config' -or $top -eq 'data') {
             continue
         }
 

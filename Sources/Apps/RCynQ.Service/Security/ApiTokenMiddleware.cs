@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using RCynQ.Core.Api;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Security;
 
@@ -54,7 +55,7 @@ public sealed class ApiTokenMiddleware
         if (!_tokens.IsValid(token))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new ErrorResponse("The local API token is missing or invalid."));
+            await context.Response.WriteAsJsonAsync(new ErrorResponse(Texts.Get("Api.TokenInvalid")));
             return;
         }
 

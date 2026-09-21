@@ -1,24 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
-    <RollForward>Major</RollForward>
-    <IsPackable>false</IsPackable>
-    <GenerateProgramFile>true</GenerateProgramFile>
-  </PropertyGroup>
-
+  <!--
+    The expectations of these tests were written against the Russian texts, so the run speaks Russian
+    (Tests/Shared/UseRussianTexts.cs); the tests of the localization itself choose their languages explicitly.
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="NSubstitute" Version="5.3.0" />
-    <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <Compile Include="..\Shared\UseRussianTexts.cs" Link="UseRussianTexts.cs" />
   </ItemGroup>
 
   <ItemGroup>

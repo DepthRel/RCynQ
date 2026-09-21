@@ -1,8 +1,5 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Hashing;
 

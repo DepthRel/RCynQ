@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Controls"
@@ -9,76 +10,82 @@
     <StackPanel Margin="28,22,28,28" Spacing="18">
 
       <StackPanel>
-        <TextBlock Classes="field-label" Text="Роль узла" />
+        <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeRole}" />
         <ComboBox ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
       </StackPanel>
 
       <StackPanel IsVisible="{Binding IsPathVisible}">
         <TextBlock Classes="field-label" Text="{Binding PathLabel}" />
         <Grid ColumnDefinitions="*,Auto">
-          <TextBox Classes="mono" Text="{Binding Path}" Watermark="/home/dev/projects/app" />
-          <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="Обзор..." Command="{Binding BrowseCommand}" />
+          <TextBox Classes="mono" Text="{Binding Path}" PlaceholderText="/home/dev/projects/app" />
+          <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="{loc:Loc Common.Browse}" Command="{Binding BrowseCommand}" />
         </Grid>
       </StackPanel>
 
       <Border Classes="banner warning" IsVisible="{Binding IsDirty}">
         <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="Роль и путь сохраняются в конфигурацию и применяются после перезапуска сервиса."
+          <TextBlock Text="{loc:Loc Roles.RoleHint}"
                      TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="Сохранить" Command="{Binding ApplyRoleCommand}" />
+          <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="{loc:Loc Common.Save}" Command="{Binding ApplyRoleCommand}" />
         </Grid>
       </Border>
 
       <StackPanel IsVisible="{Binding AreSettingsVisible}">
-        <TextBlock Classes="section" Text="Параметры узла" />
+        <TextBlock Classes="section" Text="{loc:Loc Roles.NodeParameters}" />
         <Border Classes="card">
           <StackPanel Margin="16,14" Spacing="14">
 
             <StackPanel>
-              <TextBlock Classes="field-label" Text="Идентификатор узла" />
+              <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />
               <TextBox Classes="mono" Text="{Binding NodeId}" IsReadOnly="True" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding HasLinkToken}">
-              <TextBlock Classes="field-label" Text="Общий ключ (link-токен)" />
+              <TextBlock Classes="field-label" Text="{loc:Loc Roles.LinkToken}" />
               <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                 <TextBox Classes="mono" Text="{Binding LinkToken}" PasswordChar="{Binding TokenMaskChar}"
-                         AutomationProperties.Name="Общий ключ" />
+                         AutomationProperties.Name="{loc:Loc Roles.LinkTokenName}" />
                 <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="{Binding RevealTokenText}"
                         Command="{Binding RevealTokenCommand}" />
-                <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Content="Копировать"
+                <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" Content="{loc:Loc Common.Copy}"
                         Command="{Binding CopyTokenCommand}" />
-                <Button Grid.Column="3" Classes="outline" Margin="8,0,0,0" Content="Создать новый"
-                        ToolTip.Tip="Создать новый ключ; его придётся прописать и на противоположном узле"
+                <Button Grid.Column="3" Classes="outline" Margin="8,0,0,0" Content="{loc:Loc Roles.NewToken}"
+                        ToolTip.Tip="{loc:Loc Roles.NewTokenTip}"
                         Command="{Binding NewTokenCommand}" />
               </Grid>
               <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0"
-                         Text="Ключ должен совпадать на SOURCE и DEST: именно по нему принимающий узел решает, что изменения пришли от своей пары. Посреднику ключ не нужен." />
+                         Text="{loc:Loc Roles.LinkTokenHint}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding IsEndpointModeVisible}">
-              <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
-              <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}" />
+              <TextBlock Classes="field-label" Text="{loc:Loc Endpoint.Title}" />
+              <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="items:EndpointModeOption">
+                    <TextBlock Text="{Binding Title}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
               <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding EndpointHint}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding !IsEndpointModeVisible}">
-              <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
+              <TextBlock Classes="field-label" Text="{loc:Loc Endpoint.Title}" />
               <TextBlock TextWrapping="Wrap"
-                         Text="Через SSH-сервер этого компьютера. Посредник всегда работает так: через его SSH-сервер соседи доходят друг до друга — и до SSH-сервера, и до порта RCynQ противоположного узла." />
+                         Text="{loc:Loc Roles.MediatorEndpointHint}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding IsEndpointPortVisible}">
-              <TextBlock Classes="field-label" Text="Порт для прямых подключений" />
+              <TextBlock Classes="field-label" Text="{loc:Loc Endpoint.Port}" />
               <NumericUpDown Value="{Binding EndpointPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
               <TextBlock Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0"
-                         Text="Порт нужно открыть во входящих правилах брандмауэра. Отпечаток сертификата попадёт в файл экспорта — сосед проверит его при подключении." />
+                         Text="{loc:Loc Endpoint.PortHint}" />
             </StackPanel>
 
             <Border Classes="banner warning" IsVisible="{Binding AreSettingsDirty}">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="Настройки применяются после перезапуска сервиса." TextWrapping="Wrap" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="Сохранить"
+                <TextBlock Text="{loc:Loc Roles.SettingsApplyHint}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="accent" Margin="12,0,0,0" Content="{loc:Loc Common.Save}"
                         Command="{Binding SaveSettingsCommand}" />
               </Grid>
             </Border>
@@ -89,11 +96,11 @@
       </StackPanel>
 
       <StackPanel>
-        <TextBlock Classes="section" Text="Узлы цепочки" />
+        <TextBlock Classes="section" Text="{loc:Loc Roles.Nodes}" />
         <Border Classes="card">
           <Panel>
             <TextBlock Classes="muted" Margin="16,14" TextWrapping="Wrap" IsVisible="{Binding HasNoNodes}"
-                       Text="Узлы не настроены. Импортируйте конфигурацию соседнего узла или добавьте узел вручную." />
+                       Text="{loc:Loc Roles.NoNodes}" />
             <ItemsControl Classes="rows" ItemsSource="{Binding Nodes}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:ChainNodeItemViewModel">
@@ -107,7 +114,7 @@
                                  Classes.degraded="{Binding IsDegraded}"
                                  Classes.offline="{Binding IsOffline}"
                                  Text="{Binding StatusText}" />
-                      <Button Grid.Column="4" Classes="icon hover-only" Padding="5" ToolTip.Tip="Удалить узел"
+                      <Button Grid.Column="4" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Roles.RemoveNode}"
                               Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).RemoveNodeCommand}"
                               CommandParameter="{Binding}">
                         <controls:IconView Classes="small" IconKey="Icon.Trash" />
@@ -122,30 +129,30 @@
       </StackPanel>
 
       <WrapPanel>
-        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="Экспортировать конфигурацию" Command="{Binding ExportCommand}">
+        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="{loc:Loc Roles.Export}" Command="{Binding ExportCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Upload" />
-            <TextBlock Text="Экспортировать конфигурацию" />
+            <TextBlock Text="{loc:Loc Roles.Export}" />
           </StackPanel>
         </Button>
         <Button Classes="outline" Margin="0,0,10,10" Command="{Binding ImportCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Download" />
-            <TextBlock Text="Импортировать конфигурацию" />
+            <TextBlock Text="{loc:Loc Roles.Import}" />
           </StackPanel>
         </Button>
         <Button Classes="outline" Margin="0,0,10,10" Command="{Binding AddNodeCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Plus" />
-            <TextBlock Text="Добавить узел" />
+            <TextBlock Text="{loc:Loc Nodes.AddNode}" />
           </StackPanel>
         </Button>
-        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="Разрешить подключения узлов"
-                ToolTip.Tip="Добавить ключи импортированных узлов в настройки SSH-сервера этого компьютера"
+        <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="{loc:Loc Roles.AllowAccess}"
+                ToolTip.Tip="{loc:Loc Roles.AllowAccessTip}"
                 Command="{Binding AllowAccessCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Check" />
-            <TextBlock Text="Разрешить подключения узлов" />
+            <TextBlock Text="{loc:Loc Roles.AllowAccess}" />
           </StackPanel>
         </Button>
       </WrapPanel>

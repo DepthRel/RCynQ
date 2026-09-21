@@ -3,7 +3,6 @@ using FluentAssertions;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Connection;
 using RCynQ.UI.Tests.Support;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Connection;
 

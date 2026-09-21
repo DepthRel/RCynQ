@@ -3,6 +3,7 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Configuration.Access;
 
@@ -53,7 +54,7 @@ public sealed class PeerAccessService
         {
             return new PeerAccessResult(
                 false, false, _keys.FilePath, 0, Array.Empty<string>(), Array.Empty<string>(),
-                "This node accepts connections on its own port and runs no SSH server; authorized_keys is not needed.");
+                Texts.Get("Access.NoSshServer"));
         }
 
         var plan = PeerAccessPlanner.Plan(_node, _options.ListenPort, await _peers.GetAllAsync(cancellationToken), allowGitCommand: !OperatingSystem.IsWindows());
@@ -62,17 +63,17 @@ public sealed class PeerAccessService
 
         if (plan.Entries.Count == 0)
         {
-            return new PeerAccessResult(false, false, _keys.FilePath, 0, missing, waiting, "No neighbour needs SSH access to this node yet.");
+            return new PeerAccessResult(false, false, _keys.FilePath, 0, missing, waiting, Texts.Get("Access.NobodyNeedsAccess"));
         }
 
         if (!_keys.CanWrite)
         {
             return new PeerAccessResult(false, true, _keys.FilePath, plan.Entries.Count, missing, waiting,
-                $"Administrator rights are required to update '{_keys.FilePath}'. Run 'rcynq ssh allow' as administrator.");
+                Texts.Format("Access.NeedsAdmin", _keys.FilePath));
         }
 
         var changed = await _keys.UpsertAsync(plan.Entries.Select(entry => entry.Line).ToArray(), cancellationToken);
         return new PeerAccessResult(true, false, _keys.FilePath, plan.Entries.Count, missing, waiting,
-            $"Allowed {plan.Entries.Count} neighbour key(s) in '{_keys.FilePath}' ({changed} line(s) changed).");
+            Texts.Format("Access.Allowed", plan.Entries.Count, _keys.FilePath, changed));
     }
 }

@@ -1,4 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.UI.ViewModels.Navigation;
 
@@ -19,9 +21,10 @@ public sealed partial class NavigationItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isAvailable = true;
 
-    /// <summary>Why the tab is unavailable, or <see langword="null"/>.</summary>
+    /// <summary>The role that makes the tab unavailable, or <see langword="null"/> when the tab is available.</summary>
     [ObservableProperty]
-    private string? _unavailableReason;
+    [NotifyPropertyChangedFor(nameof(UnavailableReason))]
+    private NodeRole? _unavailableForRole;
 
     /// <summary>Whether the tab signals a problem.</summary>
     [ObservableProperty]
@@ -31,13 +34,11 @@ public sealed partial class NavigationItemViewModel : ObservableObject
     /// Initializes a new instance of the <see cref="NavigationItemViewModel"/> class.
     /// </summary>
     /// <param name="key">The tab key.</param>
-    /// <param name="title">The tab title.</param>
     /// <param name="iconKey">The resource key of the icon geometry.</param>
     /// <param name="page">The page shown by the tab.</param>
-    public NavigationItemViewModel(TabKey key, string title, string iconKey, PageViewModelBase page)
+    public NavigationItemViewModel(TabKey key, string iconKey, PageViewModelBase page)
     {
         Key = key;
-        Title = title;
         IconKey = iconKey;
         Page = page;
     }
@@ -45,12 +46,20 @@ public sealed partial class NavigationItemViewModel : ObservableObject
     /// <summary>Gets the tab key.</summary>
     public TabKey Key { get; }
 
-    /// <summary>Gets the tab title.</summary>
-    public string Title { get; }
+    /// <summary>Gets the tab title in the language of the user: the text <c>Nav.&lt;tab key&gt;</c>.</summary>
+    public string Title => Texts.Get($"Nav.{Key}");
+
+    /// <summary>Gets why the tab is unavailable, or <see langword="null"/> when it is available.</summary>
+    public string? UnavailableReason => UnavailableForRole is { } role ? Texts.Format("Nav.UnavailableForRole", role) : null;
 
     /// <summary>Gets the resource key of the icon geometry.</summary>
     public string IconKey { get; }
 
     /// <summary>Gets the page shown by the tab.</summary>
     public PageViewModelBase Page { get; }
+
+    /// <summary>
+    /// Tells the bindings that the texts of the tab changed with the language.
+    /// </summary>
+    public void RefreshTexts() => OnPropertyChanged(string.Empty);
 }

@@ -1,15 +1,7 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Factory;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -58,7 +50,7 @@ public sealed class TransportAvailabilityCheck : DiagnosticCheckBase
         }
 
         return problems.Count == 0
-            ? Pass("All transports are available.")
-            : Fail(string.Join("; ", problems), "Install the missing transport tools or change the link transport.", fix);
+            ? Pass(Texts.Get("Diag.Transports.Ok"))
+            : Fail(string.Join("; ", problems), Texts.Get("Diag.Transports.Fix"), fix);
     }
 }

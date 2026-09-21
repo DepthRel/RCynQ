@@ -28,6 +28,7 @@ using RCynQ.Transports.AmneziaWG.DependencyInjection;
 using RCynQ.Transports.Direct.DependencyInjection;
 using Serilog;
 using Serilog.Events;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Hosting;
 
@@ -50,6 +51,12 @@ public static class ServiceHostBuilder
     /// The argument with the identifier of the process that started the service.
     /// </summary>
     public const string ParentProcessArgument = "--parent-pid";
+
+    /// <summary>
+    /// The argument with the language of the messages of this process (<c>ru</c>, <c>en</c>); the UI passes the language
+    /// the user chose, and requests may ask for another one with <c>Accept-Language</c>.
+    /// </summary>
+    public const string LanguageArgument = "--language";
 
     /// <summary>
     /// Reads the parent process identifier from the arguments.
@@ -85,6 +92,7 @@ public static class ServiceHostBuilder
         hostOptions ??= new ServiceHostOptions();
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory });
+        UseRequestedLanguage(GetArgument(args, LanguageArgument));
         var configPath = ConfigurationFileEditor.ResolvePath(GetArgument(args, "--config"));
         builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
         builder.Configuration.AddEnvironmentVariables(EnvironmentPrefix);
@@ -95,7 +103,7 @@ public static class ServiceHostBuilder
         var errors = SyncBridgeOptionsValidator.Validate(options);
         if (errors.Count > 0)
         {
-            throw new SyncBridgeException($"Invalid configuration in '{configPath}':{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}");
+            throw new SyncBridgeException(Texts.Format("Service.InvalidConfig", configPath, Environment.NewLine, string.Join(Environment.NewLine + " - ", errors)));
         }
 
         ConfigLocations.ApplyStorageDefaults(options, configPath, ConfigLocations.FindPortableRoot());
@@ -174,6 +182,7 @@ public static class ServiceHostBuilder
 
         // Create the local API token eagerly so the UI and other local clients can read it before the first request.
         app.Services.GetRequiredService<ApiTokenStore>().GetOrCreate();
+        app.UseMiddleware<RequestLanguageMiddleware>();
         if (endpointCertificate is not null)
         {
             app.UseMiddleware<PublicEndpointMiddleware>(new PublicEndpointOptions(options.Endpoint.Port));
@@ -183,6 +192,18 @@ public static class ServiceHostBuilder
         app.MapRCynQApi();
         app.MapHub<SyncBridgeHub>(ApiRoutes.Hub);
         return app;
+    }
+
+    /// <summary>
+    /// Puts the messages of this process into a language, when the application has texts for it.
+    /// </summary>
+    /// <param name="code">The language code, or <see langword="null"/> to keep the default language.</param>
+    private static void UseRequestedLanguage(string? code)
+    {
+        if (code is not null && Texts.Localizer.Languages.Any(language => string.Equals(language.Code, code.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            Texts.Localizer.SetLanguage(code.Trim().ToLowerInvariant());
+        }
     }
 
     /// <summary>

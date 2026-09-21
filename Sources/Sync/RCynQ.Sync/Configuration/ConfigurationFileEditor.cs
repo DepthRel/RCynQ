@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Configuration;
 
@@ -49,19 +50,19 @@ public static class ConfigurationFileEditor
     {
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException($"Configuration file '{path}' does not exist. Create it with 'role set' or pass --config.");
+            throw new SyncBridgeException(Texts.Format("ConfigFile.Missing", path));
         }
 
         try
         {
             var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
             var section = root?[SyncBridgeOptions.SectionName]
-                ?? throw new SyncBridgeException($"Configuration file '{path}' has no '{SyncBridgeOptions.SectionName}' section.");
+                ?? throw new SyncBridgeException(Texts.Format("ConfigFile.NoSection", path, SyncBridgeOptions.SectionName));
             return section.Deserialize<SyncBridgeOptions>(JsonOptions) ?? new SyncBridgeOptions();
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException($"Configuration file '{path}' is not valid JSON: {ex.Message}", ex);
+            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
         }
     }
 
@@ -85,7 +86,7 @@ public static class ConfigurationFileEditor
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException($"Configuration file '{path}' is not valid JSON: {ex.Message}", ex);
+            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
         }
 
         if (root[SyncBridgeOptions.SectionName] is not JsonObject section)

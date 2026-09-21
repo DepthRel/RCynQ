@@ -1,3 +1,4 @@
+using RCynQ.Localization;
 using System.Globalization;
 using System.Text;
 using RCynQ.Cli.Output;
@@ -97,7 +98,7 @@ public sealed class PatchCommandService
         text.Append('\n');
         if (result.Error is not null)
         {
-            text.Append("Error: ").Append(result.Error).Append('\n');
+            text.Append("Error: ").Append(LocalizedText.Render(result.Error)).Append('\n');
         }
 
         AppendConflicts(text, result);
@@ -133,7 +134,7 @@ public sealed class PatchCommandService
             text.Append("  ").Append(conflict.Path);
             if (conflict.Detail is not null)
             {
-                text.Append(" - ").Append(conflict.Detail);
+                text.Append(" - ").Append(LocalizedText.Render(conflict.Detail));
             }
 
             text.Append('\n');

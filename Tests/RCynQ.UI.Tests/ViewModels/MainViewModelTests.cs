@@ -13,7 +13,6 @@ using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Navigation;
 using RCynQ.UI.ViewModels.Pages;
 using RCynQ.UI.ViewModels.Setup;
-using Xunit;
 
 namespace RCynQ.UI.Tests.ViewModels;
 
@@ -268,6 +267,7 @@ public sealed class MainViewModelTests : IDisposable
             new TunnelViewModel(_api),
             new DiagnosticsViewModel(_api, dialogs),
             new BranchViewModel(_api),
-            new LogsViewModel(_api, dialogs));
+            new LogsViewModel(_api, dialogs),
+            new SettingsViewModel(new LanguageViewModel(new FakeLanguageService())));
     }
 }

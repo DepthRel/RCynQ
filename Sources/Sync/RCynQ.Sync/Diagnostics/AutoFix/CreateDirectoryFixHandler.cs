@@ -1,16 +1,7 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Paths;
-using RCynQ.Ssh.Keys;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.AutoFix;
 
@@ -44,7 +35,7 @@ public sealed class CreateDirectoryFixHandler : IAutoFixHandler
     {
         if (!fix.Parameters.TryGetValue("path", out var path) || string.IsNullOrWhiteSpace(path))
         {
-            throw new ArgumentException("The fix has no 'path' parameter.");
+            throw new ArgumentException(Texts.Get("Fix.NoPath"));
         }
 
         var full = Path.GetFullPath(path);
@@ -56,6 +47,6 @@ public sealed class CreateDirectoryFixHandler : IAutoFixHandler
         }
 
         Directory.CreateDirectory(full);
-        return Task.FromResult(new AutoFixResult(true, $"Created '{full}'."));
+        return Task.FromResult(new AutoFixResult(true, Texts.Format("Fix.DirectoryCreated", full)));
     }
 }

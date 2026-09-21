@@ -10,7 +10,6 @@ using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Probing;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

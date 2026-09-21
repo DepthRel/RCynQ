@@ -5,7 +5,6 @@ using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Tests.Support;
-using Xunit;
 
 namespace RCynQ.Git.Tests;
 

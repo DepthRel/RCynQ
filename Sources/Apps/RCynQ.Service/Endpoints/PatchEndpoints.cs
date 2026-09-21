@@ -10,6 +10,7 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Sync.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -34,7 +35,7 @@ public static class PatchEndpoints
         app.MapGet(ApiRoutes.State, async (IPatchService patches, CancellationToken ct) => Results.Ok(await patches.GetStateAsync(ct)));
         app.MapGet(ApiRoutes.Patches, async (IPatchService patches, int? take, CancellationToken ct) => Results.Ok(await patches.GetRecentAsync(Math.Clamp(take ?? 50, 1, 500), ct)));
         app.MapGet(ApiRoutes.PatchById, async (Guid id, IPatchService patches, CancellationToken ct) =>
-            await patches.GetAsync(id, ct) is { } patch ? Results.Ok(patch) : NotFound($"Patch {id} was not found."));
+            await patches.GetAsync(id, ct) is { } patch ? Results.Ok(patch) : NotFound(Texts.Format("Patch.NotFound", id)));
         app.MapGet(ApiRoutes.PatchDiff, GetDiffAsync);
         app.MapPost(ApiRoutes.ResolvePatch, ResolveAsync);
         app.MapPost(ApiRoutes.SendPatch, SendAsync);
@@ -57,7 +58,7 @@ public static class PatchEndpoints
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return Rejection(PatchRejectionReason.RoleNotAllowed, $"A {node.Role} node does not accept patches.");
+            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
         }
 
         var logger = loggers.CreateLogger(LoggerCategory);
@@ -119,7 +120,7 @@ public static class PatchEndpoints
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return NotFound($"A {node.Role} node has no patches to resolve.");
+            return NotFound(Texts.Format("Api.NoPatchesToResolve", node.Role));
         }
 
         try
@@ -151,7 +152,7 @@ public static class PatchEndpoints
     {
         if (!RoleCapabilities.For(node.Role).SendsPatches)
         {
-            return NotFound($"A {node.Role} node does not send patches.");
+            return NotFound(Texts.Format("Api.NoSend", node.Role));
         }
 
         try
@@ -175,7 +176,7 @@ public static class PatchEndpoints
     {
         if (!node.ParticipatesInPatchChannel)
         {
-            return NotFound($"A {node.Role} node has no sync base.");
+            return NotFound(Texts.Format("Api.NoBaseline", node.Role));
         }
 
         try

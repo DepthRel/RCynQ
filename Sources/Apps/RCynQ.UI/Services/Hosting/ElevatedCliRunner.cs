@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using RCynQ.Localization;
 
 namespace RCynQ.UI.Services.Hosting;
 
@@ -57,7 +58,7 @@ public sealed class ElevatedCliRunner : IPeerAccessElevation
     {
         if (!IsAvailable)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.NotAvailable, "Запустите «rcynq ssh allow» в терминале от имени администратора.");
+            return new ElevatedRunResult(ElevatedRunOutcome.NotAvailable, Texts.Get("Elevation.Terminal"));
         }
 
         var info = new ProcessStartInfo(_cli!.FileName, JoinArguments(_cli.PrefixArguments.Concat(new[] { "ssh", "allow", "--config", _configPath })))
@@ -69,19 +70,19 @@ public sealed class ElevatedCliRunner : IPeerAccessElevation
 
         try
         {
-            using var process = Process.Start(info) ?? throw new InvalidOperationException("The CLI did not start.");
+            using var process = Process.Start(info) ?? throw new InvalidOperationException(Texts.Get("Elevation.CliDidNotStart"));
             await process.WaitForExitAsync(cancellationToken);
             return process.ExitCode == 0
-                ? new ElevatedRunResult(ElevatedRunOutcome.Completed, "Подключения соседних узлов разрешены.")
-                : new ElevatedRunResult(ElevatedRunOutcome.Failed, $"Не удалось добавить разрешения (код {process.ExitCode}). Подробности — «rcynq ssh allow» в терминале администратора.");
+                ? new ElevatedRunResult(ElevatedRunOutcome.Completed, Texts.Get("Elevation.Done"))
+                : new ElevatedRunResult(ElevatedRunOutcome.Failed, Texts.Format("Elevation.Failed", process.ExitCode));
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == CancelledByUser)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.Cancelled, "Действие отменено: разрешения не добавлены.");
+            return new ElevatedRunResult(ElevatedRunOutcome.Cancelled, Texts.Get("Elevation.Cancelled"));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.Failed, $"Не удалось запустить команду с правами администратора: {ex.Message}");
+            return new ElevatedRunResult(ElevatedRunOutcome.Failed, Texts.Format("Elevation.StartFailed", ex.Message));
         }
     }
 }

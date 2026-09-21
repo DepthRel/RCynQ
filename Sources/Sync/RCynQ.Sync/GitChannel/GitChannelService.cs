@@ -7,6 +7,7 @@ using RCynQ.Core.State;
 using RCynQ.Git.Repository;
 using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.GitChannel;
 
@@ -115,7 +116,7 @@ public sealed class GitChannelService
     {
         if (_node.Role != NodeRole.Source)
         {
-            throw new SyncBridgeException($"Only a Source node fetches branches from Dest; this node is {_node.Role}.");
+            throw new SyncBridgeException(Texts.Format("Git.OnlySource", _node.Role));
         }
 
         ChainRoute route;
@@ -131,12 +132,11 @@ public sealed class GitChannelService
         if (route.Endpoint.Peer.EndpointMode != EndpointMode.SshTunnel)
         {
             throw new SyncBridgeException(
-                $"Dest peer {route.Endpoint.Peer.Id} accepts connections on its own port and runs no SSH server, and branches are fetched over git-over-ssh. "
-                + "Sending and receiving changes works; to fetch branches too, install an SSH server on the Dest node.");
+                Texts.Format("Git.DestNoSsh", route.Endpoint.Peer.Id));
         }
 
         var repoPath = route.Endpoint.Peer.GitRepoPath
-            ?? throw new SyncBridgeException($"Dest peer {route.Endpoint.Peer.Id} has no repository path; import its exported configuration.");
+            ?? throw new SyncBridgeException(Texts.Format("Git.DestNoRepo", route.Endpoint.Peer.Id));
         return (_node.EffectiveWorkdir!, GitRepositoryService.BuildSshUrl(route.Target!, repoPath), _ssh.BuildGitSshCommand(route.Jumps));
     }
 }

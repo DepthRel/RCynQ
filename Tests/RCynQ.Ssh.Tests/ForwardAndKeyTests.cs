@@ -1,6 +1,5 @@
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
@@ -13,7 +12,6 @@ using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Ssh.Network;
-using Xunit;
 
 namespace RCynQ.Ssh.Tests;
 

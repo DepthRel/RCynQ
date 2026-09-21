@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Data.Context;

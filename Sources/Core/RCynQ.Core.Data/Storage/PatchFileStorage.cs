@@ -1,6 +1,6 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Data.Storage;
 
@@ -81,7 +81,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
         var path = Path.Combine(GetPatchDirectory(patchId), fileName);
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException($"Payload '{fileName}' of patch {patchId} is not stored.");
+            throw new SyncBridgeException(Texts.Format("Patch.PayloadMissing", fileName, patchId));
         }
 
         return await File.ReadAllBytesAsync(path, cancellationToken);

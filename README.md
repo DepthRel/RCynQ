@@ -21,20 +21,22 @@ RCynQ (рабочее имя SyncBridge) синхронизирует рабоч
 ```
 Sources/
   Apps/            RCynQ.Service (локальный API + SignalR), RCynQ.Cli (rcynq), RCynQ.UI (Avalonia)
-  Core/            RCynQ.Core (контракты), Core.Data (EF Core SQLite),
+  Core/            RCynQ.Core (контракты), RCynQ.Localization (тексты интерфейса и сообщений, по файлу на язык),
+                   Core.Data (EF Core SQLite),
                    Core.Data.Migrations (общий раннер FluentMigrator), Core.Data.Migrations.SQLite (скрипты .sql)
   Database/        RCynQ.Dbs.SQLite.DbMigrator (консольный мигратор)
   Infrastructure/  RCynQ.Git, RCynQ.Ssh
   Sync/            RCynQ.Sync (патчи, конфликты, диагностика, конфигурация, автоопределение окружения)
   Transports/      Abstractions, Direct, AmneziaWG
 Tests/             модульные и интеграционные тесты по проектам
-Scripts/           publish-win.ps1, publish-linux.sh, publish-macos.sh, generate-icon.ps1
+Scripts/           publish-win.ps1, build-installer.ps1 + rcynq.iss (установщик), publish-linux.sh, publish-macos.sh,
+                   generate-icon.ps1, generate-flags.ps1
 Docs/              руководство, спецификация и архитектура
 ```
 
 ## Требования
 
-- .NET SDK 8 или новее (проекты нацелены на `net8.0` и запускаются на более новых рантаймах, `RollForward=Major`).
+- .NET SDK 10 (`global.json`; проекты нацелены на `net10.0`, версия платформы задаётся в `Directory.Build.props`).
 - `git` и OpenSSH-клиент в `PATH`; на узлах, к которым подключаются соседи, — `sshd`.
 - Для транспорта AmneziaWG — `awg` / `awg-quick`.
 
@@ -75,9 +77,11 @@ dotnet build Sources/Apps/RCynQ.Service/RCynQ.Service.csproj
 ./Scripts/publish-macos.sh                # osx-arm64
 ```
 
-Self-contained Release-сборки Service, CLI, UI и DbMigrator попадают в `artifacts/publish/<rid>/<app>`. В корне этого каталога создаются ярлык запуска (`RCynQ.lnk` на Windows, `RCynQ.desktop` на Linux, `RCynQ.command` на macOS), переносимый запуск `RCynQ.cmd` / `RCynQ.sh` и метка `rcynq.portable`. Рядом появляется чистый пакет `artifacts/publish/RCynQ-<rid>.zip` (Windows) или `.tar.gz`.
+Self-contained Release-сборки Service, CLI, UI и DbMigrator попадают в `artifacts/publish/<rid>/<app>`. В корне этого каталога создаются запуск (`RCynQ.exe` на Windows — обычный исполняемый файл с иконкой RCynQ; `RCynQ.desktop` / `RCynQ.sh` на Linux, `RCynQ.command` на macOS) и метка `rcynq.portable`. Рядом появляется чистый пакет `artifacts/publish/RCynQ-<rid>.zip` (Windows) или `.tar.gz`.
 
-Ярлык запускает приложение:
+Установщик для Windows (Inno Setup, установка для текущего пользователя без прав администратора, с иконкой RCynQ) собирается командой `./Scripts/build-installer.ps1`: результат — `artifacts/publish/RCynQ-<версия>-setup.exe`. Версия берётся из `Directory.Build.props`. Ключ `-Sign` подписывает программы, установщик и деинсталлятор (Authenticode, SHA-256, с меткой времени): сертификат берётся из переменных окружения `RCYNQ_SIGN_THUMBPRINT` (сертификат в хранилище пользователя) или `RCYNQ_SIGN_PFX` + `RCYNQ_SIGN_PFX_PASSWORD`, см. `Scripts/sign-file.ps1`. Без подписи Windows SmartScreen предупреждает при каждой загрузке; сертификат нужно приобрести у удостоверяющего центра. Программа ставится в `%LOCALAPPDATA%\Programs\RCynQ`, настройки и данные остаются в её папках `config\` и `data\`.
+
+`RCynQ.exe` запускает приложение:
 1. при первом запуске открывается окно настройки узла — роль, пути, порт, link-токен;
 2. приложение запускает сервис в выбранной роли, в том числе Mediator, и останавливает его вместе с туннелями при закрытии.
 
@@ -86,6 +90,10 @@ Self-contained Release-сборки Service, CLI, UI и DbMigrator попада�
 Обмен конфигурацией между узлами:
 - «Экспортировать конфигурацию» определяет адреса, открытость SSH, SSH-ключ и отпечаток ключа хоста средствами ОС и сохраняет файл с публичными данными; из CLI — `rcynq export --auto`;
 - «Импортировать конфигурацию» на соседнем узле создаёт звено.
+
+## Язык интерфейса
+
+Интерфейс и сообщения об ошибках выводятся на русском или английском. При первом запуске язык выбирается по языку операционной системы (русский — русский, иначе английский) и запоминается в `config/ui-settings.json`; сменить его можно на вкладке «Настройки» (а на экране первичной настройки — в правом верхнем углу). Тексты хранятся в `Sources/Core/RCynQ.Localization/Languages/<код>.json`; чтобы добавить язык, достаточно положить туда новый файл и флаг `Sources/Apps/RCynQ.UI/Assets/Flags/<код>.png` (`Scripts/generate-flags.ps1` перерисовывает флаги ru и en). Сервис отвечает на языке, который UI передаёт заголовком `Accept-Language`.
 
 ## Иконка
 

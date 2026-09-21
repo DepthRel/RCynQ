@@ -1,6 +1,5 @@
 using FluentAssertions;
 using RCynQ.UI.Services.Connection;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Connection;
 

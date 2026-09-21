@@ -1,12 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Data.Context;
 using RCynQ.Core.Data.Entities;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Data.Storage;
 
@@ -132,7 +132,7 @@ public sealed class AesGcmSecretStore : ISecretStore
         }
         catch (CryptographicException ex)
         {
-            throw new SyncBridgeException($"Secret '{secretName}' could not be decrypted; the key file or the database row was changed.", ex);
+            throw new SyncBridgeException(Texts.Format("Secret.Undecryptable", secretName), ex);
         }
         finally
         {
@@ -185,7 +185,7 @@ public sealed class AesGcmSecretStore : ISecretStore
             var key = await File.ReadAllBytesAsync(path, cancellationToken);
             if (key.Length != KeySize)
             {
-                throw new SyncBridgeException($"Secret key file '{path}' is malformed: expected {KeySize} bytes, found {key.Length}.");
+                throw new SyncBridgeException(Texts.Format("Secret.KeyMalformed", path, KeySize, key.Length));
             }
 
             _key = key;

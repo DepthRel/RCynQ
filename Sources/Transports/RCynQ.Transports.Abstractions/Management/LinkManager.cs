@@ -1,7 +1,4 @@
 using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Transports;
@@ -11,6 +8,7 @@ using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
 using RCynQ.Transports.Abstractions.Factory;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.Abstractions.Management;
 
@@ -144,7 +142,7 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
                 state = await active.Link.GetStatusAsync(cancellationToken);
                 if (active.Kind != config.Transport && state.Status == LinkStatus.Ready)
                 {
-                    state = new LinkState(config.Id, config.Name, active.Kind, LinkStatus.Degraded, $"Using fallback {active.Kind}. {state.Message}", state.UpdatedAtUtc);
+                    state = new LinkState(config.Id, config.Name, active.Kind, LinkStatus.Degraded, Texts.Format("Link.FallbackUsed", active.Kind, state.Message), state.UpdatedAtUtc);
                 }
             }
             else if (_factory.IsSupported(config.Transport))
@@ -153,7 +151,7 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
             }
             else
             {
-                state = new LinkState(config.Id, config.Name, config.Transport, LinkStatus.Failed, $"Transport {config.Transport} is not available in this build.", _timeProvider.GetUtcNow());
+                state = new LinkState(config.Id, config.Name, config.Transport, LinkStatus.Failed, Texts.Format("Transport.NotAvailable", config.Transport), _timeProvider.GetUtcNow());
             }
 
             states.Add(state);
@@ -209,7 +207,7 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
         {
             if (!_factory.IsSupported(kind))
             {
-                failures.Add($"{kind}: not available in this build");
+                failures.Add(Texts.Format("Link.KindNotAvailable", kind));
                 continue;
             }
 
@@ -220,13 +218,13 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
                 var state = await link.GetStatusAsync(cancellationToken);
                 if (!state.IsUsable)
                 {
-                    throw new SyncBridgeException(state.Message ?? "Link is not usable.");
+                    throw new SyncBridgeException(state.Message ?? Texts.Get("Link.NotUsable"));
                 }
 
                 _active[config.Id] = new ActiveLink(link, kind);
                 if (kind != config.Transport)
                 {
-                    state = new LinkState(config.Id, config.Name, kind, LinkStatus.Degraded, $"Using fallback {kind}; {string.Join("; ", failures)}", _timeProvider.GetUtcNow());
+                    state = new LinkState(config.Id, config.Name, kind, LinkStatus.Degraded, Texts.Format("Link.FallbackAfterFailures", kind, string.Join("; ", failures)), _timeProvider.GetUtcNow());
                 }
 
                 await PublishIfChangedAsync(state, cancellationToken);
@@ -234,7 +232,7 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
             }
             catch (SyncBridgeException ex)
             {
-                failures.Add($"{kind}: {ex.Message}");
+                failures.Add(Texts.Format("Link.KindFailed", kind, ex.Message));
                 await StopQuietlyAsync(link);
             }
         }
@@ -252,7 +250,7 @@ public sealed class LinkManager : ILinkManager, IAsyncDisposable
     /// <returns>The configuration.</returns>
     /// <exception cref="KeyNotFoundException">The link is not configured.</exception>
     private async Task<ChainLinkConfig> GetConfigAsync(Guid linkId, CancellationToken cancellationToken)
-        => await _links.GetAsync(linkId, cancellationToken) ?? throw new KeyNotFoundException($"Chain link {linkId} is not configured.");
+        => await _links.GetAsync(linkId, cancellationToken) ?? throw new KeyNotFoundException(Texts.Format("Link.NotConfigured", linkId));
 
     /// <summary>
     /// Publishes a state when its status or transport changed since the last publication. Message-only changes are not

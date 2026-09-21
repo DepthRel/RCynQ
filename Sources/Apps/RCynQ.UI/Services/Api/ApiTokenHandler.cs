@@ -1,5 +1,6 @@
 using System.Net;
 using RCynQ.Core.Api;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Connection;
 
 namespace RCynQ.UI.Services.Api;
@@ -33,6 +34,10 @@ public sealed class ApiTokenHandler : DelegatingHandler
             // Add validates the value, so a tampered token file cannot inject header lines.
             request.Headers.Add(ApiHeaders.ApiToken, token);
         }
+
+        // The service words its answers (errors, diagnostics) in the language the user chose.
+        request.Headers.AcceptLanguage.Clear();
+        request.Headers.AcceptLanguage.ParseAdd(Texts.Localizer.Current.Code);
 
         var response = await base.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)

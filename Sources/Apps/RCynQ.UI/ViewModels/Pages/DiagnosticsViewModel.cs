@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Events;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.ViewModels.Formatting;
@@ -10,7 +10,7 @@ using RCynQ.UI.ViewModels.Items;
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Диагностика" tab: runs checks and applies confirmed safe fixes.
+/// The diagnostics tab: runs checks and applies confirmed safe fixes.
 /// </summary>
 public sealed partial class DiagnosticsViewModel : PageViewModelBase
 {
@@ -20,9 +20,8 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
     /// <summary>The dialog service.</summary>
     private readonly IDialogService _dialogs;
 
-    /// <summary>The summary of the last run.</summary>
-    [ObservableProperty]
-    private string _summary = "Проверка ещё не запускалась.";
+    /// <summary>The last run, or <see langword="null"/> when the check has not been run yet.</summary>
+    private DiagnosticsEvent? _lastRun;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DiagnosticsViewModel"/> class.
@@ -38,6 +37,11 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
 
     /// <summary>Gets the check results.</summary>
     public ObservableCollection<DiagnosticItemViewModel> Results { get; } = new();
+
+    /// <summary>Gets the summary of the last run in the language of the user.</summary>
+    public string Summary => _lastRun is not { } run
+        ? Texts.Get("Diagnostics.NeverRun")
+        : Texts.Format("Diagnostics.Summary", DisplayText.Time(run.TimestampUtc), run.Results.Count(result => result.Passed), run.Results.Count);
 
     /// <summary>Gets a value indicating whether no results are shown.</summary>
     public bool HasNoResults => Results.Count == 0;
@@ -58,8 +62,8 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
             Results.Add(new DiagnosticItemViewModel(result));
         }
 
-        var failed = run.Results.Count(result => !result.Passed);
-        Summary = $"{DisplayText.Time(run.TimestampUtc)}: пройдено {run.Results.Count - failed} из {run.Results.Count}.";
+        _lastRun = run;
+        OnPropertyChanged(nameof(Summary));
     }
 
     /// <summary>
@@ -77,7 +81,7 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
     [RelayCommand]
     private async Task FixAsync(DiagnosticItemViewModel? item)
     {
-        if (item?.Result.AutoFix is not { } fix || !await _dialogs.ConfirmAsync("Исправить автоматически", fix.Description))
+        if (item?.Result.AutoFix is not { } fix || !await _dialogs.ConfirmAsync(Texts.Get("Diagnostics.FixTitle"), fix.Description))
         {
             return;
         }

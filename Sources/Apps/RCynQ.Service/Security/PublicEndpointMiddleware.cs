@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using RCynQ.Core.Api;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Security;
 
@@ -52,7 +53,7 @@ public sealed class PublicEndpointMiddleware
         if (!allowed)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
-            await context.Response.WriteAsJsonAsync(new ErrorResponse("This route is not available on the node endpoint."));
+            await context.Response.WriteAsJsonAsync(new ErrorResponse(Texts.Get("Api.RouteNotPublic")));
             return;
         }
 

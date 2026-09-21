@@ -1,11 +1,8 @@
-using System.Globalization;
 using System.Security.Cryptography;
-using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Patches;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Signing;
 
@@ -125,7 +122,7 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
                 catch (Exception ex) when (ex is FormatException or CryptographicException)
                 {
                     key.Dispose();
-                    throw new SyncBridgeException("The stored node signing key is malformed.", ex);
+                    throw new SyncBridgeException(Texts.Get("Signing.KeyMalformed"), ex);
                 }
             }
 

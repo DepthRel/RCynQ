@@ -2,7 +2,6 @@ using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Ssh;
@@ -10,13 +9,12 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
-using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Serialization;
-using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Endpoint;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Transfer;
 
@@ -199,7 +197,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         var token = await _tokens.GetTokenAsync(cancellationToken);
         if (string.IsNullOrEmpty(token))
         {
-            throw new SyncBridgeException("The link token is not configured; set SyncBridge:LinkToken or the 'link-token' secret.");
+            throw new SyncBridgeException(Texts.Get("Send.NoToken"));
         }
 
         var body = _serializer.Serialize(envelope);
@@ -228,9 +226,9 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         {
             var destination = route.UsesTls ? $"{route.Endpoint.Peer.Id} ({route.RemoteHost}:{route.RemotePort})" : $"{route.Target}";
             var hint = route.UsesTls && ex.GetBaseException() is System.Security.Authentication.AuthenticationException
-                ? " The certificate presented by the peer does not match the fingerprint from its export file; import the peer's current export."
+                ? Texts.Get("Send.CertificateMismatch")
                 : string.Empty;
-            throw new SyncBridgeException($"Patch {envelope.Id} could not be delivered to {destination}: {ex.Message}{hint}", ex);
+            throw new SyncBridgeException(Texts.Format("Send.NotDelivered", envelope.Id, destination, ex.Message, hint), ex);
         }
         finally
         {
@@ -295,11 +293,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             try
             {
                 return JsonSerializer.Deserialize<PatchApplyResult>(text, JsonOptions)
-                    ?? throw new SyncBridgeException($"The peer returned an empty result for patch {patchId}.");
+                    ?? throw new SyncBridgeException(Texts.Format("Send.EmptyResult", patchId));
             }
             catch (JsonException ex)
             {
-                throw new SyncBridgeException($"The peer returned an invalid result for patch {patchId}: {ex.Message}", ex);
+                throw new SyncBridgeException(Texts.Format("Send.InvalidResult", patchId, ex.Message), ex);
             }
         }
 
@@ -307,11 +305,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         if (attempt > 1 && rejection?.Reason == PatchRejectionReason.Replay)
         {
             return new PatchApplyResult(patchId, PatchStatus.Pending, 0, Array.Empty<ConflictFile>(),
-                "The peer already received this patch but the first response was lost; check the patch status on the peer.");
+                Texts.Get("Send.ResponseLost"));
         }
 
         var reason = rejection is null ? text : $"{rejection.Reason}: {rejection.Error}";
-        throw new SyncBridgeException($"The peer refused patch {patchId} with HTTP {(int)response.StatusCode}: {reason}".Trim());
+        throw new SyncBridgeException(Texts.Format("Send.Refused", patchId, (int)response.StatusCode, reason).Trim());
     }
 
     /// <summary>

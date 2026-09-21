@@ -1,4 +1,3 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Security;
@@ -8,7 +7,6 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
-using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Bundles;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Conflicts;
@@ -18,6 +16,7 @@ using RCynQ.Sync.Paths;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Transfer;
 
@@ -147,7 +146,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             {
                 if (!_paths.BaselineInitialized)
                 {
-                    result = PatchApplyResult.Failed(envelope.Id, "The sync base is not initialized on the receiving node; run 'patch baseline' first.");
+                    result = PatchApplyResult.Failed(envelope.Id, LocalizedText.Encode("Receive.NoBaseline"));
                 }
                 else
                 {
@@ -186,22 +185,22 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     {
         if (!_node.ParticipatesInPatchChannel)
         {
-            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, $"A {_node.Role} node does not accept patches.");
+            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", _node.Role));
         }
 
         if (!LinkTokenProvider.Matches(await _tokens.GetTokenAsync(cancellationToken), context.LinkToken))
         {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, "The link token is missing or invalid.");
+            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, Texts.Get("Receive.InvalidToken"));
         }
 
         if (!NodeId.TryParse(context.SenderNodeId, out var headerSender) || headerSender != envelope.SourceNode)
         {
-            throw new PatchRejectedException(PatchRejectionReason.SenderMismatch, "The X-Node-Id header does not match the envelope sender.");
+            throw new PatchRejectedException(PatchRejectionReason.SenderMismatch, Texts.Get("Receive.SenderMismatch"));
         }
 
         if (envelope.TargetNode != _node.Id)
         {
-            throw new PatchRejectedException(PatchRejectionReason.WrongReceiver, $"The patch is addressed to {envelope.TargetNode}, not {_node.Id}.");
+            throw new PatchRejectedException(PatchRejectionReason.WrongReceiver, Texts.Format("Receive.WrongReceiver", envelope.TargetNode, _node.Id));
         }
 
         var expectedRole = _node.Role == NodeRole.Source ? NodeRole.Dest : NodeRole.Source;
@@ -214,7 +213,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         if (!envelope.IsSigned
             || !_signatures.Verify(PayloadCanonicalizer.Build(envelope), envelope.Signature, Convert.FromBase64String(peer.SigningPublicKey)))
         {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidSignature, "The patch signature is missing or invalid.");
+            throw new PatchRejectedException(PatchRejectionReason.InvalidSignature, Texts.Get("Receive.InvalidSignature"));
         }
 
         try

@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dispatching;
@@ -46,6 +47,18 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>The data directory checked for a copied installation, or <see langword="null"/>.</summary>
     private string? _dataRoot;
 
+    /// <summary>Produces the connection status text in the current language.</summary>
+    private Func<string> _connectionText = () => Texts.Get("Main.Connecting");
+
+    /// <summary>Produces the window title in the current language.</summary>
+    private Func<string> _nodeTitle = () => "RCynQ";
+
+    /// <summary>The name of the computer the installation was copied from, or <see langword="null"/>.</summary>
+    private string? _installationCopiedFrom;
+
+    /// <summary>The service status shown in the status bar.</summary>
+    private ServiceControllerStatus _serviceStatus = ServiceControllerStatus.NotStarted;
+
     /// <summary>The selected tab.</summary>
     [ObservableProperty]
     private NavigationItemViewModel? _selectedTab;
@@ -53,18 +66,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Whether the live event stream is connected.</summary>
     [ObservableProperty]
     private bool _isConnected;
-
-    /// <summary>The connection status text.</summary>
-    [ObservableProperty]
-    private string _connectionText = "Подключение к сервису…";
-
-    /// <summary>The service status text.</summary>
-    [ObservableProperty]
-    private string _serviceText = string.Empty;
-
-    /// <summary>The node title shown in the window title.</summary>
-    [ObservableProperty]
-    private string _nodeTitle = "RCynQ";
 
     /// <summary>Whether the first-run setup is shown instead of the tabs.</summary>
     [ObservableProperty]
@@ -74,11 +75,6 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStartupError))]
     private string? _startupError;
-
-    /// <summary>The warning shown when the installation was copied from another computer together with its data.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasInstallationWarning))]
-    private string? _installationWarning;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -96,6 +92,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="diagnostics">The diagnostics page.</param>
     /// <param name="branches">The branches page.</param>
     /// <param name="logs">The logs page.</param>
+    /// <param name="settings">The settings page.</param>
     public MainViewModel(
         IServiceApiClient api,
         INodeEventStream events,
@@ -109,7 +106,8 @@ public sealed partial class MainViewModel : ObservableObject
         TunnelViewModel tunnel,
         DiagnosticsViewModel diagnostics,
         BranchViewModel branches,
-        LogsViewModel logs)
+        LogsViewModel logs,
+        SettingsViewModel settings)
     {
         _api = api;
         _events = events;
@@ -124,16 +122,18 @@ public sealed partial class MainViewModel : ObservableObject
         Diagnostics = diagnostics;
         Branches = branches;
         Logs = logs;
+        Settings = settings;
 
         _allTabs = new List<NavigationItemViewModel>
         {
-            new(TabKey.Overview, "Обзор", "Icon.Home", overview),
-            new(TabKey.RoleAndNodes, "Роль и узлы", "Icon.Nodes", roleAndNodes),
-            new(TabKey.Sync, "Синхронизация", "Icon.Upload", sync),
-            new(TabKey.Tunnel, "Туннель", "Icon.Tunnel", tunnel),
-            new(TabKey.Diagnostics, "Диагностика", "Icon.Stethoscope", diagnostics),
-            new(TabKey.Branches, "Ветки", "Icon.Branch", branches),
-            new(TabKey.Logs, "Логи", "Icon.Logs", logs)
+            new(TabKey.Overview, "Icon.Home", overview),
+            new(TabKey.RoleAndNodes, "Icon.Nodes", roleAndNodes),
+            new(TabKey.Sync, "Icon.Upload", sync),
+            new(TabKey.Tunnel, "Icon.Tunnel", tunnel),
+            new(TabKey.Diagnostics, "Icon.Stethoscope", diagnostics),
+            new(TabKey.Branches, "Icon.Branch", branches),
+            new(TabKey.Logs, "Icon.Logs", logs),
+            new(TabKey.Settings, "Icon.Settings", settings)
         };
 
         foreach (var tab in _allTabs)
@@ -144,7 +144,12 @@ public sealed partial class MainViewModel : ObservableObject
         overview.NavigationRequested += (_, key) => Navigate(key);
         roleAndNodes.RestartRequested += (_, _) => _ = RestartServiceAsync();
         setup.Completed += (_, _) => _ = CompleteSetupAsync();
-        _controller.StatusChanged += (_, status) => _dispatcher.Post(() => ServiceText = FormatService(status));
+        _controller.StatusChanged += (_, status) => _dispatcher.Post(() =>
+        {
+            _serviceStatus = status;
+            OnPropertyChanged(nameof(ServiceText));
+        });
+        Texts.Localizer.LanguageChanged += (_, _) => _dispatcher.Post(OnLanguageChanged);
         _events.LinkStateChanged += (_, evt) => _dispatcher.Post(() => OnLinkStateChanged(evt));
         _events.PatchChanged += (_, evt) => _dispatcher.Post(() => OnPatchChanged(evt));
         _events.DiagnosticsCompleted += (_, evt) => _dispatcher.Post(() => OnDiagnosticsCompleted(evt));
@@ -175,6 +180,21 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Gets the logs page.</summary>
     public LogsViewModel Logs { get; }
 
+    /// <summary>Gets the settings page.</summary>
+    public SettingsViewModel Settings { get; }
+
+    /// <summary>Gets the connection status text.</summary>
+    public string ConnectionText => _connectionText();
+
+    /// <summary>Gets the service status text.</summary>
+    public string ServiceText => FormatService(_serviceStatus);
+
+    /// <summary>Gets the node title shown in the window title.</summary>
+    public string NodeTitle => _nodeTitle();
+
+    /// <summary>Gets the warning shown when the installation was copied from another computer together with its data.</summary>
+    public string? InstallationWarning => _installationCopiedFrom is null ? null : Texts.Format("Main.InstallationCopied", _installationCopiedFrom);
+
     /// <summary>Gets all tabs in display order; the view moves tabs that do not fit into the "…" menu.</summary>
     public ObservableCollection<NavigationItemViewModel> Tabs { get; } = new();
 
@@ -200,7 +220,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        ConnectionText = "Запуск сервиса RCynQ…";
+        SetConnectionText(() => Texts.Get("Main.StartingService"));
         var start = await _controller.EnsureRunningAsync();
         if (start.IsConfigurationError)
         {
@@ -215,16 +235,16 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var config = await _api.GetConfigAsync();
             role = config.Role;
-            NodeTitle = $"RCynQ — {config.Name} ({config.Role})";
+            SetNodeTitle(() => $"RCynQ — {config.Name} ({config.Role})");
             Branches.Configure(config.Capabilities);
-            ConnectionText = start.Message;
+            SetConnectionText(() => start.Message);
             StartupError = null;
             _initialized = true;
         }
         catch (Exception ex) when (ex is ServiceApiException or HttpRequestException)
         {
             _initialized = false;
-            ConnectionText = start.IsRunning ? $"Нет связи с сервисом: {ex.Message}" : start.Message;
+            SetConnectionText(start.IsRunning ? () => Texts.Format("Main.ServiceUnreachable", ex.Message) : () => start.Message);
             StartupError = ConnectionText;
         }
 
@@ -306,6 +326,46 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Sets the connection status text; the text is produced again when the language changes.
+    /// </summary>
+    /// <param name="text">Produces the text.</param>
+    private void SetConnectionText(Func<string> text)
+    {
+        _connectionText = text;
+        OnPropertyChanged(nameof(ConnectionText));
+    }
+
+    /// <summary>
+    /// Sets the window title; the title is produced again when the language changes.
+    /// </summary>
+    /// <param name="text">Produces the title.</param>
+    private void SetNodeTitle(Func<string> text)
+    {
+        _nodeTitle = text;
+        OnPropertyChanged(nameof(NodeTitle));
+    }
+
+    /// <summary>
+    /// Puts every text on the screen into the new language: the computed texts of the window and of the pages, and the
+    /// rows of the page in view, which are read again so the texts the service words follow the language too.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        OnPropertyChanged(string.Empty);
+        Setup.RefreshTexts();
+        foreach (var tab in _allTabs)
+        {
+            tab.RefreshTexts();
+            tab.Page.RefreshTexts();
+        }
+
+        if (_initialized)
+        {
+            _ = CurrentPage?.RefreshAsync();
+        }
+    }
+
+    /// <summary>
     /// Reloads the current page, or retries initialization (including starting the service) when it failed before.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
@@ -351,11 +411,9 @@ public sealed partial class MainViewModel : ObservableObject
         var options = LocalConfigFile.TryLoad(_controller.ConfigPath) ?? new SyncBridgeOptions();
         _dataRoot = ConfigLocations.ResolveDataRoot(options, _controller.ConfigPath, portableRoot);
         var check = InstallationStamp.Check(_dataRoot, Environment.MachineName);
-        InstallationWarning = check.CopiedFromAnotherMachine
-            ? $"Папка программы скопирована с компьютера «{check.RecordedMachineName}» вместе с его настройками и ключами. "
-              + "Если это новый узел, закройте программу, удалите папки «config» и «data» и запустите её снова. "
-              + "Если вы перенесли этот же узел на новый компьютер, нажмите «Это тот же узел»."
-            : null;
+        _installationCopiedFrom = check.CopiedFromAnotherMachine ? check.RecordedMachineName : null;
+        OnPropertyChanged(nameof(InstallationWarning));
+        OnPropertyChanged(nameof(HasInstallationWarning));
     }
 
     /// <summary>
@@ -369,7 +427,9 @@ public sealed partial class MainViewModel : ObservableObject
             InstallationStamp.Write(_dataRoot, Environment.MachineName);
         }
 
-        InstallationWarning = null;
+        _installationCopiedFrom = null;
+        OnPropertyChanged(nameof(InstallationWarning));
+        OnPropertyChanged(nameof(HasInstallationWarning));
     }
 
     /// <summary>
@@ -381,8 +441,8 @@ public sealed partial class MainViewModel : ObservableObject
         Setup.Load(LocalConfigFile.TryLoad(_controller.ConfigPath), error);
         StartupError = null;
         IsSetupVisible = true;
-        NodeTitle = "RCynQ — настройка узла";
-        ConnectionText = error is null ? "Требуется настройка узла" : "Сервис не принял конфигурацию";
+        SetNodeTitle(() => Texts.Get("Main.NodeTitleSetup"));
+        SetConnectionText(error is null ? () => Texts.Get("Main.SetupNeeded") : () => Texts.Get("Main.ConfigRejected"));
     }
 
     /// <summary>
@@ -394,7 +454,7 @@ public sealed partial class MainViewModel : ObservableObject
         IsSetupVisible = false;
         if (_controller.IsManaged)
         {
-            ConnectionText = "Перезапуск сервиса…";
+            SetConnectionText(() => Texts.Get("Main.RestartingService"));
             var restart = await _controller.RestartAsync();
             if (restart.IsConfigurationError)
             {
@@ -413,12 +473,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <returns>A task representing the operation.</returns>
     private async Task RestartServiceAsync()
     {
-        ConnectionText = "Перезапуск сервиса с новой конфигурацией…";
+        SetConnectionText(() => Texts.Get("Main.RestartingNewConfig"));
         var result = await _controller.RestartAsync();
         if (result.Outcome == ServiceStartOutcome.NotManaged)
         {
-            ConnectionText = result.Message;
-            RoleAndNodes.InfoMessage = "Роль сохранена. " + result.Message;
+            SetConnectionText(() => result.Message);
+            RoleAndNodes.InfoMessage = Texts.Format("Main.RoleSaved", result.Message);
             return;
         }
 
@@ -430,7 +490,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _initialized = false;
         await InitializeAsync();
-        RoleAndNodes.InfoMessage = result.IsRunning ? "Роль применена: сервис перезапущен." : result.Message;
+        RoleAndNodes.InfoMessage = result.IsRunning ? Texts.Get("Main.RoleApplied") : result.Message;
     }
 
     /// <summary>
@@ -496,6 +556,6 @@ public sealed partial class MainViewModel : ObservableObject
     private void SetConnected(bool connected)
     {
         IsConnected = connected;
-        ConnectionText = connected ? "Подключено к сервису" : "Нет подписки на события сервиса, повторное подключение…";
+        SetConnectionText(connected ? () => Texts.Get("Main.Connected") : () => Texts.Get("Main.EventsReconnecting"));
     }
 }

@@ -7,7 +7,6 @@ using RCynQ.Core.Events;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
-using Xunit;
 
 namespace RCynQ.Core.Tests;
 

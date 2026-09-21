@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests of the real windows in the Avalonia headless platform (no screen): every text on every tab follows the
+    language the user chose. The test data and the fakes are shared with the view model tests.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\RCynQ.UI.Tests\Support\TestData.cs" Link="Support\TestData.cs" />
+    <Compile Include="..\RCynQ.UI.Tests\Support\ImmediateUiDispatcher.cs" Link="Support\ImmediateUiDispatcher.cs" />
+    <Compile Include="..\RCynQ.UI.Tests\Support\FakeLanguageService.cs" Link="Support\FakeLanguageService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Sources\Apps\RCynQ.UI\RCynQ.UI.csproj" />
+  </ItemGroup>
+
+</Project>

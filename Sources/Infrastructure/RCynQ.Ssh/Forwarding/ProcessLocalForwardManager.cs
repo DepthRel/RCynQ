@@ -1,7 +1,4 @@
 using System.Collections.Concurrent;
-using System.Net;
-using System.Net.Sockets;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Ssh;
@@ -9,6 +6,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
 using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Network;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Forwarding;
 
@@ -96,7 +94,7 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
                 if (process.HasExited)
                 {
                     throw new SshExecutionException(
-                        $"SSH forward 127.0.0.1:{port} → {target} ({remoteHost}:{remotePort}) exited: {process.StandardError.Trim()}",
+                        Texts.Format("Forward.Exited", port, target, remoteHost, remotePort, process.StandardError.Trim()),
                         process.ExitCode ?? -1);
                 }
 
@@ -108,7 +106,7 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
 
                 if (DateTime.UtcNow >= deadline)
                 {
-                    throw new SshExecutionException($"SSH forward 127.0.0.1:{port} → {target} did not become ready within {_startupTimeout.TotalSeconds:0} s.");
+                    throw new SshExecutionException(Texts.Format("Forward.NotReady", port, target, _startupTimeout.TotalSeconds));
                 }
 
                 await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);

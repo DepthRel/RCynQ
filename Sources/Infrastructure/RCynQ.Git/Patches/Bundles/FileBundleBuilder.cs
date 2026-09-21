@@ -1,12 +1,12 @@
 using System.IO.Compression;
 using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
 using RCynQ.Git.Hashing;
+using RCynQ.Localization;
 
 namespace RCynQ.Git.Patches.Bundles;
 
@@ -124,7 +124,7 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
                 total += entry.Length;
                 if (total > MaxTotalBytes)
                 {
-                    throw new FormatException("Bundle exceeds the maximum accepted size.");
+                    throw new FormatException(Texts.Get("Bundle.TooBig"));
                 }
 
                 var (prefix, rawPath) = SplitEntryName(entry.FullName);
@@ -135,12 +135,12 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
                 }
                 catch (ArgumentException ex)
                 {
-                    throw new FormatException($"Bundle entry '{entry.FullName}' has an unsafe path: {ex.Message}", ex);
+                    throw new FormatException(Texts.Format("Bundle.UnsafePath", entry.FullName, ex.Message), ex);
                 }
 
                 if (path != rawPath || !seen.Add(path))
                 {
-                    throw new FormatException($"Bundle entry '{entry.FullName}' is not canonical or is duplicated.");
+                    throw new FormatException(Texts.Format("Bundle.NotCanonical", entry.FullName));
                 }
 
                 switch (prefix)
@@ -159,7 +159,7 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
         }
         catch (InvalidDataException ex)
         {
-            throw new FormatException($"Bundle is not a valid zip archive: {ex.Message}", ex);
+            throw new FormatException(Texts.Format("Bundle.NotZip", ex.Message), ex);
         }
 
         var result = new FileBundle(files, symlinks, deleted);
@@ -181,7 +181,7 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
     {
         if (bundle.Count != manifest.Count)
         {
-            throw new FormatException($"Bundle has {bundle.Count} entries but the manifest has {manifest.Count} changes.");
+            throw new FormatException(Texts.Format("Bundle.CountMismatch", bundle.Count, manifest.Count));
         }
 
         foreach (var change in manifest)
@@ -197,7 +197,7 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
                     && DefaultStateHasher.Sha256Hex(Encoding.UTF8.GetBytes(target)) == change.Sha256:
                     break;
                 default:
-                    throw new FormatException($"Bundle content for '{change.Path}' ({change.Kind}) is missing or does not match the manifest hash.");
+                    throw new FormatException(Texts.Format("Bundle.ContentMismatch", change.Path, change.Kind));
             }
         }
     }
@@ -218,7 +218,7 @@ public sealed class FileBundleBuilder : IFileBundleBuilder
             }
         }
 
-        throw new FormatException($"Bundle entry '{fullName}' has an unknown prefix.");
+        throw new FormatException(Texts.Format("Bundle.UnknownPrefix", fullName));
     }
 
     /// <summary>

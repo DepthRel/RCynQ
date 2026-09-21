@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
@@ -56,7 +57,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The SSH key description.</summary>
     [ObservableProperty]
-    private string _sshKeyDescription = "Определяется…";
+    private string _sshKeyDescription = Texts.Get("Export.Detecting");
 
     /// <summary>Whether the SSH public key is exported.</summary>
     [ObservableProperty]
@@ -64,7 +65,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The sshd host key fingerprint.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasHostKey))]
+    [NotifyPropertyChangedFor(nameof(HasHostKey), nameof(HostKeyFingerprintText))]
     private string? _hostKeyFingerprint;
 
     /// <summary>Whether the host key fingerprint is exported.</summary>
@@ -73,7 +74,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The sshd check label.</summary>
     [ObservableProperty]
-    private string _sshdStatus = "SSH-сервер: проверяется…";
+    private string _sshdStatus = Texts.Get("Export.SshdChecking");
 
     /// <summary>Whether sshd accepts connections.</summary>
     [ObservableProperty]
@@ -81,7 +82,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The service port check label.</summary>
     [ObservableProperty]
-    private string _servicePortStatus = "Порт сервиса: проверяется…";
+    private string _servicePortStatus = Texts.Get("Export.ServicePortChecking");
 
     /// <summary>Whether the service port accepts connections.</summary>
     [ObservableProperty]
@@ -129,7 +130,14 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>Gets the fingerprint of the node's TLS certificate that neighbours will pin.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TlsFingerprintText))]
     private string? _tlsFingerprint;
+
+    /// <summary>Gets the host key fingerprint, or the word for "not determined".</summary>
+    public string HostKeyFingerprintText => HostKeyFingerprint ?? Texts.Get("Export.NotDetermined");
+
+    /// <summary>Gets the fingerprint of the TLS certificate, or the word for "not determined".</summary>
+    public string TlsFingerprintText => TlsFingerprint ?? Texts.Get("Export.NotDetermined");
 
     /// <summary>Gets a value indicating whether the node accepts connections through its SSH server.</summary>
     public bool IsSshEndpoint => !IsDirectEndpoint;
@@ -168,22 +176,18 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         if (IsDirectEndpoint)
         {
             SshdOk = report.Addresses.Any(address => address.SshReachable);
-            SshdStatus = SshdOk
-                ? $"Узел без SSH-сервера: соседи подключаются к порту RCynQ {report.EndpointPort} (TLS)"
-                : $"Узел без SSH-сервера, но порт RCynQ {report.EndpointPort} не отвечает — проверьте брандмауэр";
+            SshdStatus = Texts.Format(SshdOk ? "Export.Direct.Ok" : "Export.Direct.Closed", report.EndpointPort);
         }
         else
         {
             SshdOk = report.SshdListening;
-            SshdStatus = report.SshdListening
-                ? $"SSH-сервер принимает подключения на порту {report.SshPort}"
-                : $"SSH-сервер не отвечает на порту {report.SshPort}";
+            SshdStatus = Texts.Format(report.SshdListening ? "Export.Ssh.Ok" : "Export.Ssh.Closed", report.SshPort);
         }
         ServicePortOk = report.ServicePortListening;
-        ServicePortStatus = report.ServicePortListening ? "Порт сервиса RCynQ отвечает" : "Порт сервиса RCynQ не отвечает";
+        ServicePortStatus = Texts.Get(report.ServicePortListening ? "Export.ServicePort.Ok" : "Export.ServicePort.Closed");
 
         SshPublicKey = report.SshPublicKey;
-        SshKeyDescription = report.SshPublicKey is null ? "SSH-ключ не найден" : $"{report.SshKeyFingerprint} · {report.SshPublicKeyPath}";
+        SshKeyDescription = report.SshPublicKey is null ? Texts.Get("Export.SshKeyMissing") : $"{report.SshKeyFingerprint} · {report.SshPublicKeyPath}";
         IncludeSshKey = HasSshKey;
 
         HostKeyFingerprint = report.HostKeyFingerprints.FirstOrDefault();
@@ -231,25 +235,25 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         var host = Host.Trim();
         if (host.Length == 0)
         {
-            Error = "Укажите адрес, по которому соседи подключаются к этому узлу.";
+            Error = Texts.Get("Export.Error.HostRequired");
             return;
         }
 
         if (!SshEndpoint.IsValidHost(host))
         {
-            Error = "Недопустимый адрес.";
+            Error = Texts.Get("Export.Error.HostInvalid");
             return;
         }
 
         if (User.Length > 0 && !SshEndpoint.IsValidUser(User.Trim()))
         {
-            Error = "Недопустимое имя пользователя SSH.";
+            Error = Texts.Get("Export.Error.UserInvalid");
             return;
         }
 
         if (SshPort is < 1 or > 65535)
         {
-            Error = "Порт должен быть в диапазоне 1..65535.";
+            Error = Texts.Get("Export.Error.Port");
             return;
         }
 
@@ -282,7 +286,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         }
         catch (HttpRequestException ex)
         {
-            ProbeError = $"Сервис RCynQ недоступен: {ex.Message}";
+            ProbeError = Texts.Format("Common.ServiceUnavailable", ex.Message);
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 
 namespace RCynQ.UI.Services.Hosting;
@@ -103,7 +104,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
     {
         if (!IsManaged && Status == ServiceControllerStatus.Attached)
         {
-            return new ServiceStartResult(ServiceStartOutcome.NotManaged, "Сервис запущен вне приложения — перезапустите его вручную.");
+            return new ServiceStartResult(ServiceStartOutcome.NotManaged, Texts.Get("Host.NotManaged"));
         }
 
         await StopAsync(cancellationToken).ConfigureAwait(false);
@@ -169,22 +170,22 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
             if (IsManaged)
             {
                 Status = ServiceControllerStatus.Running;
-                return new ServiceStartResult(ServiceStartOutcome.Started, $"Сервис запущен приложением (PID {_process!.Id}).");
+                return new ServiceStartResult(ServiceStartOutcome.Started, Texts.Format("Host.Started", _process!.Id));
             }
 
             Status = ServiceControllerStatus.Attached;
-            return new ServiceStartResult(ServiceStartOutcome.AlreadyRunning, "Используется уже запущенный сервис RCynQ.");
+            return new ServiceStartResult(ServiceStartOutcome.AlreadyRunning, Texts.Get("Host.Attached"));
         }
 
         if (!File.Exists(ConfigPath))
         {
-            return new ServiceStartResult(ServiceStartOutcome.NotConfigured, $"Файл конфигурации не найден: {ConfigPath}");
+            return new ServiceStartResult(ServiceStartOutcome.NotConfigured, Texts.Format("Host.NoConfig", ConfigPath));
         }
 
         if (_command is null)
         {
             Status = ServiceControllerStatus.Failed;
-            return new ServiceStartResult(ServiceStartOutcome.NotFound, $"Не найден {ServiceExecutableLocator.AssemblyName} рядом с приложением; укажите его через {ServiceExecutableLocator.Argument}.");
+            return new ServiceStartResult(ServiceStartOutcome.NotFound, Texts.Format("Host.NotFound", ServiceExecutableLocator.AssemblyName, ServiceExecutableLocator.Argument));
         }
 
         if (_process is not null)
@@ -195,7 +196,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
 
         Status = ServiceControllerStatus.Starting;
         var arguments = _command.PrefixArguments
-            .Concat(new[] { "--config", ConfigPath, "--parent-pid", _options.ParentProcessId.ToString(CultureInfo.InvariantCulture) })
+            .Concat(new[] { "--config", ConfigPath, "--parent-pid", _options.ParentProcessId.ToString(CultureInfo.InvariantCulture), "--language", Texts.Localizer.Current.Code })
             .ToArray();
 
         IChildProcess process;
@@ -206,7 +207,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             Status = ServiceControllerStatus.Failed;
-            return new ServiceStartResult(ServiceStartOutcome.Failed, $"Не удалось запустить сервис: {ex.Message}");
+            return new ServiceStartResult(ServiceStartOutcome.Failed, Texts.Format("Host.StartFailed", ex.Message));
         }
 
         _process = process;
@@ -222,14 +223,14 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
                 Status = ServiceControllerStatus.Failed;
                 return new ServiceStartResult(
                     ServiceStartOutcome.Failed,
-                    errors.Length > 0 ? errors : $"Сервис завершился с кодом {exitCode}.",
+                    errors.Length > 0 ? errors : Texts.Format("Host.Exited", exitCode),
                     exitCode);
             }
 
             if (await _api.IsHealthyAsync(cancellationToken).ConfigureAwait(false))
             {
                 Status = ServiceControllerStatus.Running;
-                return new ServiceStartResult(ServiceStartOutcome.Started, $"Сервис запущен приложением (PID {process.Id}).");
+                return new ServiceStartResult(ServiceStartOutcome.Started, Texts.Format("Host.Started", process.Id));
             }
 
             await Task.Delay(_options.PollInterval, cancellationToken).ConfigureAwait(false);
@@ -238,7 +239,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
         process.Kill();
         ReleaseProcess();
         Status = ServiceControllerStatus.Failed;
-        return new ServiceStartResult(ServiceStartOutcome.Failed, $"Сервис не ответил за {_options.StartTimeout.TotalSeconds:0} с.");
+        return new ServiceStartResult(ServiceStartOutcome.Failed, Texts.Format("Host.Timeout", _options.StartTimeout.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)));
     }
 
     /// <summary>

@@ -6,7 +6,6 @@ using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.ViewModels.Items;
 using RCynQ.UI.ViewModels.Setup;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Setup;
 
@@ -111,7 +110,7 @@ public sealed class SetupViewModelTests : IDisposable
         var mediatorDirect = await LocalConfigFile.SaveAsync(
             Path.Combine(_root, "mediator.json"),
             new NodeSetupValues("mediator-1", "M", NodeRole.Mediator, string.Empty, 18443, string.Empty, EndpointMode.Direct, 18444));
-        mediatorDirect.Should().Contain(error => error.Contains("Mediator"), "the configuration check refuses a Mediator without SSH");
+        mediatorDirect.Should().Contain(error => error.Contains("SshTunnel"), "the configuration check refuses a Mediator without SSH");
     }
 
     /// <summary>

@@ -1,14 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Ssh.Keys;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.AutoFix;
 
@@ -54,17 +46,17 @@ public sealed class SafeAutoFixer : IAutoFixer
         ArgumentNullException.ThrowIfNull(fix);
         if (!IsAllowed(fix.Kind))
         {
-            return new AutoFixResult(false, $"Fix '{fix.Kind}' is not allowed automatically; apply it manually after review.");
+            return new AutoFixResult(false, Texts.Format("Fix.NotAutomatic", fix.Kind));
         }
 
         if (!confirmed)
         {
-            return new AutoFixResult(false, $"Fix '{fix.Description}' requires explicit confirmation.");
+            return new AutoFixResult(false, Texts.Format("Fix.NeedsConfirmation", fix.Description));
         }
 
         if (!_handlers.TryGetValue(fix.Kind, out var handler))
         {
-            return new AutoFixResult(false, $"No handler is registered for fix '{fix.Kind}' in this process.");
+            return new AutoFixResult(false, Texts.Format("Fix.NoHandler", fix.Kind));
         }
 
         try
@@ -73,7 +65,7 @@ public sealed class SafeAutoFixer : IAutoFixer
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException or KeyNotFoundException or FormatException)
         {
-            return new AutoFixResult(false, $"Fix '{fix.Description}' failed: {ex.Message}");
+            return new AutoFixResult(false, Texts.Format("Fix.Failed", fix.Description, ex.Message));
         }
     }
 }

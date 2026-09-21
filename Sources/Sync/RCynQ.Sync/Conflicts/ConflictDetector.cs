@@ -1,14 +1,8 @@
-using System.Globalization;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
-using RCynQ.Core.Validation;
-using RCynQ.Git.Commands;
-using RCynQ.Git.Patches;
-using RCynQ.Git.Paths;
 using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Conflicts;
 
@@ -64,10 +58,10 @@ public sealed class ConflictDetector
 
             var detail = local switch
             {
-                null => "Deleted locally since the last sync.",
-                FileState.DirectoryMarker => "A directory exists locally at this path.",
-                _ when localBase is null => "Created locally since the last sync.",
-                _ => "Modified locally since the last sync."
+                null => LocalizedText.Encode("Conflict.DeletedLocally"),
+                FileState.DirectoryMarker => LocalizedText.Encode("Conflict.DirectoryLocally"),
+                _ when localBase is null => LocalizedText.Encode("Conflict.CreatedLocally"),
+                _ => LocalizedText.Encode("Conflict.ModifiedLocally")
             };
             conflicts.Add(new ConflictFile(change.Path, local == FileState.DirectoryMarker ? null : local, incoming, detail));
         }

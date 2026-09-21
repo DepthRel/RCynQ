@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Config;

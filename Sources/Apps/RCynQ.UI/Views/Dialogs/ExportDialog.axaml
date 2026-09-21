@@ -1,12 +1,13 @@
 <dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      xmlns:items="using:RCynQ.UI.ViewModels.Items"
                      xmlns:controls="using:RCynQ.UI.Controls"
                      x:Class="RCynQ.UI.Views.Dialogs.ExportDialog"
                      x:DataType="vm:ExportDialogViewModel"
-                     Title="Экспорт конфигурации"
+                     Title="{loc:Loc Export.Title}"
                      Icon="avares://RCynQ.UI/Assets/rcynq.ico"
                      Width="660" SizeToContent="Height" MaxHeight="820" CanResize="False"
                      WindowStartupLocation="CenterOwner">
@@ -27,9 +28,9 @@
     <ScrollViewer>
       <StackPanel Margin="22,22,22,8" Spacing="14">
         <StackPanel Spacing="4">
-          <TextBlock Classes="page-title" Text="Экспорт конфигурации" />
+          <TextBlock Classes="page-title" Text="{loc:Loc Export.Title}" />
           <TextBlock Classes="secondary" TextWrapping="Wrap"
-                     Text="Данные определены автоматически средствами ОС. Проверьте их: файл импортируется на соседнем узле. Закрытые ключи не экспортируются." />
+                     Text="{loc:Loc Export.Hint}" />
         </StackPanel>
 
         <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsProbing}" />
@@ -38,7 +39,7 @@
         </Border>
 
         <StackPanel>
-          <TextBlock Classes="field-label" Text="Адрес, по которому соседи подключаются к узлу" />
+          <TextBlock Classes="field-label" Text="{loc:Loc Export.Address}" />
           <Border Classes="card" IsVisible="{Binding HasAddresses}" Margin="0,0,0,8">
             <ListBox Classes="addresses" MaxHeight="190" ItemsSource="{Binding Addresses}" SelectedItem="{Binding SelectedAddress}">
               <ListBox.ItemTemplate>
@@ -57,16 +58,16 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </Border>
-          <TextBox Classes="mono" Text="{Binding Host}" Watermark="IP-адрес или имя хоста (можно ввести вручную)" />
+          <TextBox Classes="mono" Text="{Binding Host}" PlaceholderText="{loc:Loc Export.AddressWatermark}" />
         </StackPanel>
 
         <Grid ColumnDefinitions="*,12,140">
           <StackPanel>
-            <TextBlock Classes="field-label" Text="SSH-пользователь" />
-            <TextBox Classes="mono" Text="{Binding User}" Watermark="rcynq" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Field.SshUser}" />
+            <TextBox Classes="mono" Text="{Binding User}" PlaceholderText="rcynq" />
           </StackPanel>
           <StackPanel Grid.Column="2">
-            <TextBlock Classes="field-label" Text="SSH-порт" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Field.SshPort}" />
             <NumericUpDown Value="{Binding SshPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
           </StackPanel>
         </Grid>
@@ -90,27 +91,27 @@
 
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="2">
-                <CheckBox IsChecked="{Binding IncludeSshKey}" IsEnabled="{Binding HasSshKey}" Content="Включить публичный SSH-ключ узла" />
+                <CheckBox IsChecked="{Binding IncludeSshKey}" IsEnabled="{Binding HasSshKey}" Content="{loc:Loc Export.IncludeSshKey}" />
                 <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap" Text="{Binding SshKeyDescription}" />
               </StackPanel>
               <Button Grid.Column="1" Classes="outline" VerticalAlignment="Center" IsVisible="{Binding CanGenerateKey}" IsEnabled="{Binding !IsProbing}" Command="{Binding GenerateKeyCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <controls:IconView Classes="small" IconKey="Icon.Plus" />
-                  <TextBlock Text="Создать ключ" />
+                  <TextBlock Text="{loc:Loc Export.CreateKey}" />
                 </StackPanel>
               </Button>
             </Grid>
 
             <StackPanel Spacing="2" IsVisible="{Binding IsSshEndpoint}">
-              <CheckBox IsChecked="{Binding IncludeHostKey}" IsEnabled="{Binding HasHostKey}" Content="Включить отпечаток ключа хоста sshd" />
+              <CheckBox IsChecked="{Binding IncludeHostKey}" IsEnabled="{Binding HasHostKey}" Content="{loc:Loc Export.IncludeHostKey}" />
               <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap"
-                         Text="{Binding HostKeyFingerprint, FallbackValue='не определён', TargetNullValue='не определён'}" />
+                         Text="{Binding HostKeyFingerprintText}" />
             </StackPanel>
 
             <StackPanel Spacing="2" IsVisible="{Binding IsDirectEndpoint}">
-              <TextBlock Text="Отпечаток TLS-сертификата узла (попадёт в файл, сосед проверит его при подключении)" TextWrapping="Wrap" />
+              <TextBlock Text="{loc:Loc Export.TlsFingerprintLabel}" TextWrapping="Wrap" />
               <SelectableTextBlock Classes="mono muted" FontSize="11.5" TextWrapping="Wrap"
-                                   Text="{Binding TlsFingerprint, FallbackValue='не определён', TargetNullValue='не определён'}" />
+                                   Text="{Binding TlsFingerprintText}" />
             </StackPanel>
           </StackPanel>
         </Border>
@@ -135,12 +136,12 @@
       <Button Classes="outline" IsEnabled="{Binding !IsProbing}" Command="{Binding ProbeCommand}">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <controls:IconView Classes="small" IconKey="Icon.Refresh" />
-          <TextBlock Text="Проверить снова" />
+          <TextBlock Text="{loc:Loc Export.Recheck}" />
         </StackPanel>
       </Button>
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-        <Button Classes="outline" Content="Отмена" IsCancel="True" Command="{Binding CancelCommand}" />
-        <Button Classes="accent" Content="Экспортировать" IsDefault="True" IsEnabled="{Binding CanConfirm}" Command="{Binding ConfirmCommand}" />
+        <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+        <Button Classes="accent" Content="{loc:Loc Export.Confirm}" IsDefault="True" IsEnabled="{Binding CanConfirm}" Command="{Binding ConfirmCommand}" />
       </StackPanel>
     </Grid>
   </Grid>

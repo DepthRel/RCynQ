@@ -8,6 +8,7 @@ using RCynQ.Service.Hosting;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Access;
 using RCynQ.Sync.Configuration.Probing;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -132,8 +133,8 @@ public static class ConfigEndpoints
             await ConfigurationFileEditor.SetRoleAsync(runtime.ConfigFilePath, request.Role, request.RepoPath, request.WorkdirPath, cancellationToken);
             var restart = request.Role != node.Role || repo != node.RepoPath || workdir != node.WorkdirPath;
             return Results.Ok(new RoleChangeResult(true, restart, restart
-                ? $"Saved to {runtime.ConfigFilePath}. Restart RCynQ.Service to run as {request.Role}."
-                : "The configuration already matches the running service."));
+                ? Texts.Format("Api.RoleSaved", runtime.ConfigFilePath, request.Role)
+                : Texts.Get("Api.ConfigUnchanged")));
         }
         catch (Exception ex) when (ex is ArgumentException or SyncBridgeException)
         {

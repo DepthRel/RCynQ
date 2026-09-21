@@ -141,7 +141,7 @@
 | OpenSSH-клиент | Source, все Mediator, Dest | ProxyJump-цепочка |
 | OpenSSH-сервер (`sshd`) | все Mediator, Dest | jump-host, приём git/patch-соединений |
 | AmneziaWG (клиент + драйвер) | на звеньях, пересекающих цензурируемую границу | обход DPI-блокировок |
-| .NET 8 Runtime | все узлы, если публикация framework-dependent | выполнение приложения |
+| .NET 10 Runtime | все узлы, если публикация framework-dependent | выполнение приложения |
 
 **Используется внутри приложения:**
 

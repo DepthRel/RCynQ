@@ -1,7 +1,6 @@
 using FluentAssertions;
 using RCynQ.Core.Config;
 using RCynQ.Ssh.Commands;
-using Xunit;
 
 namespace RCynQ.Ssh.Tests;
 

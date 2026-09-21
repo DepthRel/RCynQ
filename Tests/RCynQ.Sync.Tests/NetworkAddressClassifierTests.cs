@@ -3,7 +3,6 @@ using FluentAssertions;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Sync.Configuration.Probing;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

@@ -1,17 +1,13 @@
-using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Baseline;
 
@@ -113,13 +109,13 @@ public sealed class BaselineService
     {
         if (!_node.ParticipatesInPatchChannel)
         {
-            throw new SyncBridgeException("A Mediator node has no sync base.");
+            throw new SyncBridgeException(Texts.Get("Baseline.MediatorHasNone"));
         }
 
         var workdir = _paths.Workdir;
         if (!Directory.Exists(workdir))
         {
-            throw new SyncBridgeException($"Working tree '{workdir}' does not exist.");
+            throw new SyncBridgeException(Texts.Format("Baseline.WorkdirMissing", workdir));
         }
 
         SnapshotInfo snapshot;
@@ -158,7 +154,7 @@ public sealed class BaselineService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new SyncBridgeException($"Creating the sync base failed: {ex.Message}", ex);
+                throw new SyncBridgeException(Texts.Format("Baseline.Failed", ex.Message), ex);
             }
             finally
             {

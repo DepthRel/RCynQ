@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
+             xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:vm="using:RCynQ.UI.ViewModels"
+             xmlns:controls="using:RCynQ.UI.Views.Controls"
+             x:Class="RCynQ.UI.Views.Pages.SettingsView"
+             x:DataType="pages:SettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="28,22,28,28" Spacing="18">
+
+      <StackPanel>
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10">
+            <controls:LanguageSelector DataContext="{Binding Language}" HorizontalAlignment="Left" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.LanguageHint}" />
+            <TextBlock Classes="danger" TextWrapping="Wrap"
+                       IsVisible="{Binding Language.HasError}" Text="{Binding Language.Error}" />
+            <TextBlock Classes="muted mono" FontSize="12" TextWrapping="Wrap"
+                       IsVisible="{Binding HasSettingsPath}" Text="{Binding StoredInText}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

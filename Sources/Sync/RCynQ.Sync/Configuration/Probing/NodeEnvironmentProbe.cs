@@ -9,6 +9,7 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Sync.Endpoint;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Configuration.Probing;
 
@@ -194,7 +195,7 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
         }
         else if (!File.Exists(privateKey + ".pub"))
         {
-            throw new SyncBridgeException($"The private key '{privateKey}' exists without '{privateKey}.pub'; restore the public key or remove the private key.");
+            throw new SyncBridgeException(Texts.Format("Probe.PublicKeyMissing", privateKey));
         }
 
         if (!configured)

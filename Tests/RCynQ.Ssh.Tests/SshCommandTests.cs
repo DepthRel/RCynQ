@@ -1,6 +1,5 @@
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
@@ -8,7 +7,6 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
-using Xunit;
 
 namespace RCynQ.Ssh.Tests;
 

@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Patches;
 

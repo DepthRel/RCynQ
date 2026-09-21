@@ -1,14 +1,8 @@
-using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Transports;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
 using RCynQ.Transports.Abstractions.Links;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.Abstractions.Factory;
 
@@ -56,7 +50,7 @@ public sealed class TransportLinkFactory : ITransportLinkFactory
         if (!_providers.TryGetValue(config.Transport, out var provider))
         {
             throw new ArgumentException(
-                $"Transport {config.Transport} is not available in this build. Available: {string.Join(", ", _providers.Keys)}.",
+                Texts.Format("Transport.NotAvailableList", config.Transport, string.Join(", ", _providers.Keys)),
                 nameof(config));
         }
 

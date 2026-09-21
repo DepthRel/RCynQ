@@ -1,9 +1,9 @@
 using System.Text.Json;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 
 namespace RCynQ.Git.Patches.Serialization;
 
@@ -81,17 +81,17 @@ public sealed class PatchEnvelopeSerializer
                 var normalized = _paths.NormalizeRelativePath(change.Path);
                 if (normalized != change.Path)
                 {
-                    throw new FormatException($"Manifest path '{change.Path}' is not canonical.");
+                    throw new FormatException(Texts.Format("Envelope.PathNotCanonical", change.Path));
                 }
 
                 if (change.Kind == ChangeKind.Renamed || !Enum.IsDefined(change.Kind))
                 {
-                    throw new FormatException($"Manifest change kind '{change.Kind}' is not supported.");
+                    throw new FormatException(Texts.Format("Envelope.KindUnsupported", change.Kind));
                 }
 
                 if (change.Kind != ChangeKind.Deleted && change.Sha256 is null)
                 {
-                    throw new FormatException($"Manifest entry '{change.Path}' requires a SHA-256 hash.");
+                    throw new FormatException(Texts.Format("Envelope.NeedsHash", change.Path));
                 }
 
                 return new FileChange(change.Kind, normalized, change.Sha256, change.SizeBytes, change.IsSymlink);
@@ -99,7 +99,7 @@ public sealed class PatchEnvelopeSerializer
 
             if (manifest.Select(change => change.Path).Distinct(StringComparer.Ordinal).Count() != manifest.Length)
             {
-                throw new FormatException("Manifest contains duplicate paths.");
+                throw new FormatException(Texts.Get("Envelope.DuplicatePaths"));
             }
 
             return new PatchEnvelope(
@@ -116,7 +116,7 @@ public sealed class PatchEnvelopeSerializer
         }
         catch (ArgumentException ex)
         {
-            throw new FormatException($"Patch envelope is invalid: {ex.Message}", ex);
+            throw new FormatException(Texts.Format("Envelope.Invalid", ex.Message), ex);
         }
     }
 
@@ -142,9 +142,9 @@ public sealed class PatchEnvelopeSerializer
         }
         catch (JsonException ex)
         {
-            throw new FormatException($"Patch envelope JSON is malformed: {ex.Message}", ex);
+            throw new FormatException(Texts.Format("Envelope.Malformed", ex.Message), ex);
         }
 
-        return FromDto(dto ?? throw new FormatException("Patch envelope JSON is empty."));
+        return FromDto(dto ?? throw new FormatException(Texts.Get("Envelope.Empty")));
     }
 }

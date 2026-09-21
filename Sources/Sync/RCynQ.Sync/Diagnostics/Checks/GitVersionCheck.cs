@@ -1,15 +1,9 @@
 using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
 using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -45,18 +39,18 @@ public sealed partial class GitVersionCheck : DiagnosticCheckBase
         var output = await TryGetVersionOutputAsync(_processes, _git, cancellationToken);
         if (output is null)
         {
-            return Fail("Git is not available, so its version cannot be checked.", "Install Git 2.30 or newer.");
+            return Fail(Texts.Get("Diag.GitVersion.NotAvailable"), Texts.Get("Diag.GitVersion.Install"));
         }
 
         var version = ParseVersion(output);
         if (version is null)
         {
-            return Fail($"Unrecognized git version output '{output}'.");
+            return Fail(Texts.Format("Diag.GitVersion.Unrecognized", output));
         }
 
         return version >= MinimumVersion
-            ? Pass($"Git {version}.")
-            : Fail($"Git {version} is older than {MinimumVersion}.", "Upgrade Git to 2.30 or newer (required for reliable apply --3way and no-index diffs).");
+            ? Pass(Texts.Format("Diag.GitVersion.Ok", version))
+            : Fail(Texts.Format("Diag.GitVersion.Old", version, MinimumVersion), Texts.Get("Diag.GitVersion.Upgrade"));
     }
 
     /// <summary>

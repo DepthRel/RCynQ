@@ -5,6 +5,7 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
 using RCynQ.Sync.GitChannel;
+using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -24,7 +25,7 @@ public static class GitEndpoints
         {
             if (!RoleCapabilities.For(node.Role).ShowsBranchesTab)
             {
-                return Results.NotFound(new ErrorResponse($"A {node.Role} node has no working tree."));
+                return Results.NotFound(new ErrorResponse(Texts.Format("Node.NoWorkingTree", node.Role)));
             }
 
             try
@@ -40,12 +41,12 @@ public static class GitEndpoints
         app.MapPost(ApiRoutes.GitFetch, async (NodeConfig node, GitChannelService git, CancellationToken ct) =>
             RoleCapabilities.For(node.Role).FetchesGit
                 ? Results.Ok(await git.FetchAsync(ct))
-                : Results.NotFound(new ErrorResponse($"A {node.Role} node does not fetch from Dest.")));
+                : Results.NotFound(new ErrorResponse(Texts.Format("Api.NoFetch", node.Role))));
 
         app.MapPost(ApiRoutes.GitPull, async (NodeConfig node, GitChannelService git, CancellationToken ct) =>
             RoleCapabilities.For(node.Role).FetchesGit
                 ? Results.Ok(await git.PullAsync(ct))
-                : Results.NotFound(new ErrorResponse($"A {node.Role} node does not pull from Dest.")));
+                : Results.NotFound(new ErrorResponse(Texts.Format("Api.NoPull", node.Role))));
         return app;
     }
 }

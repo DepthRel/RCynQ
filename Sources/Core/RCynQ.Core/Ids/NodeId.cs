@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Ids;
 
@@ -39,12 +39,12 @@ public readonly record struct NodeId
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
         {
-            throw new ArgumentException("Node identifier must not be blank.", nameof(value));
+            throw new ArgumentException(Texts.Get("NodeId.Blank"), nameof(value));
         }
 
         if (trimmed.Length > MaxLength)
         {
-            throw new ArgumentException($"Node identifier must not exceed {MaxLength} characters.", nameof(value));
+            throw new ArgumentException(Texts.Format("NodeId.TooLong", MaxLength), nameof(value));
         }
 
         foreach (var c in trimmed)
@@ -52,7 +52,7 @@ public readonly record struct NodeId
             if (!(char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
             {
                 throw new ArgumentException(
-                    "Node identifier may contain only ASCII letters, digits, '-', '_' and '.'.",
+                    Texts.Get("NodeId.Forbidden"),
                     nameof(value));
             }
         }

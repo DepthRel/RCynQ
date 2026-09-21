@@ -1,13 +1,7 @@
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
-using RCynQ.Core.Config;
-using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.AmneziaWG.Cli;
 
@@ -46,7 +40,7 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
             : await RunAsync(_options.QuickExecutable, cancellationToken, "up", path);
         if (result.ExitCode != 0 && !result.StandardError.Contains("already exists", StringComparison.OrdinalIgnoreCase))
         {
-            throw new SyncBridgeException($"Starting AmneziaWG interface '{name}' failed: {result.StandardError.Trim()}");
+            throw new SyncBridgeException(Texts.Format("Awg.StartFailed", name, result.StandardError.Trim()));
         }
 
         return await GetStatusAsync(path, cancellationToken);
@@ -63,7 +57,7 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
             || result.StandardError.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
         if (result.ExitCode != 0 && !notRunning)
         {
-            throw new SyncBridgeException($"Stopping AmneziaWG interface '{name}' failed: {result.StandardError.Trim()}");
+            throw new SyncBridgeException(Texts.Format("Awg.StopFailed", name, result.StandardError.Trim()));
         }
     }
 
@@ -76,11 +70,11 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
         {
             var result = await RunAsync(_options.ShowExecutable, cancellationToken, "show", name);
             var running = result.ExitCode == 0 && result.StandardOutput.Contains("interface:", StringComparison.OrdinalIgnoreCase);
-            return new AmneziaWgStatus(running, name, localIp, running ? null : NonEmpty(result.StandardError, $"Interface '{name}' is not up."));
+            return new AmneziaWgStatus(running, name, localIp, running ? null : NonEmpty(result.StandardError, Texts.Format("Awg.NotUp", name)));
         }
         catch (SyncBridgeException ex)
         {
-            return new AmneziaWgStatus(false, name, localIp, $"AmneziaWG tools are not available: {ex.Message}");
+            return new AmneziaWgStatus(false, name, localIp, Texts.Format("Awg.ToolsMissing", ex.Message));
         }
     }
 

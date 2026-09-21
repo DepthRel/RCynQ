@@ -6,18 +6,20 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Hosting;
 using RCynQ.UI.ViewModels.Dialogs;
+using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
 using RCynQ.UI.ViewModels.Setup;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Роль и узлы" tab: role, working path, chain nodes, export and import.
+/// The role and nodes tab: role, working path, chain nodes, export and import.
 /// </summary>
 public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 {
@@ -112,7 +114,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     public bool HasNoNodes => Nodes.Count == 0;
 
     /// <summary>Gets the label of the path field.</summary>
-    public string PathLabel => SelectedRole == NodeRole.Dest ? "Путь к репозиторию" : "Рабочая копия";
+    public string PathLabel => DisplayText.PathLabel(SelectedRole);
 
     /// <summary>Gets a value indicating whether the path field applies.</summary>
     public bool IsPathVisible => SelectedRole != NodeRole.Mediator;
@@ -139,7 +141,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     public char TokenMaskChar => IsTokenRevealed ? '\0' : '•';
 
     /// <summary>Gets the caption of the reveal button.</summary>
-    public string RevealTokenText => IsTokenRevealed ? "Скрыть" : "Показать";
+    public string RevealTokenText => Texts.Get(IsTokenRevealed ? "Common.Hide" : "Common.Show");
 
     /// <summary>Gets the path of the configuration file, shown under the settings.</summary>
     public string ConfigPath => _settings?.ConfigPath ?? string.Empty;
@@ -164,6 +166,16 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
             ApplyLinkState(state);
         }
     });
+
+    /// <inheritdoc />
+    public override void RefreshTexts()
+    {
+        base.RefreshTexts();
+        foreach (var node in Nodes)
+        {
+            node.RefreshTexts();
+        }
+    }
 
     /// <summary>
     /// Applies a link state pushed by the service.
@@ -224,8 +236,8 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task CopyTokenAsync()
         => InfoMessage = await _dialogs.CopyToClipboardAsync(LinkToken)
-            ? "Общий ключ скопирован. Вставьте его на противоположном узле (SOURCE или DEST) — он должен совпадать."
-            : "Не удалось скопировать ключ. Нажмите «Показать» и скопируйте его вручную.";
+            ? Texts.Get("Roles.TokenCopied")
+            : Texts.Get("Roles.TokenCopyFailed");
 
     /// <summary>
     /// Replaces the shared token with a new one after confirmation.
@@ -235,13 +247,13 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     private async Task NewTokenAsync()
     {
         var confirmed = await _dialogs.ConfirmAsync(
-            "Создать новый общий ключ",
-            "Старый ключ перестанет действовать. Пока новый ключ не прописан на противоположном узле, обмен изменениями работать не будет. Продолжить?");
+            Texts.Get("Roles.NewTokenTitle"),
+            Texts.Get("Roles.NewTokenConfirm"));
         if (confirmed)
         {
             LinkToken = SetupViewModel.CreateToken();
             IsTokenRevealed = true;
-            InfoMessage = "Новый ключ создан. Сохраните настройки и перенесите ключ на противоположный узел.";
+            InfoMessage = Texts.Get("Roles.NewTokenCreated");
         }
     }
 
@@ -254,7 +266,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     {
         if (_settings?.Read() is not { } options)
         {
-            ErrorMessage = "Файл конфигурации недоступен.";
+            ErrorMessage = Texts.Get("Roles.ConfigUnavailable");
             return;
         }
 
@@ -278,7 +290,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
             }
 
             AreSettingsDirty = false;
-            InfoMessage = "Настройки сохранены, сервис перезапускается…";
+            InfoMessage = Texts.Get("Roles.SettingsSaved");
             RestartRequested?.Invoke(this, EventArgs.Empty);
         });
     }
@@ -332,7 +344,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         IsDirty = false;
         if (result.RestartRequired)
         {
-            InfoMessage = "Роль сохранена, сервис перезапускается…";
+            InfoMessage = Texts.Get("Roles.RoleSavedRestarting");
             RestartRequested?.Invoke(this, EventArgs.Empty);
         }
         else
@@ -355,7 +367,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
             return;
         }
 
-        var file = await _dialogs.PickSaveFileAsync("Экспорт конфигурации", $"{_loaded?.NodeId.Value ?? "node"}.rcynq.json");
+        var file = await _dialogs.PickSaveFileAsync(Texts.Get("Export.Title"), $"{_loaded?.NodeId.Value ?? "node"}.rcynq.json");
         if (file is null)
         {
             return;
@@ -370,7 +382,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
                 dialog.ExportedSshPublicKey,
                 dialog.ExportedHostKeyFingerprint);
             await File.WriteAllTextAsync(file, JsonSerializer.Serialize(exported, Json));
-            InfoMessage = $"Конфигурация сохранена в {file}. Закрытые ключи не экспортируются.";
+            InfoMessage = Texts.Format("Roles.Exported", file);
         });
     }
 
@@ -381,7 +393,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ImportAsync()
     {
-        var file = await _dialogs.PickOpenFileAsync("Импорт конфигурации узла");
+        var file = await _dialogs.PickOpenFileAsync(Texts.Get("Roles.ImportTitle"));
         if (file is null)
         {
             return;
@@ -391,12 +403,12 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         if (await RunSafeAsync(async () =>
         {
             var configuration = JsonSerializer.Deserialize<ExportedNodeConfiguration>(await File.ReadAllTextAsync(file), Json)
-                ?? throw new FormatException("Файл конфигурации пуст.");
+                ?? throw new FormatException(Texts.Get("Roles.ImportEmpty"));
             importedPeer = (await _api.ImportConfigAsync(configuration)).PeerId.Value;
         }))
         {
             await RefreshNodesAsync();
-            await AllowAccessCoreAsync($"Узел {importedPeer} импортирован.");
+            await AllowAccessCoreAsync(Texts.Format("Roles.Imported", importedPeer));
         }
     }
 
@@ -409,8 +421,8 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     {
         ArgumentNullException.ThrowIfNull(result);
         var text = result.EntryCount == 0
-            ? "Пока ни одному соседнему узлу не нужно подключаться к этому компьютеру."
-            : result.Applied ? $"Подключения соседних узлов разрешены ({result.EntryCount})." : string.Empty;
+            ? Texts.Get("Roles.Access.None")
+            : result.Applied ? Texts.Format("Roles.Access.Allowed", result.EntryCount) : string.Empty;
         return (text + AccessNotes(result)).Trim();
     }
 
@@ -424,12 +436,12 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         var notes = new StringBuilder();
         if (result.PeersWithoutKey.Count > 0)
         {
-            notes.Append($" В файле узла {string.Join(", ", result.PeersWithoutKey)} нет SSH-ключа: попросите экспортировать конфигурацию заново с включённым ключом и импортируйте её ещё раз.");
+            notes.Append(Texts.Format("Roles.Access.NoKey", string.Join(", ", result.PeersWithoutKey)));
         }
 
         if (result.PeersWaitingForCounterpart.Count > 0)
         {
-            notes.Append($" Для узла {string.Join(", ", result.PeersWaitingForCounterpart)} импортируйте также файл второго конечного узла (SOURCE или DEST).");
+            notes.Append(Texts.Format("Roles.Access.NeedCounterpart", string.Join(", ", result.PeersWaitingForCounterpart)));
         }
 
         return notes.ToString();
@@ -464,17 +476,16 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 
         if (_elevation is not { IsAvailable: true })
         {
-            InfoMessage = lead + $"Чтобы соседние узлы могли подключаться, выполните «rcynq ssh allow» в терминале от имени администратора ({result.FilePath}).";
+            InfoMessage = lead + Texts.Format("Roles.Access.RunManually", result.FilePath);
             return;
         }
 
         var confirmed = await _dialogs.ConfirmAsync(
-            "Разрешить подключения узлов",
-            $"RCynQ добавит ключи соседних узлов ({result.EntryCount}) в настройки SSH-сервера этого компьютера:{Environment.NewLine}{result.FilePath}{Environment.NewLine}{Environment.NewLine}"
-            + "Каждому ключу разрешено только передавать соединения RCynQ; войти в систему по нему нельзя. Windows попросит подтвердить действие от имени администратора.");
+            Texts.Get("Roles.AllowAccess"),
+            Texts.Format("Roles.Access.Confirm", result.EntryCount, result.FilePath));
         if (!confirmed)
         {
-            InfoMessage = lead + "Подключения соседних узлов не разрешены. Это можно сделать позже кнопкой «Разрешить подключения узлов».";
+            InfoMessage = lead + Texts.Get("Roles.Access.Declined");
             return;
         }
 
@@ -520,7 +531,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task RemoveNodeAsync(ChainNodeItemViewModel? node)
     {
-        if (node is null || !await _dialogs.ConfirmAsync("Удалить узел", $"Удалить звено к узлу {node.Name}? Импортированные ключи узла сохранятся."))
+        if (node is null || !await _dialogs.ConfirmAsync(Texts.Get("Roles.RemoveNode"), Texts.Format("Roles.RemoveNodeConfirm", node.Name)))
         {
             return;
         }

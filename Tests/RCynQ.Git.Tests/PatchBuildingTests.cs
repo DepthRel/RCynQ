@@ -2,7 +2,6 @@ using System.IO.Compression;
 using System.Text;
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
@@ -17,7 +16,6 @@ using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Tests.Support;
-using Xunit;
 
 namespace RCynQ.Git.Tests;
 

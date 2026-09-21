@@ -5,7 +5,6 @@ using RCynQ.Core.Patches;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Items;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Dialogs;
 

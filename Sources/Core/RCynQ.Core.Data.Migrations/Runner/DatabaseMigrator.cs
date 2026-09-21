@@ -1,5 +1,4 @@
 using FluentMigrator.Runner;
-using FluentMigrator.Runner.Initialization;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace RCynQ.Core.Data.Migrations.Runner;

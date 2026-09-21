@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.ViewModels.Items;
@@ -8,7 +9,7 @@ using RCynQ.UI.ViewModels.Items;
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Логи" tab: service log entries filtered by level, with export.
+/// The logs tab: service log entries filtered by level, with export.
 /// </summary>
 public sealed partial class LogsViewModel : PageViewModelBase
 {
@@ -74,7 +75,7 @@ public sealed partial class LogsViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ExportAsync()
     {
-        var file = await _dialogs.PickSaveFileAsync("Экспорт логов", $"rcynq-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        var file = await _dialogs.PickSaveFileAsync(Texts.Get("Logs.ExportTitle"), $"rcynq-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         if (file is null)
         {
             return;
@@ -83,7 +84,7 @@ public sealed partial class LogsViewModel : PageViewModelBase
         await RunSafeAsync(async () =>
         {
             await File.WriteAllLinesAsync(file, Entries.Reverse().Select(entry => entry.ToExportLine()));
-            InfoMessage = $"Логи сохранены в {file}.";
+            InfoMessage = Texts.Format("Logs.Saved", file);
         });
     }
 }

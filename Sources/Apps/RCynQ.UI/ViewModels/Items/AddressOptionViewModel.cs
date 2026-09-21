@@ -1,4 +1,5 @@
 using RCynQ.Core.Api;
+using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Formatting;
 
 namespace RCynQ.UI.ViewModels.Items;
@@ -37,11 +38,5 @@ public sealed class AddressOptionViewModel
     public bool SshReachable => Info.SshReachable;
 
     /// <summary>Gets the SSH status label.</summary>
-    public string StatusText => (_checkedOnOwnPort, Info.SshReachable) switch
-    {
-        (true, true) => "порт RCynQ отвечает",
-        (true, false) => "порт RCynQ не отвечает",
-        (false, true) => "SSH отвечает",
-        _ => "SSH не отвечает"
-    };
+    public string StatusText => Texts.Get($"Address.Status.{_checkedOnOwnPort}.{Info.SshReachable}");
 }

@@ -1,6 +1,7 @@
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Config;
 
@@ -70,12 +71,12 @@ public sealed record PeerDescriptor
         {
             if (TlsFingerprint is null)
             {
-                throw new ArgumentException("A peer that accepts connections on its own port must publish its TLS certificate fingerprint.", nameof(tlsFingerprint));
+                throw new ArgumentException(Texts.Get("Peer.NeedsFingerprint"), nameof(tlsFingerprint));
             }
 
             if (EndpointPort == 0)
             {
-                throw new ArgumentException("A peer that accepts connections on its own port must publish that port.", nameof(endpointPort));
+                throw new ArgumentException(Texts.Get("Peer.NeedsPort"), nameof(endpointPort));
             }
         }
         if (id.IsEmpty)
@@ -185,7 +186,7 @@ public sealed record PeerDescriptor
         var buffer = new byte[trimmed.Length];
         if (!Convert.TryFromBase64String(trimmed, buffer, out _))
         {
-            throw new ArgumentException("Signing public key must be Base64 encoded.", parameterName);
+            throw new ArgumentException(Texts.Get("Peer.KeyBase64"), parameterName);
         }
 
         return trimmed;

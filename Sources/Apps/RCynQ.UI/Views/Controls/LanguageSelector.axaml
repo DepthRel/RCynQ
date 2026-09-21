@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
+             xmlns:vm="using:RCynQ.UI.ViewModels"
+             x:Class="RCynQ.UI.Views.Controls.LanguageSelector"
+             x:DataType="vm:LanguageViewModel">
+  <!-- The languages the application has texts for: the flag and the name of the language in that language. -->
+  <ComboBox ItemsSource="{Binding Options}"
+            SelectedItem="{Binding Selected}"
+            MinWidth="180"
+            AutomationProperties.Name="{loc:Loc Language.Selector}">
+    <ComboBox.ItemTemplate>
+      <DataTemplate x:DataType="vm:LanguageOption">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <Border CornerRadius="2" ClipToBounds="True" Width="24" Height="16" VerticalAlignment="Center"
+                  IsVisible="{Binding Flag, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <Image Source="{Binding Flag}" Stretch="UniformToFill" />
+          </Border>
+          <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+        </StackPanel>
+      </DataTemplate>
+    </ComboBox.ItemTemplate>
+  </ComboBox>
+</UserControl>

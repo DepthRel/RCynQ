@@ -1,6 +1,3 @@
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Exceptions;
-
 namespace RCynQ.Git.Commands;
 
 /// <summary>

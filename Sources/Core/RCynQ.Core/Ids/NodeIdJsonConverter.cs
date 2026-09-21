@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Ids;
 
@@ -20,13 +21,13 @@ public sealed class NodeIdJsonConverter : JsonConverter<NodeId>
     {
         if (reader.TokenType != JsonTokenType.String)
         {
-            throw new JsonException("Node identifier must be a JSON string.");
+            throw new JsonException(Texts.Get("NodeId.NotString"));
         }
 
         var text = reader.GetString();
         if (!NodeId.TryParse(text, out var nodeId))
         {
-            throw new JsonException($"Value '{text}' is not a valid node identifier.");
+            throw new JsonException(Texts.Format("NodeId.NotValid", text));
         }
 
         return nodeId;

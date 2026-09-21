@@ -7,7 +7,7 @@ using RCynQ.UI.ViewModels.Items;
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The "Туннель" tab: chain links, their transports and state, start and stop.
+/// The tunnel tab: chain links, their transports and state, start and stop.
 /// </summary>
 public sealed partial class TunnelViewModel : PageViewModelBase
 {
@@ -45,6 +45,16 @@ public sealed partial class TunnelViewModel : PageViewModelBase
             ApplyLinkState(state);
         }
     });
+
+    /// <inheritdoc />
+    public override void RefreshTexts()
+    {
+        base.RefreshTexts();
+        foreach (var link in Links)
+        {
+            link.RefreshTexts();
+        }
+    }
 
     /// <summary>
     /// Applies a link state pushed by the service.

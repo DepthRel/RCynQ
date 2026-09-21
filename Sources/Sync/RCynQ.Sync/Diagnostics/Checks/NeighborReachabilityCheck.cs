@@ -1,15 +1,7 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -36,7 +28,7 @@ public sealed class NeighborReachabilityCheck : DiagnosticCheckBase
     {
         if (context.Chain.Count == 0)
         {
-            return Fail("No chain links are configured.", "Add links with 'link add' or in syncbridge.json.");
+            return Fail("No chain links are configured.", Texts.Get("Diag.Neighbours.AddLinks"));
         }
 
         var neighbours = context.Node.Role == NodeRole.Mediator ? context.Chain : context.Chain.Take(1).ToArray();
@@ -50,7 +42,7 @@ public sealed class NeighborReachabilityCheck : DiagnosticCheckBase
         }
 
         return unreachable.Count == 0
-            ? Pass($"Reachable: {string.Join(", ", neighbours.Select(link => link.Name))}.")
-            : Fail($"Unreachable: {string.Join(", ", unreachable)}.", "Start the transport of the link or check the network and the neighbour's sshd.");
+            ? Pass(Texts.Format("Diag.Neighbours.Ok", string.Join(", ", neighbours.Select(link => link.Name))))
+            : Fail(Texts.Format("Diag.Neighbours.Unreachable", string.Join(", ", unreachable)), Texts.Get("Diag.Neighbours.Fix"));
     }
 }

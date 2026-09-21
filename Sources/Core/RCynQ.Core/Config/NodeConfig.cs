@@ -1,6 +1,7 @@
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 
 namespace RCynQ.Core.Config;
 
@@ -42,11 +43,11 @@ public sealed record NodeConfig
         switch (Role)
         {
             case NodeRole.Source when WorkdirPath is null:
-                throw new ArgumentException("Source node requires a working directory path.", nameof(workdirPath));
+                throw new ArgumentException(Texts.Get("Node.SourceNeedsWorkdir"), nameof(workdirPath));
             case NodeRole.Dest when RepoPath is null:
-                throw new ArgumentException("Dest node requires a repository path.", nameof(repoPath));
+                throw new ArgumentException(Texts.Get("Node.DestNeedsRepo"), nameof(repoPath));
             case NodeRole.Mediator when RepoPath is not null || WorkdirPath is not null:
-                throw new ArgumentException("Mediator node must not have repository or working directory paths.", nameof(role));
+                throw new ArgumentException(Texts.Get("Node.MediatorNoPaths"), nameof(role));
         }
     }
 

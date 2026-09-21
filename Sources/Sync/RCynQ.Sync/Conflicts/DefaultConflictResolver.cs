@@ -1,17 +1,10 @@
-using System.Globalization;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
-using RCynQ.Git.Commands;
-using RCynQ.Git.Patches;
-using RCynQ.Git.Paths;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
 using RCynQ.Sync.Paths;
-using RCynQ.Sync.State;
 
 namespace RCynQ.Sync.Conflicts;
 

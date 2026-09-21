@@ -24,5 +24,8 @@ public enum TabKey
     Branches = 6,
 
     /// <summary>Service logs.</summary>
-    Logs = 7
+    Logs = 7,
+
+    /// <summary>Settings of the interface, such as its language.</summary>
+    Settings = 8
 }

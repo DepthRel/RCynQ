@@ -4,7 +4,6 @@ using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Connection;
 using RCynQ.UI.Services.Hosting;
 using RCynQ.UI.Tests.Support;
-using Xunit;
 
 namespace RCynQ.UI.Tests.Hosting;
 
@@ -73,7 +72,7 @@ public sealed class ServiceProcessControllerTests : IDisposable
         controller.Status.Should().Be(ServiceControllerStatus.Running);
         var start = _launcher.Starts.Should().ContainSingle().Subject;
         start.FileName.Should().Be("dotnet");
-        start.Arguments.Should().Equal("RCynQ.Service.dll", "--config", _configPath, "--parent-pid", "777");
+        start.Arguments.Should().Equal("RCynQ.Service.dll", "--config", _configPath, "--parent-pid", "777", "--language", "ru");
         start.WorkingDirectory.Should().Be(_root);
     }
 

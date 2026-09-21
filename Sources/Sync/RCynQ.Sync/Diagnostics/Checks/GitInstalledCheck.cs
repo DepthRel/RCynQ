@@ -1,15 +1,7 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
 using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -41,7 +33,7 @@ public sealed class GitInstalledCheck : DiagnosticCheckBase
     {
         var output = await GitVersionCheck.TryGetVersionOutputAsync(_processes, _git, cancellationToken);
         return output is null
-            ? Fail($"'{_git.GitExecutable}' could not be executed.", "Install Git 2.30 or newer and make sure it is on PATH (or set SyncBridge:Ssh:GitExecutable).")
+            ? Fail(Texts.Format("Diag.Git.NotRunnable", _git.GitExecutable), Texts.Get("Diag.Git.InstallFix"))
             : Pass(output);
     }
 }

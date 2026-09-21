@@ -1,15 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Ssh.Keys;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Management;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.AutoFix;
 
@@ -38,10 +29,10 @@ public sealed class StartTransportFixHandler : IAutoFixHandler
     {
         if (!fix.Parameters.TryGetValue("linkId", out var text) || !Guid.TryParse(text, out var linkId))
         {
-            throw new ArgumentException("The fix has no valid 'linkId' parameter.");
+            throw new ArgumentException(Texts.Get("Fix.NoLinkId"));
         }
 
         var state = await _links.StartAsync(linkId, cancellationToken);
-        return new AutoFixResult(state.IsUsable, $"Link '{state.LinkName}' is {state.Status}: {state.Message}");
+        return new AutoFixResult(state.IsUsable, Texts.Format("Fix.LinkState", state.LinkName, state.Status, state.Message));
     }
 }

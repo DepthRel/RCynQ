@@ -1,15 +1,6 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
-using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -38,6 +29,6 @@ public sealed class SshdListeningCheck : DiagnosticCheckBase
         var port = context.Options.Ssh.LocalSshdPort;
         return await _probe.CanConnectAsync("127.0.0.1", port, TimeSpan.FromSeconds(3), cancellationToken)
             ? Pass($"sshd accepts connections on port {port}.")
-            : Fail($"Nothing listens on 127.0.0.1:{port}.", "Install and start the OpenSSH server (sshd). RCynQ does not change system services automatically.");
+            : Fail(Texts.Format("Diag.Sshd.Down", port), Texts.Get("Diag.Sshd.Fix"));
     }
 }

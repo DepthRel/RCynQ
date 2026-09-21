@@ -1,33 +1,40 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:setup="using:RCynQ.UI.ViewModels.Setup"
              xmlns:controls="using:RCynQ.UI.Controls"
+             xmlns:selector="using:RCynQ.UI.Views.Controls"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
              x:Class="RCynQ.UI.Views.Setup.SetupView"
              x:DataType="setup:SetupViewModel">
   <ScrollViewer>
     <Border Classes="card" Margin="28" Padding="28,24" MaxWidth="640" HorizontalAlignment="Center" VerticalAlignment="Center">
       <StackPanel Spacing="16">
-        <StackPanel Orientation="Horizontal" Spacing="12">
+        <Grid ColumnDefinitions="Auto,*,Auto">
           <Image Source="avares://RCynQ.UI/Assets/rcynq-256.png" Width="40" Height="40" />
-          <StackPanel VerticalAlignment="Center">
-            <TextBlock Classes="page-title" Text="Настройка узла RCynQ" />
-            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding ConfigPath, StringFormat='Конфигурация: {0}'}" />
+          <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+            <TextBlock Classes="page-title" Text="{loc:Loc Setup.Title}" />
+            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Key=Setup.ConfigFile, Arg={Binding ConfigPath}}" />
           </StackPanel>
-        </StackPanel>
+          <!-- The first screen of a new installation: the language chosen from the operating system can be changed here. -->
+          <Panel Grid.Column="2" IsVisible="{Binding HasLanguage}" VerticalAlignment="Top">
+            <selector:LanguageSelector DataContext="{Binding Language}" />
+          </Panel>
+        </Grid>
 
         <Grid ColumnDefinitions="*,14,*">
           <StackPanel>
-            <TextBlock Classes="field-label" Text="Идентификатор узла" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />
             <TextBox Classes="mono" Text="{Binding NodeId}" />
           </StackPanel>
           <StackPanel Grid.Column="2">
-            <TextBlock Classes="field-label" Text="Отображаемое имя" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Setup.DisplayName}" />
             <TextBox Text="{Binding Name}" />
           </StackPanel>
         </Grid>
 
         <StackPanel>
-          <TextBlock Classes="field-label" Text="Роль узла" />
+          <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeRole}" />
           <ComboBox ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
           <TextBlock Classes="muted" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding RoleHint}" />
         </StackPanel>
@@ -35,21 +42,21 @@
         <StackPanel IsVisible="{Binding IsPathVisible}">
           <TextBlock Classes="field-label" Text="{Binding PathLabel}" />
           <Grid ColumnDefinitions="*,Auto">
-            <TextBox Classes="mono" Text="{Binding Path}" Watermark="/home/dev/projects/app" />
-            <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="Обзор..." Command="{Binding BrowseCommand}" />
+            <TextBox Classes="mono" Text="{Binding Path}" PlaceholderText="/home/dev/projects/app" />
+            <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" Content="{loc:Loc Common.Browse}" Command="{Binding BrowseCommand}" />
           </Grid>
         </StackPanel>
 
         <Grid ColumnDefinitions="140,14,*">
           <StackPanel>
-            <TextBlock Classes="field-label" Text="Порт сервиса" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Setup.ServicePort}" />
             <NumericUpDown Value="{Binding ListenPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
           </StackPanel>
           <StackPanel Grid.Column="2" IsVisible="{Binding IsTokenVisible}">
-            <TextBlock Classes="field-label" Text="Общий link-токен (одинаковый на Source и Dest)" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Setup.LinkToken}" />
             <Grid ColumnDefinitions="*,Auto">
               <TextBox Classes="mono" Text="{Binding LinkToken}" />
-              <Button Grid.Column="1" Classes="icon" Margin="6,0,0,0" ToolTip.Tip="Сгенерировать новый" Command="{Binding GenerateTokenCommand}">
+              <Button Grid.Column="1" Classes="icon" Margin="6,0,0,0" ToolTip.Tip="{loc:Loc Setup.GenerateToken}" Command="{Binding GenerateTokenCommand}">
                 <controls:IconView Classes="small" IconKey="Icon.Refresh" />
               </Button>
             </Grid>
@@ -58,17 +65,23 @@
 
         <Grid ColumnDefinitions="*,14,140" IsVisible="{Binding IsEndpointModeVisible}">
           <StackPanel>
-            <TextBlock Classes="field-label" Text="Как соседи подключаются к этому узлу" />
-            <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Endpoint.Title}" />
+            <ComboBox ItemsSource="{Binding EndpointModes}" SelectedItem="{Binding SelectedEndpointMode}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="items:EndpointModeOption">
+                  <TextBlock Text="{Binding Title}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
           </StackPanel>
           <StackPanel Grid.Column="2" IsVisible="{Binding IsEndpointPortVisible}">
-            <TextBlock Classes="field-label" Text="Порт подключений" />
+            <TextBlock Classes="field-label" Text="{loc:Loc Setup.EndpointPort}" />
             <NumericUpDown Value="{Binding EndpointPort}" Minimum="1" Maximum="65535" Increment="1" FormatString="0" />
           </StackPanel>
         </Grid>
         <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding EndpointHint}" IsVisible="{Binding IsEndpointModeVisible}" />
         <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !IsEndpointModeVisible}"
-                   Text="Посредник всегда работает через SSH-сервер этого компьютера: через него проходят соединения соседей. Включите SSH-сервер (шаг 0.2 инструкции)." />
+                   Text="{loc:Loc Setup.MediatorHint}" />
 
         <Border Classes="banner error" IsVisible="{Binding HasError}">
           <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />
@@ -77,7 +90,7 @@
         <Button Classes="accent" HorizontalAlignment="Right" IsDefault="True" IsEnabled="{Binding !IsBusy}" Command="{Binding SaveCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Play" />
-            <TextBlock Text="Сохранить и запустить" />
+            <TextBlock Text="{loc:Loc Setup.SaveAndStart}" />
           </StackPanel>
         </Button>
       </StackPanel>

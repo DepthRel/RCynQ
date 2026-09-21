@@ -1,4 +1,3 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Security;
@@ -8,7 +7,6 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
-using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Baseline;
@@ -18,6 +16,7 @@ using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Services;
 
@@ -150,7 +149,7 @@ public sealed class PatchService : IPatchService
 
         if (!_paths.BaselineInitialized)
         {
-            throw new SyncBridgeException("The sync base is not initialized. Run 'patch baseline' on both nodes while their working trees are identical.");
+            throw new SyncBridgeException(Texts.Get("Patch.NoBaseline"));
         }
 
         PatchEnvelope envelope;
@@ -161,7 +160,7 @@ public sealed class PatchService : IPatchService
 
         if (envelope.Manifest.Count == 0)
         {
-            return new SendPatchResult(false, null, null, "No changes to send.");
+            return new SendPatchResult(false, null, null, Texts.Get("Patch.NothingToSend"));
         }
 
         envelope = envelope.WithSignature(await _signatures.SignAsync(PayloadCanonicalizer.Build(envelope), cancellationToken));
@@ -187,7 +186,7 @@ public sealed class PatchService : IPatchService
             }
         }
 
-        await _outcomes.RecordAsync(metadata, result, $"Sent {envelope.Manifest.Count} file(s) to {route.Endpoint.Peer.Id}.", cancellationToken);
+        await _outcomes.RecordAsync(metadata, result, LocalizedText.Encode("Patch.Sent", envelope.Manifest.Count, route.Endpoint.Peer.Id), cancellationToken);
         await _tracker.MarkSentAsync(cancellationToken);
         return new SendPatchResult(true, envelope.Id, result, Describe(result, envelope.Manifest.Count));
     }
@@ -206,10 +205,10 @@ public sealed class PatchService : IPatchService
         }
 
         var metadata = await _patches.GetAsync(patchId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Patch {patchId} was not found.");
+            ?? throw new KeyNotFoundException(Texts.Format("Patch.NotFound", patchId));
         if (metadata.Direction != PatchDirection.Incoming || metadata.Status is not (PatchStatus.ConflictPending or PatchStatus.Failed))
         {
-            throw new InvalidOperationException($"Patch {patchId} is an {metadata.Direction} patch in state {metadata.Status}; only incoming patches that are ConflictPending or Failed can be resolved.");
+            throw new InvalidOperationException(Texts.Format("Patch.NotResolvable", patchId, metadata.Direction, metadata.Status));
         }
 
         var envelope = new PatchEnvelope(
@@ -233,7 +232,7 @@ public sealed class PatchService : IPatchService
             }
         }
 
-        await _outcomes.RecordAsync(metadata, result, $"Resolved with {policy}.", cancellationToken);
+        await _outcomes.RecordAsync(metadata, result, LocalizedText.Encode("Patch.ResolvedWith", policy), cancellationToken);
         await _tracker.RefreshAsync(cancellationToken);
         return result;
     }
@@ -273,7 +272,7 @@ public sealed class PatchService : IPatchService
     {
         if (!_node.ParticipatesInPatchChannel)
         {
-            throw new SyncBridgeException($"A {_node.Role} node does not take part in the patch channel.");
+            throw new SyncBridgeException(Texts.Format("Patch.NoChannel", _node.Role));
         }
     }
 
@@ -285,9 +284,9 @@ public sealed class PatchService : IPatchService
     /// <returns>The message.</returns>
     private static string Describe(PatchApplyResult result, int fileCount) => result.Status switch
     {
-        PatchStatus.Applied => $"Patch with {fileCount} file(s) applied on the peer.",
-        PatchStatus.ConflictPending => $"Patch delivered; {result.Conflicts.Count} file(s) conflict on the peer and wait for a decision there.",
-        PatchStatus.Pending => result.Error ?? "Patch delivered; status unknown.",
-        _ => $"Patch was not applied: {result.Error}"
+        PatchStatus.Applied => Texts.Format("Patch.AppliedOnPeer", fileCount),
+        PatchStatus.ConflictPending => Texts.Format("Patch.ConflictOnPeer", result.Conflicts.Count),
+        PatchStatus.Pending => result.Error ?? Texts.Get("Patch.StatusUnknown"),
+        _ => Texts.Format("Patch.NotApplied", result.Error)
     };
 }

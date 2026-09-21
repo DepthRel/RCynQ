@@ -1,5 +1,7 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Formatting;
 
 namespace RCynQ.UI.ViewModels.Items;
@@ -7,7 +9,7 @@ namespace RCynQ.UI.ViewModels.Items;
 /// <summary>
 /// A row of the patch history on the "Синхронизация" tab.
 /// </summary>
-public sealed class PatchHistoryItemViewModel
+public sealed class PatchHistoryItemViewModel : ObservableObject
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchHistoryItemViewModel"/> class.
@@ -36,11 +38,19 @@ public sealed class PatchHistoryItemViewModel
     /// <summary>Gets the status label.</summary>
     public string StatusText => DisplayText.Patch(Patch.Status);
 
+    /// <summary>Gets the error of the patch worded in the language in use, or <see langword="null"/>.</summary>
+    public string? ErrorText => LocalizedText.Render(Patch.Error);
+
     /// <summary>Gets a value indicating whether the patch succeeded.</summary>
     public bool IsSuccess => Patch.Status is PatchStatus.Applied or PatchStatus.ConflictResolved;
 
     /// <summary>Gets a value indicating whether the patch needs attention.</summary>
     public bool IsProblem => Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed;
+
+    /// <summary>
+    /// Tells the bindings that the texts of the row changed with the language.
+    /// </summary>
+    public void RefreshTexts() => OnPropertyChanged(string.Empty);
 
     /// <summary>Gets a value indicating whether the patch can be resolved on this node.</summary>
     public bool CanResolve => Patch.Direction == PatchDirection.Incoming && Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed;

@@ -1,16 +1,12 @@
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Network;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Links;
 using RCynQ.Transports.AmneziaWG.Cli;
+using RCynQ.Localization;
 
 namespace RCynQ.Transports.AmneziaWG.Links;
 
@@ -55,7 +51,7 @@ public sealed class AmneziaWgLink : TransportLinkBase
     /// <exception cref="SyncBridgeException">The setting is missing.</exception>
     private string ConfigPath => Config.TransportSettings.TryGetValue(ConfigPathSetting, out var path) && !string.IsNullOrWhiteSpace(path)
         ? path
-        : throw new SyncBridgeException($"Link '{Config.Name}' needs the transport setting '{ConfigPathSetting}' with the AmneziaWG .conf path.");
+        : throw new SyncBridgeException(Texts.Format("Awg.NeedsConfig", Config.Name, ConfigPathSetting));
 
     /// <inheritdoc />
     protected override async Task StartCoreAsync(CancellationToken cancellationToken)
@@ -98,13 +94,13 @@ public sealed class AmneziaWgLink : TransportLinkBase
 
         if (!status.Running)
         {
-            return CreateState(LinkStatus.Failed, $"Interface {status.InterfaceName} is down: {status.Message}");
+            return CreateState(LinkStatus.Failed, Texts.Format("Awg.Down", status.InterfaceName, status.Message));
         }
 
         var peer = Config.Peer;
         return await _probe.CanConnectAsync(peer.Host, peer.SshPort, ProbeTimeout, cancellationToken)
-            ? CreateState(LinkStatus.Ready, $"Interface {status.InterfaceName} ({status.LocalIp ?? "no address"}) is up; {peer.Host}:{peer.SshPort} is reachable.")
-            : CreateState(LinkStatus.Failed, $"Interface {status.InterfaceName} is up, but {peer.Host}:{peer.SshPort} is not reachable through it.");
+            ? CreateState(LinkStatus.Ready, Texts.Format("Awg.Up", status.InterfaceName, status.LocalIp ?? Texts.Get("Awg.NoAddress"), peer.Host, peer.SshPort))
+            : CreateState(LinkStatus.Failed, Texts.Format("Awg.UpUnreachable", status.InterfaceName, peer.Host, peer.SshPort));
     }
 
     /// <inheritdoc />
@@ -112,8 +108,8 @@ public sealed class AmneziaWgLink : TransportLinkBase
     {
         if (!Config.TransportSettings.TryGetValue(ConfigPathSetting, out var path) || !File.Exists(path))
         {
-            return DiagnosticResult.Fail(CheckName, $"AmneziaWG configuration '{path}' is missing.",
-                $"Set the transport setting '{ConfigPathSetting}' of link '{Config.Name}' to an existing .conf file.");
+            return DiagnosticResult.Fail(CheckName, Texts.Format("Awg.ConfigMissing", path),
+                Texts.Format("Awg.ConfigMissingFix", ConfigPathSetting, Config.Name));
         }
 
         var state = await ProbeCoreAsync(cancellationToken);
@@ -121,8 +117,8 @@ public sealed class AmneziaWgLink : TransportLinkBase
             ? DiagnosticResult.Pass(CheckName, state.Message)
             : DiagnosticResult.Fail(
                 CheckName,
-                state.Message ?? "Tunnel is not usable.",
-                "Install AmneziaWG, make sure awg-quick (or amneziawg.exe) can run with the required privileges, and check the peer configuration.",
-                new DiagnosticFix(DiagnosticFixKind.StartTransport, $"Start transport link '{Config.Name}'.", new Dictionary<string, string> { ["linkId"] = Config.Id.ToString() }));
+                state.Message ?? Texts.Get("Awg.TunnelNotUsable"),
+                Texts.Get("Awg.InstallFix"),
+                new DiagnosticFix(DiagnosticFixKind.StartTransport, Texts.Format("Awg.StartFix", Config.Name), new Dictionary<string, string> { ["linkId"] = Config.Id.ToString() }));
     }
 }

@@ -1,16 +1,13 @@
+using RCynQ.Localization;
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
-using RCynQ.Core.State;
 using RCynQ.Git.Commands;
 using RCynQ.Sync.Tests.Fixtures;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 
@@ -74,7 +71,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var result = await _fixture.CreateReceiver().ReceiveAsync(envelope, Context());
 
         result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && conflict.Detail!.Contains("Modified locally"));
+        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && LocalizedText.Render(conflict.Detail)!.Contains("Modified locally"));
         SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("local edit\n");
         SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().BeNull();
         SyncFixture.Read(_fixture.DestWork, "b.txt").Should().Be("keep\n");
@@ -192,7 +189,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var result = await _fixture.CreateResolver(git).ResolveAsync(envelope, conflicts, ConflictPolicy.UseGit);
 
         result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Detail.Should().Contain("a.txt.rej");
+        result.Conflicts.Should().ContainSingle().Which.Detail.Should().Match(detail => LocalizedText.Render(detail)!.Contains("a.txt.rej"));
         SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v1\n", "the sync base changes only after a clean apply");
         await git.DidNotReceive().RunAsync(Arg.Is<IReadOnlyList<string>>(args => args.Contains("--3way")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>());
     }

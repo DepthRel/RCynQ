@@ -1,7 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Network;
 using RCynQ.Core.Abstractions.Processes;
@@ -14,16 +13,12 @@ using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Core.State;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Factory;
 using RCynQ.Transports.Abstractions.Links;
 using RCynQ.Transports.Abstractions.Management;
-using RCynQ.Transports.AmneziaWG;
 using RCynQ.Transports.AmneziaWG.Cli;
 using RCynQ.Transports.AmneziaWG.Links;
-using RCynQ.Transports.Direct;
 using RCynQ.Transports.Direct.Links;
-using Xunit;
 
 namespace RCynQ.Transports.Tests;
 

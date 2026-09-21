@@ -1,8 +1,3 @@
-using System.Text;
-using RCynQ.Core.Abstractions;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Patches;
-using RCynQ.Core.Validation;
 using RCynQ.Git.Paths;
 
 namespace RCynQ.Git.Manifest;

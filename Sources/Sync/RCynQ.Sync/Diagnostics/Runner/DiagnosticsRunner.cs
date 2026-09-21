@@ -1,6 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Storage;
@@ -8,10 +5,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
-using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Ssh.Keys;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Runner;
 
@@ -101,11 +95,11 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                results.Add(DiagnosticResult.Fail(check.Name, $"The check timed out after {CheckTimeout.TotalSeconds:0} s."));
+                results.Add(DiagnosticResult.Fail(check.Name, Texts.Format("Diag.Timeout", CheckTimeout.TotalSeconds)));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                results.Add(DiagnosticResult.Fail(check.Name, $"The check failed unexpectedly: {ex.Message}"));
+                results.Add(DiagnosticResult.Fail(check.Name, Texts.Format("Diag.Unexpected", ex.Message)));
             }
         }
 

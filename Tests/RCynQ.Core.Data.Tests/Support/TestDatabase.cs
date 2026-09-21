@@ -1,11 +1,9 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Config;
 using RCynQ.Core.Data.Context;
-using RCynQ.Core.Data.Migrations.SQLite;
 using RCynQ.Core.Data.Migrations.SQLite.Runner;
 using RCynQ.Core.Data.Storage;
 

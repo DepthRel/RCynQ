@@ -1,12 +1,7 @@
-using System.Text;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Storage;
 using RCynQ.Core.Config;
-using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Patches;
-using RCynQ.Core.State;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Paths;
 
@@ -41,7 +36,7 @@ public sealed class SyncPaths
     /// </summary>
     /// <exception cref="SyncBridgeException">The node is a Mediator.</exception>
     public string Workdir => Path.GetFullPath(_node.EffectiveWorkdir
-        ?? throw new SyncBridgeException($"A {_node.Role} node has no working tree."));
+        ?? throw new SyncBridgeException(Texts.Format("Node.NoWorkingTree", _node.Role)));
 
     /// <summary>
     /// Gets the sync base directory.

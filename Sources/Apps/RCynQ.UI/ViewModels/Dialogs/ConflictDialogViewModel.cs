@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 
 namespace RCynQ.UI.ViewModels.Dialogs;
 
@@ -33,8 +34,8 @@ public sealed partial class ConflictDialogViewModel : DialogViewModelBase
 
     /// <summary>Gets the header text.</summary>
     public string Header => Files.Count == 0
-        ? $"Патч от {Sender} не удалось применить. Выберите, как поступить."
-        : $"Патч от {Sender} конфликтует с локальными изменениями в {Files.Count} файл(ах).";
+        ? Texts.Format("Conflict.HeaderNoFiles", Sender)
+        : Texts.Format("Conflict.Header", Sender, Files.Count);
 
     /// <summary>Gets the chosen policy, or <see langword="null"/> when cancelled.</summary>
     public ConflictPolicy? Result { get; private set; }

@@ -1,7 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Repositories;
@@ -9,16 +8,13 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Data.Storage;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Core.State;
 using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
-using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
-using RCynQ.Sync.Diagnostics;
 using RCynQ.Sync.Diagnostics.AutoFix;
 using RCynQ.Sync.Diagnostics.Checks;
 using RCynQ.Sync.Diagnostics.Endpoint;
@@ -26,9 +22,7 @@ using RCynQ.Sync.Diagnostics.Runner;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Tests.Fakes;
 using RCynQ.Sync.Tests.Fixtures;
-using RCynQ.Transports.Abstractions;
 using RCynQ.Transports.Abstractions.Management;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

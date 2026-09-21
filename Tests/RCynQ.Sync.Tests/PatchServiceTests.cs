@@ -1,7 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
@@ -9,9 +8,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
-using RCynQ.Sync.Services;
 using RCynQ.Sync.Tests.Fixtures;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 

@@ -1,5 +1,6 @@
 using RCynQ.Core.Exceptions;
 using RCynQ.Service.Hosting;
+using RCynQ.Localization;
 
 namespace RCynQ.Service;
 
@@ -36,7 +37,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            await Console.Error.WriteLineAsync($"RCynQ.Service stopped unexpectedly: {ex}");
+            await Console.Error.WriteLineAsync(Texts.Format("Service.Crashed", ex));
             return 1;
         }
         finally

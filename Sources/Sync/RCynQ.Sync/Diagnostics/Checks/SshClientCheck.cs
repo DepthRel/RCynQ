@@ -1,15 +1,8 @@
-using System.Text.RegularExpressions;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
-using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.State;
-using RCynQ.Git.Commands;
-using RCynQ.Ssh.Keys;
-using RCynQ.Sync.Security;
-using RCynQ.Transports.Abstractions;
+using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -45,11 +38,11 @@ public sealed class SshClientCheck : DiagnosticCheckBase
             var version = (result.StandardError + result.StandardOutput).Trim();
             return result.ExitCode == 0
                 ? Pass(version)
-                : Fail($"'{_ssh.SshExecutable} -V' failed: {version}", "Install the OpenSSH client.");
+                : Fail(Texts.Format("Diag.SshClient.Failed", _ssh.SshExecutable, version), Texts.Get("Diag.SshClient.Install"));
         }
         catch (SyncBridgeException ex)
         {
-            return Fail(ex.Message, "Install the OpenSSH client and make sure 'ssh' is on PATH (or set SyncBridge:Ssh:SshExecutable).");
+            return Fail(ex.Message, Texts.Get("Diag.SshClient.InstallFix"));
         }
     }
 }

@@ -23,7 +23,6 @@ using RCynQ.Sync.Configuration;
 using Microsoft.Extensions.Hosting;
 using RCynQ.Sync.Configuration.Probing;
 using RCynQ.Sync.Services;
-using Xunit;
 
 namespace RCynQ.Service.Tests;
 

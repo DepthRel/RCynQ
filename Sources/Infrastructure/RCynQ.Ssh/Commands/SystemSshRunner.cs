@@ -1,8 +1,8 @@
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Ssh;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Commands;
 
@@ -52,12 +52,12 @@ public sealed class SystemSshRunner : ISshExecutor
         }
         catch (SyncBridgeException ex) when (ex is not SshExecutionException)
         {
-            throw new SshExecutionException($"ssh to {target} could not be executed: {ex.Message}", ex);
+            throw new SshExecutionException(Texts.Format("Ssh.NotExecuted", target, ex.Message), ex);
         }
 
         if (result.ExitCode == SshFailureExitCode)
         {
-            throw new SshExecutionException($"ssh to {target} failed: {result.StandardError.Trim()}", result.ExitCode);
+            throw new SshExecutionException(Texts.Format("Ssh.Failed", target, result.StandardError.Trim()), result.ExitCode);
         }
 
         return new SshResult(result.ExitCode, result.StandardOutput, result.StandardError);

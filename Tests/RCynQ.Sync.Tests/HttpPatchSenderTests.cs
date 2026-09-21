@@ -3,21 +3,18 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
-using RCynQ.Core.Abstractions;
 using RCynQ.Core.Abstractions.Ssh;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
-using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.Tests.Fakes;
 using RCynQ.Sync.Tests.Fixtures;
 using RCynQ.Sync.Transfer;
-using Xunit;
 
 namespace RCynQ.Sync.Tests;
 
