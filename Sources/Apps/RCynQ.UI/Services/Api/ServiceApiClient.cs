@@ -22,8 +22,14 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     /// </summary>
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>The HTTP client.</summary>
+    /// <summary>The HTTP client for ordinary requests; a request that takes longer than ten minutes is treated as a hang.</summary>
     private readonly HttpClient _http;
+
+    /// <summary>
+    /// The HTTP client for operations that legitimately take long: sending a patch, fetching branches, creating the baseline.
+    /// It has no time limit; the caller cancels it.
+    /// </summary>
+    private readonly HttpClient _long;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServiceApiClient"/> class.
@@ -39,6 +45,11 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         {
             BaseAddress = settings.ServiceUri,
             Timeout = TimeSpan.FromMinutes(10)
+        };
+        _long = new HttpClient(tokenHandler, disposeHandler: false)
+        {
+            BaseAddress = settings.ServiceUri,
+            Timeout = Timeout.InfiniteTimeSpan
         };
     }
 
@@ -61,10 +72,10 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     }
 
     /// <inheritdoc />
-    public Task<SendPatchResult> SendPatchAsync(CancellationToken cancellationToken = default) => PostAsync<SendPatchResult>(ApiRoutes.SendPatch, null, cancellationToken);
+    public Task<SendPatchResult> SendPatchAsync(CancellationToken cancellationToken = default) => PostAsync<SendPatchResult>(ApiRoutes.SendPatch, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
-    public Task<SnapshotInfo> CreateBaselineAsync(CancellationToken cancellationToken = default) => PostAsync<SnapshotInfo>(ApiRoutes.Baseline, null, cancellationToken);
+    public Task<SnapshotInfo> CreateBaselineAsync(CancellationToken cancellationToken = default) => PostAsync<SnapshotInfo>(ApiRoutes.Baseline, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
     public Task<PatchApplyResult> ResolvePatchAsync(Guid patchId, ConflictPolicy policy, CancellationToken cancellationToken = default)
@@ -96,10 +107,10 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public Task<GitBranchInfo> GetBranchAsync(CancellationToken cancellationToken = default) => GetAsync<GitBranchInfo>(ApiRoutes.GitBranch, cancellationToken);
 
     /// <inheritdoc />
-    public Task<GitOperationResult> FetchAsync(CancellationToken cancellationToken = default) => PostAsync<GitOperationResult>(ApiRoutes.GitFetch, null, cancellationToken);
+    public Task<GitOperationResult> FetchAsync(CancellationToken cancellationToken = default) => PostAsync<GitOperationResult>(ApiRoutes.GitFetch, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
-    public Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default) => PostAsync<GitOperationResult>(ApiRoutes.GitPull, null, cancellationToken);
+    public Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default) => PostAsync<GitOperationResult>(ApiRoutes.GitPull, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
     public Task<DiagnosticsEvent> RunDiagnosticsAsync(CancellationToken cancellationToken = default) => PostAsync<DiagnosticsEvent>(ApiRoutes.DiagnosticsRun, null, cancellationToken);
@@ -192,7 +203,11 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     /// <summary>
     /// Disposes the HTTP client.
     /// </summary>
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _long.Dispose();
+        _http.Dispose();
+    }
 
     /// <summary>
     /// Sends a GET request.
@@ -214,12 +229,14 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     /// <param name="path">The path.</param>
     /// <param name="body">The body, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <param name="longRunning">Whether the operation may take long and must not be cut off by the ordinary time limit.</param>
     /// <returns>The response body.</returns>
-    private async Task<T> PostAsync<T>(string path, object? body, CancellationToken cancellationToken)
+    private async Task<T> PostAsync<T>(string path, object? body, CancellationToken cancellationToken, bool longRunning = false)
     {
+        var client = longRunning ? _long : _http;
         using var response = body is null
-            ? await _http.PostAsync(path, null, cancellationToken)
-            : await _http.PostAsync(path, JsonContent.Create(body, body.GetType(), options: Json), cancellationToken);
+            ? await client.PostAsync(path, null, cancellationToken)
+            : await client.PostAsync(path, JsonContent.Create(body, body.GetType(), options: Json), cancellationToken);
         return await ReadAsync<T>(response, cancellationToken);
     }
 

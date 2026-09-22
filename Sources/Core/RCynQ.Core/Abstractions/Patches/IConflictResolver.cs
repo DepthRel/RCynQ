@@ -13,6 +13,7 @@ public interface IConflictResolver
     /// Resolves the given conflicts according to the configured policy.
     /// </summary>
     /// <param name="envelope">The patch envelope that produced the conflicts. Must not be <see langword="null"/>.</param>
+    /// <param name="content">The stored content of the patch. Must not be <see langword="null"/>.</param>
     /// <param name="conflicts">
     /// The files that produced conflicts. Must not be <see langword="null"/>.
     /// </param>
@@ -24,6 +25,7 @@ public interface IConflictResolver
     /// <exception cref="PatchApplyException">Conflict resolution failed.</exception>
     Task<PatchApplyResult> ResolveAsync(
         PatchEnvelope envelope,
+        IPatchContent content,
         IReadOnlyList<ConflictFile> conflicts,
         ConflictPolicy policy,
         CancellationToken cancellationToken = default);

@@ -73,6 +73,13 @@ public sealed class SyncBridgeOptions
     public List<string> ExcludedDirectories { get; set; } = new() { "bin", "obj", ".vs", ".idea", "node_modules" };
 
     /// <summary>
+    /// Gets or sets a value indicating whether files and directories described by <c>.gitignore</c> files in the tree are
+    /// left out of snapshots and patches. Nested <c>.gitignore</c> files are honoured; <c>.git/info/exclude</c> and the
+    /// global Git ignore file are not read.
+    /// </summary>
+    public bool RespectGitIgnore { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the maximum accepted age of a received patch, in minutes.
     /// </summary>
     public int PatchMaxAgeMinutes { get; set; } = 24 * 60;

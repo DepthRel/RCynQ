@@ -53,16 +53,16 @@ public class SignatureAndReplayTests
     {
         var created = new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero);
         var id = Guid.NewGuid();
-        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, byte[]? diff = null, string target = "dest")
+        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, long size = 1, string target = "dest")
             => new(id, new NodeId("source"), new NodeId(target), at ?? created, Hash, Hash,
-                new[] { new FileChange(ChangeKind.Modified, path, Hash, 1, false) }, diff ?? new byte[] { 1 }, new byte[] { 2 });
+                new[] { new FileChange(ChangeKind.Modified, path, Hash, size, false) });
 
         var baseline = PayloadCanonicalizer.Build(Envelope());
         PayloadCanonicalizer.Build(Envelope()).Should().Equal(baseline);
         PayloadCanonicalizer.Build(Envelope().WithSignature(new byte[] { 9 })).Should().Equal(baseline, "the signature is not part of the payload");
         PayloadCanonicalizer.Build(Envelope(path: "b.txt")).Should().NotEqual(baseline);
         PayloadCanonicalizer.Build(Envelope(at: created.AddTicks(1))).Should().NotEqual(baseline);
-        PayloadCanonicalizer.Build(Envelope(diff: new byte[] { 3 })).Should().NotEqual(baseline);
+        PayloadCanonicalizer.Build(Envelope(size: 2)).Should().NotEqual(baseline, "the size bounds the upload, so it is signed too");
         PayloadCanonicalizer.Build(Envelope(target: "other")).Should().NotEqual(baseline);
     }
 
@@ -78,7 +78,7 @@ public class SignatureAndReplayTests
         clock.GetUtcNow().Returns(now);
         var repository = new InMemoryPatchRepository();
         var guard = new ReplayGuard(repository, clock, new ReplayGuardOptions { MaxAge = TimeSpan.FromHours(1), MaxClockSkew = TimeSpan.FromMinutes(5) });
-        PatchEnvelope At(DateTimeOffset createdAt) => new(Guid.NewGuid(), new NodeId("s"), new NodeId("d"), createdAt, Hash, Hash, Array.Empty<FileChange>(), Array.Empty<byte>(), Array.Empty<byte>());
+        PatchEnvelope At(DateTimeOffset createdAt) => new(Guid.NewGuid(), new NodeId("s"), new NodeId("d"), createdAt, Hash, Hash, Array.Empty<FileChange>());
 
         var fresh = At(now.AddMinutes(-10));
         await guard.EnsureFreshAsync(fresh);
@@ -88,6 +88,10 @@ public class SignatureAndReplayTests
         (await Reason(() => guard.EnsureFreshAsync(fresh))).Should().Be(PatchRejectionReason.Replay);
         (await Reason(() => guard.EnsureFreshAsync(At(now.AddHours(-2))))).Should().Be(PatchRejectionReason.Expired);
         (await Reason(() => guard.EnsureFreshAsync(At(now.AddMinutes(10))))).Should().Be(PatchRejectionReason.Expired);
+
+        guard.EnsureInWindow(fresh);
+        var stale = () => guard.EnsureInWindow(At(now.AddHours(-2)));
+        stale.Should().Throw<PatchRejectedException>("a session may be resumed, but not past the age limit");
     }
 
     /// <summary>

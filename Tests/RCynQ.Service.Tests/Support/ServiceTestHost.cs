@@ -61,8 +61,9 @@ public sealed class ServiceTestHost : IAsyncDisposable
     /// </summary>
     /// <param name="role">The node role.</param>
     /// <param name="configureServices">Service replacements applied after the default registrations.</param>
+    /// <param name="extraSettings">Additional configuration values, for example a direct TLS endpoint.</param>
     /// <returns>The started host.</returns>
-    public static async Task<ServiceTestHost> StartAsync(NodeRole role = NodeRole.Dest, Action<IServiceCollection>? configureServices = null)
+    public static async Task<ServiceTestHost> StartAsync(NodeRole role = NodeRole.Dest, Action<IServiceCollection>? configureServices = null, IReadOnlyDictionary<string, string?>? extraSettings = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "rcynq-service-tests", Guid.NewGuid().ToString("N"));
         var work = Directory.CreateDirectory(Path.Combine(root, "work")).FullName;
@@ -78,6 +79,11 @@ public sealed class ServiceTestHost : IAsyncDisposable
             ["SyncBridge:LinkToken"] = LinkToken,
             ["SyncBridge:ListenPort"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
+
+        foreach (var pair in extraSettings ?? new Dictionary<string, string?>())
+        {
+            settings[pair.Key] = pair.Value;
+        }
 
         SqliteDatabaseMigrator.MigrateUp(AppDataPaths.FromRoot(dataRoot).ConnectionString);
         var app = ServiceHostBuilder.Build(
@@ -136,7 +142,7 @@ public sealed class ServiceTestHost : IAsyncDisposable
     /// Finds a free loopback port.
     /// </summary>
     /// <returns>The port.</returns>
-    private static int FreePort()
+    public static int FreePort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();

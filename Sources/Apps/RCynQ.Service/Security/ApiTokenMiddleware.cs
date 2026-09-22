@@ -5,7 +5,7 @@ using RCynQ.Localization;
 namespace RCynQ.Service.Security;
 
 /// <summary>
-/// Requires the local API token on every request except <c>GET /health</c> and <c>POST /patch</c>.
+/// Requires the local API token on every request except <c>GET /health</c>, the patch session routes (<c>/patch/sessions/...</c>) and <c>POST /git/bundle</c>.
 /// </summary>
 /// <remarks>
 /// The token is read from the <c>X-Api-Token</c> header; SignalR clients may pass it as the <c>access_token</c> query
@@ -39,7 +39,9 @@ public sealed class ApiTokenMiddleware
     {
         var path = context.Request.Path;
         var isPublic = path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase)
-            || (path.Equals(ApiRoutes.Patch, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method));
+            || (path.Equals(ApiRoutes.GitBundle, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method))
+            || (path.StartsWithSegments(ApiRoutes.PatchSessionPrefix, StringComparison.OrdinalIgnoreCase)
+                && (HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method)));
         if (isPublic)
         {
             await _next(context);

@@ -1,12 +1,14 @@
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Diagnostics;
+using RCynQ.Sync.GitChannel;
 using RCynQ.Localization;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
 /// <summary>
-/// Checks that the sync base exists and matches the recorded state hash.
+/// Checks that the sync base exists and matches the recorded state hash; passes without a snapshot for a Source node that
+/// compares against the branch last pulled from Dest instead (see <see cref="IPendingChangesBaseResolver"/>).
 /// </summary>
 public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
 {
@@ -19,23 +21,34 @@ public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
     /// <summary>The state store.</summary>
     private readonly INodeStateStore _state;
 
+    /// <summary>The resolver of the directory to compare the working tree against.</summary>
+    private readonly IPendingChangesBaseResolver _baseResolver;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SnapshotIntegrityCheck"/> class.
     /// </summary>
     /// <param name="manifest">The manifest builder.</param>
     /// <param name="hasher">The state hasher.</param>
     /// <param name="state">The state store.</param>
-    public SnapshotIntegrityCheck(IFileManifestBuilder manifest, IStateHasher hasher, INodeStateStore state)
+    /// <param name="baseResolver">The resolver of the directory to compare the working tree against.</param>
+    public SnapshotIntegrityCheck(IFileManifestBuilder manifest, IStateHasher hasher, INodeStateStore state, IPendingChangesBaseResolver baseResolver)
         : base("SnapshotIntegrity", PatchRoles)
     {
         _manifest = manifest;
         _hasher = hasher;
         _state = state;
+        _baseResolver = baseResolver;
     }
 
     /// <inheritdoc />
     public override async Task<DiagnosticResult> RunAsync(DiagnosticContext context, CancellationToken cancellationToken = default)
     {
+        await using var sendBase = await _baseResolver.ResolveAsync(cancellationToken);
+        if (sendBase is { IsGitNative: true })
+        {
+            return Pass(Texts.Get("Diag.Snapshot.GitNative"));
+        }
+
         var syncBase = context.Paths.SyncBaseDirectory;
         if (!Directory.Exists(syncBase))
         {

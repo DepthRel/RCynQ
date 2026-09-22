@@ -20,6 +20,9 @@ public static class ApiHeaders
     /// </summary>
     public const string NodeId = "X-Node-Id";
 
+    /// <summary>The header of a bundle response that names the branch the served repository has checked out.</summary>
+    public const string GitHead = "X-Git-Head";
+
     /// <summary>
     /// The query parameter carrying the API token for SignalR connections that cannot send headers.
     /// </summary>

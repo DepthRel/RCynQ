@@ -4,8 +4,9 @@ namespace RCynQ.Core.Api;
 /// Route templates of the local service API and helpers that build concrete paths.
 /// </summary>
 /// <remarks>
-/// The service listens on <c>http://127.0.0.1:&lt;ListenPort&gt;</c> only. <see cref="Health"/> and <see cref="Patch"/>
-/// are the only routes without the local API token; <see cref="Patch"/> is protected by the link token and signature.
+/// The service listens on <c>http://127.0.0.1:&lt;ListenPort&gt;</c> only. <see cref="Health"/> and the routes below
+/// <see cref="PatchSessionPrefix"/> are the only routes without the local API token; the patch session routes are protected
+/// by the link token and the signature of the manifest.
 /// </remarks>
 public static class ApiRoutes
 {
@@ -15,8 +16,17 @@ public static class ApiRoutes
     /// <summary>Node synchronization status.</summary>
     public const string State = "/state";
 
-    /// <summary>Patch receive endpoint used by the peer through the SSH forward.</summary>
-    public const string Patch = "/patch";
+    /// <summary>Opens a patch session with the signed, gzip-compressed manifest; used by the peer through the SSH forward or its TLS port.</summary>
+    public const string PatchSessions = "/patch/sessions";
+
+    /// <summary>Uploads the gzip-compressed content of one file of a patch session, addressed by its SHA-256 hash.</summary>
+    public const string PatchSessionContent = "/patch/sessions/{id:guid}/content/{sha256}";
+
+    /// <summary>Applies the patch of a session once all its content is uploaded.</summary>
+    public const string PatchSessionCommit = "/patch/sessions/{id:guid}/commit";
+
+    /// <summary>The path prefix shared by the patch session routes, which are the only routes open to the peer.</summary>
+    public const string PatchSessionPrefix = "/patch/sessions";
 
     /// <summary>Recent patches.</summary>
     public const string Patches = "/patches";
@@ -60,6 +70,9 @@ public static class ApiRoutes
     /// <summary>Fetch branches from Dest.</summary>
     public const string GitFetch = "/git/fetch";
 
+    /// <summary>Serves an incremental git bundle to the peer that asks for the branches of this repository (Dest, no SSH server needed).</summary>
+    public const string GitBundle = "/git/bundle";
+
     /// <summary>Fetch and fast-forward the current branch.</summary>
     public const string GitPull = "/git/pull";
 
@@ -101,6 +114,21 @@ public static class ApiRoutes
 
     /// <summary>SignalR hub.</summary>
     public const string Hub = "/hub";
+
+    /// <summary>
+    /// Builds the content upload path of a patch session.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <param name="sha256">The SHA-256 hash (lowercase hex) of the content.</param>
+    /// <returns>The path.</returns>
+    public static string PatchSessionContentPath(Guid id, string sha256) => $"/patch/sessions/{id}/content/{sha256}";
+
+    /// <summary>
+    /// Builds the commit path of a patch session.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <returns>The path.</returns>
+    public static string PatchSessionCommitPath(Guid id) => $"/patch/sessions/{id}/commit";
 
     /// <summary>
     /// Builds the path of one patch.

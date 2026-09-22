@@ -7,7 +7,6 @@ using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
-using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Processes;
@@ -50,12 +49,10 @@ public class GitIntegrationTests
 
         var paths = new PathUtility();
         var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
-        var builder = new DefaultPatchBuilder(
-            new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), new GitDiffBuilder(git), new FileBundleBuilder(paths), paths, TimeProvider.System);
-
-        var envelope = await builder.BuildAsync(new NodeId("s"), new NodeId("d"), baseDir.Path, work.Path);
+        var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(baseDir.Path, work.Path);
+        var diff = await new PatchDiffBuilder(new GitDiffBuilder(git), paths).BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), PatchDiffLimits.Full);
         var diffFile = Path.Combine(target.Path, "..", Guid.NewGuid().ToString("N") + ".diff");
-        await File.WriteAllBytesAsync(diffFile, envelope.Diff);
+        await File.WriteAllBytesAsync(diffFile, diff);
         try
         {
             var apply = await git.RunAsync(new[] { "apply", "--whitespace=nowarn", diffFile }, target.Path);

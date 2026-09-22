@@ -45,6 +45,11 @@ public sealed class ReplayGuard
     }
 
     /// <summary>
+    /// Gets the maximum age of an accepted envelope.
+    /// </summary>
+    public TimeSpan MaxAge => _options.MaxAge;
+
+    /// <summary>
     /// Ensures that the envelope is fresh and was not processed before.
     /// </summary>
     /// <param name="envelope">The envelope.</param>
@@ -52,6 +57,23 @@ public sealed class ReplayGuard
     /// <returns>A task that completes when the envelope is accepted.</returns>
     /// <exception cref="PatchRejectedException">The envelope is stale, from the future or a replay.</exception>
     public async Task EnsureFreshAsync(PatchEnvelope envelope, CancellationToken cancellationToken = default)
+    {
+        EnsureInWindow(envelope);
+        if (await _patches.ExistsAsync(envelope.Id, cancellationToken))
+        {
+            throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", envelope.Id));
+        }
+    }
+
+    /// <summary>
+    /// Ensures that the creation time of the envelope is inside the accepted window, without looking at earlier patches.
+    /// </summary>
+    /// <param name="envelope">The envelope.</param>
+    /// <remarks>
+    /// Used to resume an open session: the identifier is known by design then, but a session may not be kept alive past the age limit.
+    /// </remarks>
+    /// <exception cref="PatchRejectedException">The envelope is stale or from the future.</exception>
+    public void EnsureInWindow(PatchEnvelope envelope)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         var now = _timeProvider.GetUtcNow();
@@ -63,11 +85,6 @@ public sealed class ReplayGuard
         if (envelope.CreatedAtUtc < now - _options.MaxAge)
         {
             throw new PatchRejectedException(PatchRejectionReason.Expired, Texts.Format("Replay.Old", envelope.Id, _options.MaxAge));
-        }
-
-        if (await _patches.ExistsAsync(envelope.Id, cancellationToken))
-        {
-            throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", envelope.Id));
         }
     }
 }

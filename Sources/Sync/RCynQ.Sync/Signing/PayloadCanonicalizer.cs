@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using RCynQ.Core.Patches;
-using RCynQ.Git.Hashing;
 
 namespace RCynQ.Sync.Signing;
 
@@ -10,14 +9,14 @@ namespace RCynQ.Sync.Signing;
 /// </summary>
 /// <remarks>
 /// Every field is length-prefixed (<c>length:value\n</c>), so no path content can make two different envelopes
-/// produce the same payload. Binary payloads are represented by their SHA-256 digests.
+/// produce the same payload. File content is represented by the SHA-256 hashes in the manifest, so the signature covers every file that follows the manifest.
 /// </remarks>
 public static class PayloadCanonicalizer
 {
     /// <summary>
     /// The payload format version.
     /// </summary>
-    public const string Version = "rcynq-patch-v1";
+    public const string Version = "rcynq-patch-v2";
 
     /// <summary>
     /// Builds the canonical payload of an envelope (the signature itself is excluded).
@@ -45,8 +44,6 @@ public static class PayloadCanonicalizer
             Append(builder, change.IsSymlink ? "1" : "0");
         }
 
-        Append(builder, DefaultStateHasher.Sha256Hex(envelope.Diff));
-        Append(builder, DefaultStateHasher.Sha256Hex(envelope.Bundle));
         return Encoding.UTF8.GetBytes(builder.ToString());
     }
 

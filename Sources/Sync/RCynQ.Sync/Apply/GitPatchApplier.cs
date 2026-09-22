@@ -12,13 +12,13 @@ using RCynQ.Localization;
 namespace RCynQ.Sync.Apply;
 
 /// <summary>
-/// <see cref="IPatchApplier"/> that uses Git tooling: <c>--check</c>, then <c>--3way</c> in a repository, then <c>--reject</c>.
+/// Applies a patch diff with Git tooling: <c>--check</c>, then <c>--3way</c> in a repository, then <c>--reject</c>.
 /// </summary>
 /// <remarks>
 /// Conflicts left by <c>--3way</c> (unmerged files) or <c>--reject</c> (<c>.rej</c> files) are reported as
 /// <see cref="PatchStatus.ConflictPending"/> for manual resolution.
 /// </remarks>
-public sealed class GitPatchApplier : IPatchApplier
+public sealed class GitPatchApplier
 {
     /// <summary>
     /// The git command runner.
@@ -55,12 +55,19 @@ public sealed class GitPatchApplier : IPatchApplier
         _appData = appData;
     }
 
-    /// <inheritdoc />
-    public async Task<PatchApplyResult> ApplyAsync(PatchEnvelope envelope, string targetDirectory, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Applies the diff of a patch to the target directory.
+    /// </summary>
+    /// <param name="envelope">The patch the diff belongs to.</param>
+    /// <param name="diff">The complete diff, as <see cref="RCynQ.Git.Patches.Diff.IPatchDiffBuilder"/> builds it with <see cref="RCynQ.Git.Patches.Diff.PatchDiffLimits.Full"/>.</param>
+    /// <param name="targetDirectory">The directory to apply the diff to.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The application result.</returns>
+    public async Task<PatchApplyResult> ApplyDiffAsync(PatchEnvelope envelope, byte[] diff, string targetDirectory, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         var root = Path.GetFullPath(Guard.NotBlank(targetDirectory, nameof(targetDirectory)));
-        if (envelope.Diff.Length == 0)
+        if (diff.Length == 0)
         {
             return PatchApplyResult.Applied(envelope.Id, 0);
         }
@@ -68,7 +75,7 @@ public sealed class GitPatchApplier : IPatchApplier
         var tempRoot = _appData?.Create().TempDirectory ?? Path.Combine(Path.GetTempPath(), "rcynq");
         var diffFile = Path.Combine(tempRoot, $"apply-{envelope.Id:N}-{Guid.NewGuid():N}.diff");
         Directory.CreateDirectory(Path.GetDirectoryName(diffFile)!);
-        await File.WriteAllBytesAsync(diffFile, envelope.Diff, cancellationToken);
+        await File.WriteAllBytesAsync(diffFile, diff, cancellationToken);
         try
         {
             var isRepository = await _repository.IsWorkTreeAsync(root, cancellationToken);

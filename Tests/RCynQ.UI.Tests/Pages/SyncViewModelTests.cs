@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
+using RCynQ.Core.State;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Tests.Support;
@@ -87,5 +89,60 @@ public sealed class SyncViewModelTests
 
         sync.ErrorMessage.Should().Be("baseline missing");
         sync.IsBusy.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that creating a baseline for the first time shows the plain confirmation and success text.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task First_Baseline_Uses_Create_Wording()
+    {
+        _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status() with { BaselineInitialized = false });
+        _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _api.CreateBaselineAsync(Arg.Any<CancellationToken>()).Returns(new SnapshotInfo(Guid.NewGuid(), new NodeId("node-1"), DateTimeOffset.UtcNow, "hash", null));
+        var sync = new SyncViewModel(_api, _dialogs);
+        await sync.RefreshAsync();
+        sync.NeedsBaseline.Should().BeTrue();
+
+        await sync.CreateBaselineCommand.ExecuteAsync(null);
+
+        await _dialogs.Received(1).ConfirmAsync(Arg.Any<string>(), "Создать базовую копию из текущей рабочей копии? Делайте это на Source и Dest, когда их рабочие копии совпадают.");
+        sync.InfoMessage.Should().Be("Базовая копия создана.");
+    }
+
+    /// <summary>
+    /// Verifies that replacing an existing baseline shows the stronger recreate confirmation and success text.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Existing_Baseline_Uses_Recreate_Wording()
+    {
+        _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _api.CreateBaselineAsync(Arg.Any<CancellationToken>()).Returns(new SnapshotInfo(Guid.NewGuid(), new NodeId("node-1"), DateTimeOffset.UtcNow, "hash", null));
+        var sync = new SyncViewModel(_api, _dialogs);
+        await sync.RefreshAsync();
+        sync.NeedsBaseline.Should().BeFalse();
+
+        await sync.CreateBaselineCommand.ExecuteAsync(null);
+
+        await _dialogs.Received(1).ConfirmAsync(Arg.Any<string>(), Arg.Is<string>(text => text.Contains("Заменить существующую базовую копию")));
+        sync.InfoMessage.Should().Be("Базовая копия заменена.");
+    }
+
+    /// <summary>
+    /// Verifies that cancelling the confirmation dialog leaves the baseline untouched.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Cancelled_Baseline_Confirmation_Does_Not_Create()
+    {
+        _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
+        var sync = new SyncViewModel(_api, _dialogs);
+        await sync.RefreshAsync();
+
+        await sync.CreateBaselineCommand.ExecuteAsync(null);
+
+        await _api.DidNotReceiveWithAnyArgs().CreateBaselineAsync(default);
     }
 }

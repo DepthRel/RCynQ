@@ -165,6 +165,31 @@ public class CoreRecordTests
     }
 
     /// <summary>
+    /// Verifies that the content a receiver needs lists every distinct hash once and skips deletions.
+    /// </summary>
+    [Fact]
+    public void PatchEnvelope_ContentHashes_Are_Distinct_And_Skip_Deletions()
+    {
+        var other = new string('a', 64);
+        var envelope = new PatchEnvelope(
+            Guid.NewGuid(),
+            new NodeId("source"),
+            new NodeId("dest"),
+            DateTimeOffset.UtcNow,
+            Hash,
+            Hash,
+            new[]
+            {
+                new FileChange(ChangeKind.Added, "a.txt", Hash, 1, false),
+                new FileChange(ChangeKind.Added, "copy-of-a.txt", Hash, 1, false),
+                new FileChange(ChangeKind.Modified, "b.txt", other, 2, false),
+                new FileChange(ChangeKind.Deleted, "gone.txt", null, null, false)
+            });
+
+        envelope.ContentHashes.Should().Equal(Hash, other);
+    }
+
+    /// <summary>
     /// Verifies apply result helpers.
     /// </summary>
     [Fact]
@@ -225,7 +250,5 @@ public class CoreRecordTests
             DateTimeOffset.UtcNow,
             Hash,
             Hash,
-            new[] { new FileChange(ChangeKind.Modified, "a.txt", Hash, 1, false) },
-            new byte[] { 1 },
-            new byte[] { 2 });
+            new[] { new FileChange(ChangeKind.Modified, "a.txt", Hash, 1, false) });
 }

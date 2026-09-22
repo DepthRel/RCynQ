@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text;
 using FluentAssertions;
 using NSubstitute;
@@ -11,7 +10,6 @@ using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
-using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Git.Paths;
@@ -20,7 +18,7 @@ using RCynQ.Git.Tests.Support;
 namespace RCynQ.Git.Tests;
 
 /// <summary>
-/// Tests for the git command runner, diff builder, bundle builder, patch builder and serializer.
+/// Tests for the git command runner, diff builder, patch diff builder, patch builder and serializer.
 /// </summary>
 public class PatchBuildingTests
 {
@@ -102,65 +100,13 @@ public class PatchBuildingTests
         Directory.Exists(Path.Combine(staging.Path, "a")).Should().BeTrue();
     }
 
+
     /// <summary>
-    /// Verifies bundle round-trip with deletion markers and manifest verification.
+    /// Verifies that the patch builder fills the envelope with the manifest and the state hashes and holds no content.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Bundle_RoundTrip_And_Verification()
-    {
-        using var incoming = new TempDirectory();
-        incoming.Write("src/a.txt", "alpha");
-        incoming.Write("b.bin", "");
-        var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(Path.Combine(incoming.Path, "none"), incoming.Path);
-        manifest = manifest.Append(new FileChange(ChangeKind.Deleted, "old/c.txt", null, null, false)).ToArray();
-
-        var builder = new FileBundleBuilder(_paths);
-        var bytes = await builder.BuildAsync(manifest, incoming.Path);
-        var bundle = builder.Read(bytes, manifest);
-
-        Encoding.UTF8.GetString(bundle.Files["src/a.txt"]).Should().Be("alpha");
-        bundle.Deleted.Should().BeEquivalentTo(new[] { "old/c.txt" });
-
-        var wrongManifest = manifest.Select(change => change.Path == "src/a.txt"
-            ? new FileChange(ChangeKind.Modified, change.Path, new string('0', 64), 5, false)
-            : change).ToArray();
-        var verifyWrong = () => builder.Read(bytes, wrongManifest);
-        verifyWrong.Should().Throw<FormatException>();
-
-        incoming.Write("src/a.txt", "changed after scan");
-        var rebuild = () => builder.BuildAsync(manifest, incoming.Path);
-        await rebuild.Should().ThrowAsync<SyncBridgeException>();
-    }
-
-    /// <summary>
-    /// Verifies that bundles with zip-slip or Git metadata entries are rejected.
-    /// </summary>
-    /// <param name="entryName">The malicious entry name.</param>
-    [Theory]
-    [InlineData("files/../evil.txt")]
-    [InlineData("files/.git/hooks/post-checkout")]
-    [InlineData("files//abs")]
-    [InlineData("unknown/x")]
-    public void Bundle_Read_Rejects_Unsafe_Entries(string entryName)
-    {
-        using var buffer = new MemoryStream();
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            using var stream = zip.CreateEntry(entryName).Open();
-            stream.Write("x"u8);
-        }
-
-        var read = () => new FileBundleBuilder(_paths).Read(buffer.ToArray());
-        read.Should().Throw<FormatException>();
-    }
-
-    /// <summary>
-    /// Verifies that the patch builder stages base and incoming versions and fills the envelope.
-    /// </summary>
-    /// <returns>A task representing the test.</returns>
-    [Fact]
-    public async Task PatchBuilder_Stages_Files_And_Builds_Envelope()
+    public async Task PatchBuilder_Builds_Manifest_Envelope()
     {
         using var baseDir = new TempDirectory();
         using var work = new TempDirectory();
@@ -169,6 +115,52 @@ public class PatchBuildingTests
         work.Write("mod.txt", "new");
         work.Write("add/x.txt", "added");
 
+        var manifestBuilder = new DefaultFileManifestBuilder(new SnapshotFilter());
+        var now = new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
+        var clock = Substitute.For<TimeProvider>();
+        clock.GetUtcNow().Returns(now);
+        var builder = new DefaultPatchBuilder(manifestBuilder, new DefaultStateHasher(), clock);
+
+        var envelope = await builder.BuildAsync(new NodeId("source"), new NodeId("dest"), baseDir.Path, work.Path);
+
+        envelope.Manifest.Select(change => (change.Kind, change.Path)).Should().Equal(
+            (ChangeKind.Added, "add/x.txt"), (ChangeKind.Deleted, "del.txt"), (ChangeKind.Modified, "mod.txt"));
+        envelope.CreatedAtUtc.Should().Be(now);
+        envelope.BaseStateHash.Should().Be(new DefaultStateHasher().ComputeHash(await manifestBuilder.ScanAsync(baseDir.Path)));
+        envelope.IncomingStateHash.Should().NotBe(envelope.BaseStateHash);
+        envelope.ContentHashes.Should().HaveCount(2, "the deleted file needs no content");
+        envelope.IsSigned.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that identical directories produce an empty manifest.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchBuilder_Builds_Empty_Manifest_For_No_Changes()
+    {
+        using var dir = new TempDirectory();
+        dir.Write("a.txt", "same");
+        var builder = new DefaultPatchBuilder(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), TimeProvider.System);
+
+        var envelope = await builder.BuildAsync(new NodeId("s"), new NodeId("d"), dir.Path, dir.Path);
+
+        envelope.Manifest.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies that the diff builder stages the old and the new side of every file and runs the git diff on them.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchDiffBuilder_Stages_Old_And_New_Sides()
+    {
+        using var baseDir = new TempDirectory();
+        using var work = new TempDirectory();
+        baseDir.Write("mod.txt", "old");
+        baseDir.Write("del.txt", "bye");
+        work.Write("mod.txt", "new");
+        work.Write("add/x.txt", "added");
         var staged = new Dictionary<string, string>();
         var diffBuilder = Substitute.For<IGitDiffBuilder>();
         diffBuilder.BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
@@ -181,15 +173,11 @@ public class PatchBuildingTests
 
             return new byte[] { 42 };
         });
+        var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(baseDir.Path, work.Path);
 
-        var manifestBuilder = new DefaultFileManifestBuilder(new SnapshotFilter());
-        var now = new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
-        var clock = Substitute.For<TimeProvider>();
-        clock.GetUtcNow().Returns(now);
-        var builder = new DefaultPatchBuilder(manifestBuilder, new DefaultStateHasher(), diffBuilder, new FileBundleBuilder(_paths), _paths, clock);
+        var diff = await new PatchDiffBuilder(diffBuilder, _paths).BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), PatchDiffLimits.Full);
 
-        var envelope = await builder.BuildAsync(new NodeId("source"), new NodeId("dest"), baseDir.Path, work.Path);
-
+        diff.Should().Equal(42);
         staged.Should().BeEquivalentTo(new Dictionary<string, string>
         {
             ["a/mod.txt"] = "old",
@@ -197,31 +185,40 @@ public class PatchBuildingTests
             ["b/mod.txt"] = "new",
             ["b/add/x.txt"] = "added"
         });
-        envelope.Diff.Should().Equal(42);
-        envelope.Manifest.Should().HaveCount(3);
-        envelope.CreatedAtUtc.Should().Be(now);
-        envelope.BaseStateHash.Should().Be(new DefaultStateHasher().ComputeHash(await manifestBuilder.ScanAsync(baseDir.Path)));
-        envelope.IncomingStateHash.Should().NotBe(envelope.BaseStateHash);
-        new FileBundleBuilder(_paths).Read(envelope.Bundle, envelope.Manifest).Count.Should().Be(3);
     }
 
     /// <summary>
-    /// Verifies that no diff is built for identical directories.
+    /// Verifies that a diff built for display leaves large files out and names them, while a full diff includes them.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task PatchBuilder_Skips_Diff_For_No_Changes()
+    public async Task PatchDiffBuilder_Display_Limits_Skip_Large_Files_But_Full_Does_Not()
     {
-        using var dir = new TempDirectory();
-        dir.Write("a.txt", "same");
+        using var baseDir = new TempDirectory();
+        using var work = new TempDirectory();
+        work.Write("small.txt", "tiny");
+        work.Write("big.txt", new string('x', 5000));
+        var staged = new List<string>();
         var diffBuilder = Substitute.For<IGitDiffBuilder>();
-        var builder = new DefaultPatchBuilder(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), diffBuilder, new FileBundleBuilder(_paths), _paths, TimeProvider.System);
+        diffBuilder.BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var root = call.Arg<string>();
+            staged.Clear();
+            staged.AddRange(Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(root, file).Replace('\\', '/')));
+            return "diff\n"u8.ToArray();
+        });
+        var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(baseDir.Path, work.Path);
+        var builder = new PatchDiffBuilder(diffBuilder, _paths);
 
-        var envelope = await builder.BuildAsync(new NodeId("s"), new NodeId("d"), dir.Path, dir.Path);
+        var display = await builder.BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), new PatchDiffLimits(1000, null));
 
-        envelope.Manifest.Should().BeEmpty();
-        envelope.Diff.Should().BeEmpty();
-        await diffBuilder.DidNotReceiveWithAnyArgs().BuildAsync(default!, default);
+        staged.Should().Equal("b/small.txt");
+        Encoding.UTF8.GetString(display).Should().StartWith("# rcynq: big.txt (5000 bytes) is not shown in this diff.").And.EndWith("diff\n");
+
+        var full = await builder.BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), PatchDiffLimits.Full);
+
+        staged.Should().BeEquivalentTo("b/small.txt", "b/big.txt");
+        Encoding.UTF8.GetString(full).Should().Be("diff\n");
     }
 
     /// <summary>
@@ -235,15 +232,15 @@ public class PatchBuildingTests
         var envelope = new PatchEnvelope(
             Guid.NewGuid(), new NodeId("source"), new NodeId("dest"), DateTimeOffset.UtcNow, hash, hash,
             new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false), new FileChange(ChangeKind.Deleted, "b.txt", null, null, false) },
-            new byte[] { 1, 2 }, new byte[] { 3 }, new byte[] { 9, 9 });
+            new byte[] { 9, 9 });
 
         var json = serializer.Serialize(envelope);
-        Encoding.UTF8.GetString(json).Should().Contain("\"unifiedDiffBase64\":\"AQI=\"").And.Contain("\"kind\":\"Modified\"");
+        var text = Encoding.UTF8.GetString(json);
+        text.Should().Contain("\"kind\":\"Modified\"").And.NotContain("Base64\":\"", "no file content is embedded in the manifest");
 
         var back = serializer.Deserialize(json);
         back.Id.Should().Be(envelope.Id);
         back.Manifest.Should().BeEquivalentTo(envelope.Manifest);
-        back.Diff.Should().Equal(1, 2);
         back.Signature.Should().Equal(9, 9);
 
         var traversal = serializer.ToDto(envelope);
@@ -251,10 +248,15 @@ public class PatchBuildingTests
         var fromTraversal = () => serializer.FromDto(traversal);
         fromTraversal.Should().Throw<FormatException>();
 
-        var badBase64 = serializer.ToDto(envelope);
-        badBase64.UnifiedDiffBase64 = "!!!";
-        var fromBadBase64 = () => serializer.FromDto(badBase64);
-        fromBadBase64.Should().Throw<FormatException>();
+        var badSignature = serializer.ToDto(envelope);
+        badSignature.Signature = "!!!";
+        var fromBadSignature = () => serializer.FromDto(badSignature);
+        fromBadSignature.Should().Throw<FormatException>();
+
+        var withoutSize = serializer.ToDto(envelope);
+        withoutSize.Changes[0].SizeBytes = null;
+        var fromWithoutSize = () => serializer.FromDto(withoutSize);
+        fromWithoutSize.Should().Throw<FormatException>("the size bounds the upload of the file");
 
         var malformed = () => serializer.Deserialize("{not json"u8);
         malformed.Should().Throw<FormatException>();

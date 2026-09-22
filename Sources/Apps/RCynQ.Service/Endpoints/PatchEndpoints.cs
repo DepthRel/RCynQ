@@ -10,12 +10,13 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Sync.Services;
+using RCynQ.Sync.Transfer;
 using RCynQ.Localization;
 
 namespace RCynQ.Service.Endpoints;
 
 /// <summary>
-/// Patch channel endpoints: receive, list, inspect, resolve, send, baseline, state and history.
+/// Patch channel endpoints: receive (session, content, commit), list, inspect, resolve, send, baseline, state and history.
 /// </summary>
 public static class PatchEndpoints
 {
@@ -31,7 +32,9 @@ public static class PatchEndpoints
     /// <returns>The same route builder.</returns>
     public static IEndpointRouteBuilder MapPatchEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost(ApiRoutes.Patch, ReceiveAsync);
+        app.MapPost(ApiRoutes.PatchSessions, OpenSessionAsync);
+        app.MapPut(ApiRoutes.PatchSessionContent, ReceiveContentAsync);
+        app.MapPost(ApiRoutes.PatchSessionCommit, CommitAsync);
         app.MapGet(ApiRoutes.State, async (IPatchService patches, CancellationToken ct) => Results.Ok(await patches.GetStateAsync(ct)));
         app.MapGet(ApiRoutes.Patches, async (IPatchService patches, int? take, CancellationToken ct) => Results.Ok(await patches.GetRecentAsync(Math.Clamp(take ?? 50, 1, 500), ct)));
         app.MapGet(ApiRoutes.PatchById, async (Guid id, IPatchService patches, CancellationToken ct) =>
@@ -45,7 +48,12 @@ public static class PatchEndpoints
     }
 
     /// <summary>
-    /// Handles <c>POST /patch</c> from the peer.
+    /// The largest uncompressed manifest a peer may send.
+    /// </summary>
+    public const long MaxManifestBytes = 256L * 1024 * 1024;
+
+    /// <summary>
+    /// Handles <c>POST /patch/sessions</c> from the peer: opens (or resumes) the session with the gzip-compressed signed manifest.
     /// </summary>
     /// <param name="http">The HTTP context.</param>
     /// <param name="node">The local node.</param>
@@ -53,8 +61,8 @@ public static class PatchEndpoints
     /// <param name="serializer">The envelope serializer.</param>
     /// <param name="loggers">The logger factory.</param>
     /// <param name="cancellationToken">The request token.</param>
-    /// <returns>The result.</returns>
-    private static async Task<IResult> ReceiveAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, CancellationToken cancellationToken)
+    /// <returns>The session with the hashes of the content the receiver still lacks.</returns>
+    private static async Task<IResult> OpenSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
@@ -62,30 +70,125 @@ public static class PatchEndpoints
         }
 
         var logger = loggers.CreateLogger(LoggerCategory);
-        using var buffer = new MemoryStream();
-        await http.Request.Body.CopyToAsync(buffer, cancellationToken);
-
         PatchEnvelope envelope;
         try
         {
-            envelope = serializer.Deserialize(buffer.ToArray());
+            envelope = serializer.Deserialize(await ReadManifestAsync(http.Request, cancellationToken));
         }
-        catch (FormatException ex)
+        catch (Exception ex) when (ex is FormatException or InvalidDataException)
         {
             logger.LogWarning("Refused a malformed patch envelope: {Error}", ex.Message);
             return Rejection(PatchRejectionReason.Malformed, ex.Message);
         }
 
-        var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NodeId].FirstOrDefault(), http.Request.Headers[ApiHeaders.LinkToken].FirstOrDefault());
+        var context = ContextOf(http);
         try
         {
-            return Results.Ok(await patches.ReceiveAsync(envelope, context, cancellationToken));
+            return Results.Ok(await patches.OpenSessionAsync(envelope, context, cancellationToken));
         }
         catch (PatchRejectedException ex)
         {
             logger.LogWarning("Refused patch {PatchId} from {Sender}: {Reason} {Error}", envelope.Id, context.SenderNodeId, ex.Reason, ex.Message);
             return Rejection(ex.Reason, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Handles <c>PUT /patch/sessions/{id}/content/{sha256}</c> from the peer: stores the gzip-compressed content of one file.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <param name="sha256">The SHA-256 hash of the content.</param>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>An empty success result, or the rejection.</returns>
+    private static async Task<IResult> ReceiveContentAsync(Guid id, string sha256, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, CancellationToken cancellationToken)
+    {
+        if (!RoleCapabilities.For(node.Role).ReceivesPatches)
+        {
+            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
+        }
+
+        var logger = loggers.CreateLogger(LoggerCategory);
+        var context = ContextOf(http);
+        try
+        {
+            await using var body = IsCompressed(http.Request) ? GzipCodec.Decompress(http.Request.Body) : http.Request.Body;
+            await patches.ReceiveContentAsync(id, sha256, body, context, cancellationToken);
+            return Results.NoContent();
+        }
+        catch (PatchRejectedException ex)
+        {
+            logger.LogWarning("Refused content {Hash} of patch {PatchId} from {Sender}: {Reason} {Error}", sha256, id, context.SenderNodeId, ex.Reason, ex.Message);
+            return Rejection(ex.Reason, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /patch/sessions/{id}/commit</c> from the peer: applies the patch once all its content is stored.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The processing result, or the rejection.</returns>
+    private static async Task<IResult> CommitAsync(Guid id, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, CancellationToken cancellationToken)
+    {
+        if (!RoleCapabilities.For(node.Role).ReceivesPatches)
+        {
+            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
+        }
+
+        var logger = loggers.CreateLogger(LoggerCategory);
+        var context = ContextOf(http);
+        try
+        {
+            return Results.Ok(await patches.CommitAsync(id, context, cancellationToken));
+        }
+        catch (PatchRejectedException ex)
+        {
+            logger.LogWarning("Refused to apply patch {PatchId} from {Sender}: {Reason} {Error}", id, context.SenderNodeId, ex.Reason, ex.Message);
+            return Rejection(ex.Reason, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Reads the transport-level facts a receiver validates.
+    /// </summary>
+    /// <param name="http">The HTTP context.</param>
+    /// <returns>The sender node header and the link token.</returns>
+    private static PatchReceiveContext ContextOf(HttpContext http)
+        => new(http.Request.Headers[ApiHeaders.NodeId].FirstOrDefault(), http.Request.Headers[ApiHeaders.LinkToken].FirstOrDefault());
+
+    /// <summary>
+    /// Checks whether a request body is gzip-compressed.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns><see langword="true"/> when the <c>Content-Encoding</c> header says gzip.</returns>
+    private static bool IsCompressed(HttpRequest request)
+        => request.Headers.ContentEncoding.Any(value => string.Equals(value?.Trim(), GzipCodec.ContentEncoding, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Reads the manifest of a request into memory, decompressing it when needed, within <see cref="MaxManifestBytes"/>.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The uncompressed JSON bytes.</returns>
+    /// <exception cref="InvalidDataException">The body is not valid gzip data or larger than the limit.</exception>
+    private static async Task<byte[]> ReadManifestAsync(HttpRequest request, CancellationToken cancellationToken)
+    {
+        if (IsCompressed(request))
+        {
+            return await GzipCodec.DecompressAsync(request.Body, MaxManifestBytes, cancellationToken);
+        }
+
+        using var buffer = new MemoryStream();
+        await request.Body.CopyToAsync(buffer, cancellationToken);
+        return buffer.Length <= MaxManifestBytes ? buffer.ToArray() : throw new InvalidDataException($"The body exceeds {MaxManifestBytes} bytes.");
     }
 
     /// <summary>

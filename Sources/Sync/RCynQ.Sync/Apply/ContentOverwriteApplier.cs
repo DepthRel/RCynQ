@@ -4,57 +4,40 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
-using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Paths;
 using RCynQ.Localization;
 
 namespace RCynQ.Sync.Apply;
 
 /// <summary>
-/// <see cref="IPatchApplier"/> that writes the complete incoming content from the bundle over the target directory.
+/// <see cref="IPatchApplier"/> that writes the complete incoming content of every file over the target directory.
 /// </summary>
 /// <remarks>
-/// The bundle is verified against the manifest first. Files are written atomically; writing below a symbolic link or
+/// Content is streamed from the source to a temporary file, so a large file is never held in memory. Each file is replaced atomically; writing below a symbolic link or
 /// creating a symbolic link that points outside the target directory is refused. Unix file modes of replaced files are kept.
 /// </remarks>
-public sealed class BundleOverwriteApplier : IPatchApplier
+public sealed class ContentOverwriteApplier : IPatchApplier
 {
-    /// <summary>
-    /// The bundle builder.
-    /// </summary>
-    private readonly IFileBundleBuilder _bundles;
-
     /// <summary>
     /// The path utility.
     /// </summary>
     private readonly IPathUtility _paths;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BundleOverwriteApplier"/> class.
+    /// Initializes a new instance of the <see cref="ContentOverwriteApplier"/> class.
     /// </summary>
-    /// <param name="bundles">The bundle builder.</param>
     /// <param name="paths">The path utility.</param>
-    public BundleOverwriteApplier(IFileBundleBuilder bundles, IPathUtility paths)
+    public ContentOverwriteApplier(IPathUtility paths)
     {
-        _bundles = bundles;
         _paths = paths;
     }
 
     /// <inheritdoc />
-    public async Task<PatchApplyResult> ApplyAsync(PatchEnvelope envelope, string targetDirectory, CancellationToken cancellationToken = default)
+    public async Task<PatchApplyResult> ApplyAsync(PatchEnvelope envelope, IPatchContent content, string targetDirectory, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(content);
         var root = Path.GetFullPath(Guard.NotBlank(targetDirectory, nameof(targetDirectory)));
-        FileBundle bundle;
-        try
-        {
-            bundle = _bundles.Read(envelope.Bundle, envelope.Manifest);
-        }
-        catch (FormatException ex)
-        {
-            throw new PatchApplyException(Texts.Format("Apply.BundleInvalid", envelope.Id, ex.Message), ex);
-        }
-
         Directory.CreateDirectory(root);
         var count = 0;
         foreach (var change in envelope.Manifest)
@@ -75,11 +58,14 @@ public sealed class BundleOverwriteApplier : IPatchApplier
                 }
                 else if (change.IsSymlink)
                 {
-                    WriteSymlink(root, full, bundle.Symlinks[change.Path]);
+                    await using var link = await content.OpenReadAsync(change, cancellationToken);
+                    using var reader = new StreamReader(link, System.Text.Encoding.UTF8);
+                    WriteSymlink(root, full, await reader.ReadToEndAsync(cancellationToken));
                 }
                 else
                 {
-                    await WriteFileAsync(full, bundle.Files[change.Path], cancellationToken);
+                    await using var source = await content.OpenReadAsync(change, cancellationToken);
+                    await WriteFileAsync(full, source, cancellationToken);
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -122,10 +108,10 @@ public sealed class BundleOverwriteApplier : IPatchApplier
     /// Writes a regular file through a temporary file.
     /// </summary>
     /// <param name="full">The full path.</param>
-    /// <param name="content">The content.</param>
+    /// <param name="content">The content stream.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the file is in place.</returns>
-    private static async Task WriteFileAsync(string full, byte[] content, CancellationToken cancellationToken)
+    private static async Task WriteFileAsync(string full, Stream content, CancellationToken cancellationToken)
     {
         if (Directory.Exists(full) && new DirectoryInfo(full).LinkTarget is null)
         {
@@ -137,7 +123,11 @@ public sealed class BundleOverwriteApplier : IPatchApplier
         var temp = Path.Combine(directory, $".{Path.GetFileName(full)}.rcynq-{Guid.NewGuid():N}.tmp");
         try
         {
-            await File.WriteAllBytesAsync(temp, content, cancellationToken);
+            await using (var destination = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                await content.CopyToAsync(destination, cancellationToken);
+            }
+
             var existing = new FileInfo(full);
             if (existing.LinkTarget is not null)
             {

@@ -3,51 +3,97 @@ using RCynQ.Core.Exceptions;
 namespace RCynQ.Core.Abstractions.Storage;
 
 /// <summary>
-/// Stores and reads patch payloads (diff and bundle) on disk.
+/// Stores the on-disk payloads of patches: the display diff, the content that peers upload and the content of
+/// received patches that still wait for a decision.
 /// </summary>
 /// <remarks>
-/// The database stores patch metadata only; binary payloads live in the
-/// patches directory of the application data paths.
+/// The database stores patch metadata only. Uploaded content is kept by its SHA-256 hash in a node-wide area until the
+/// patch is committed, so an interrupted transfer can be resumed by any later attempt that needs the same files. On commit
+/// the content moves into the directory of the patch and stays there until the patch is finished.
 /// </remarks>
 public interface IPatchFileStorage
 {
     /// <summary>
-    /// Saves the diff and bundle payloads for the given patch.
+    /// Saves the diff shown to the user for the given patch.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
-    /// <param name="diff">The raw git diff payload. Must not be <see langword="null"/>.</param>
-    /// <param name="bundle">The raw file bundle payload. Must not be <see langword="null"/>.</param>
+    /// <param name="diff">The diff bytes. Must not be <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that completes when both payloads have been written.</returns>
-    /// <exception cref="ArgumentNullException">A payload is <see langword="null"/>.</exception>
-    Task SaveAsync(Guid patchId, byte[] diff, byte[] bundle, CancellationToken cancellationToken = default);
+    /// <returns>A task that completes when the diff has been written.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="diff"/> is <see langword="null"/>.</exception>
+    Task SaveDiffAsync(Guid patchId, byte[] diff, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads the diff payload of the given patch.
+    /// Reads the diff shown to the user for the given patch.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that resolves to the diff payload bytes.</returns>
-    /// <exception cref="SyncBridgeException">The patch payload is not stored.</exception>
+    /// <returns>A task that resolves to the diff bytes.</returns>
+    /// <exception cref="SyncBridgeException">The diff is not stored.</exception>
     Task<byte[]> ReadDiffAsync(Guid patchId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reads the bundle payload of the given patch.
+    /// Checks whether a diff is stored for the given patch.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that resolves to the bundle payload bytes.</returns>
-    /// <exception cref="SyncBridgeException">The patch payload is not stored.</exception>
-    Task<byte[]> ReadBundleAsync(Guid patchId, CancellationToken cancellationToken = default);
+    /// <returns>A task that resolves to <see langword="true"/> when the diff exists; otherwise <see langword="false"/>.</returns>
+    Task<bool> ExistsAsync(Guid patchId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Checks whether payloads are stored for the given patch.
+    /// Checks whether content with the given hash is available, either uploaded or already staged for the patch.
+    /// </summary>
+    /// <param name="patchId">The patch the content is needed for.</param>
+    /// <param name="sha256">The SHA-256 hash (lowercase hex).</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that resolves to <see langword="true"/> when the content is available.</returns>
+    Task<bool> HasContentAsync(Guid patchId, string sha256, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stores uploaded content after verifying that it has the announced hash and size limit.
+    /// </summary>
+    /// <param name="sha256">The SHA-256 hash (lowercase hex) the content must have.</param>
+    /// <param name="content">The content stream. Must not be <see langword="null"/>.</param>
+    /// <param name="expectedSize">The size in bytes the manifest announced; reading more than that fails.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the verified content is stored.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="content"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">The content is larger than announced or its hash differs; nothing is stored.</exception>
+    Task SaveUploadAsync(string sha256, Stream content, long expectedSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves the uploaded content of a patch into the directory of the patch.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="sha256Hashes">The hashes the patch needs.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when all content is staged.</returns>
+    /// <exception cref="SyncBridgeException">Content is missing.</exception>
+    Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens the staged content of a patch for reading.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="sha256">The SHA-256 hash (lowercase hex).</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that resolves to a readable stream; the caller disposes it.</returns>
+    /// <exception cref="SyncBridgeException">The content is not staged.</exception>
+    Task<Stream> OpenContentAsync(Guid patchId, string sha256, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the staged content of a patch that is finished; the diff stays.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>
-    /// A task that resolves to <see langword="true"/> when the payload exists;
-    /// otherwise <see langword="false"/>.
-    /// </returns>
-    Task<bool> ExistsAsync(Guid patchId, CancellationToken cancellationToken = default);
+    /// <returns>A task that completes when the content is deleted.</returns>
+    Task DeleteContentAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes uploaded content that was not committed within the given time.
+    /// </summary>
+    /// <param name="olderThanUtc">Uploads last written before this moment are deleted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the stale uploads are deleted.</returns>
+    Task PruneUploadsAsync(DateTimeOffset olderThanUtc, CancellationToken cancellationToken = default);
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
+using RCynQ.Core.Patches;
 using RCynQ.Sync.GitChannel;
 using RCynQ.Localization;
 
@@ -47,6 +48,49 @@ public static class GitEndpoints
             RoleCapabilities.For(node.Role).FetchesGit
                 ? Results.Ok(await git.PullAsync(ct))
                 : Results.NotFound(new ErrorResponse(Texts.Format("Api.NoPull", node.Role))));
+
+        app.MapPost(ApiRoutes.GitBundle, BundleAsync);
         return app;
+    }
+
+    /// <summary>
+    /// Handles <c>POST /git/bundle</c> from a Source: streams a git bundle with what the Source does not have yet.
+    /// </summary>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="request">The commits the Source already has.</param>
+    /// <param name="bundles">The bundle service.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The bundle, <c>204</c> when the Source has everything, or the rejection.</returns>
+    private static async Task<IResult> BundleAsync(HttpContext http, GitBundleRequest request, GitBundleService bundles, CancellationToken cancellationToken)
+    {
+        var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NodeId].FirstOrDefault(), http.Request.Headers[ApiHeaders.LinkToken].FirstOrDefault());
+        GitBundleFile? bundle;
+        try
+        {
+            bundle = await bundles.CreateAsync(request.Have ?? Array.Empty<string>(), context, cancellationToken);
+        }
+        catch (PatchRejectedException ex)
+        {
+            return Results.Json(new PatchRejectionResponse(ex.Reason, ex.Message), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
+        }
+        catch (SyncBridgeException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(ex.Message));
+        }
+
+        if (bundle is null)
+        {
+            return Results.NoContent();
+        }
+
+        if (bundle.Head is not null)
+        {
+            http.Response.Headers[ApiHeaders.GitHead] = bundle.Head;
+        }
+
+        // The file is deleted when the response is complete; until then it is streamed from disk, never held in memory.
+        http.Response.OnCompleted(async () => await bundle.DisposeAsync());
+        var stream = new FileStream(bundle.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return Results.Stream(stream, "application/x-git-bundle");
     }
 }

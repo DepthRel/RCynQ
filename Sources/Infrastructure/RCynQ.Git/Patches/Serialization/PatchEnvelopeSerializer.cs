@@ -11,7 +11,7 @@ namespace RCynQ.Git.Patches.Serialization;
 /// Converts patch envelopes to and from their JSON transfer representation.
 /// </summary>
 /// <remarks>
-/// Deserialization treats the input as untrusted: identifiers, hashes, Base64 payloads and every manifest path are
+/// Deserialization treats the input as untrusted: identifiers, hashes, the Base64 signature and every manifest path are
 /// validated, and non-canonical or unsafe paths are rejected before anything touches the file system.
 /// </remarks>
 public sealed class PatchEnvelopeSerializer
@@ -59,8 +59,6 @@ public sealed class PatchEnvelopeSerializer
                 SizeBytes = change.SizeBytes,
                 IsSymlink = change.IsSymlink
             }).ToList(),
-            UnifiedDiffBase64 = Convert.ToBase64String(envelope.Diff),
-            IncomingFileBundleBase64 = Convert.ToBase64String(envelope.Bundle),
             Signature = envelope.IsSigned ? Convert.ToBase64String(envelope.Signature) : null
         };
     }
@@ -94,6 +92,12 @@ public sealed class PatchEnvelopeSerializer
                     throw new FormatException(Texts.Format("Envelope.NeedsHash", change.Path));
                 }
 
+                // The size bounds the content the receiver accepts for the entry, so a compressed upload cannot expand without limit.
+                if (change.Kind != ChangeKind.Deleted && change.SizeBytes is null)
+                {
+                    throw new FormatException(Texts.Format("Envelope.NeedsSize", change.Path));
+                }
+
                 return new FileChange(change.Kind, normalized, change.Sha256, change.SizeBytes, change.IsSymlink);
             }).ToArray();
 
@@ -110,8 +114,6 @@ public sealed class PatchEnvelopeSerializer
                 dto.BaseStateHash,
                 dto.IncomingStateHash,
                 manifest,
-                Convert.FromBase64String(dto.UnifiedDiffBase64 ?? string.Empty),
-                Convert.FromBase64String(dto.IncomingFileBundleBase64 ?? string.Empty),
                 string.IsNullOrEmpty(dto.Signature) ? null : Convert.FromBase64String(dto.Signature));
         }
         catch (ArgumentException ex)

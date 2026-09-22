@@ -5,12 +5,12 @@ using RCynQ.Localization;
 namespace RCynQ.Service.Security;
 
 /// <summary>
-/// Restricts the direct endpoint listener to the two routes a neighbour needs.
+/// Restricts the direct endpoint listener to the routes a neighbour needs.
 /// </summary>
 /// <remarks>
 /// The local API is reachable with the local API token and is meant for the UI and the CLI on this computer only.
 /// The direct endpoint is open to the network, so requests arriving on its port may only receive a patch
-/// (<c>POST /patch</c>, authenticated by the link token and the envelope signature) or read the health of the node.
+/// (the <c>/patch/sessions</c> routes, authenticated by the link token and the manifest signature) or read the health of the node.
 /// Everything else is answered with 404, as if the route did not exist.
 /// </remarks>
 public sealed class PublicEndpointMiddleware
@@ -48,7 +48,9 @@ public sealed class PublicEndpointMiddleware
         }
 
         var path = context.Request.Path;
-        var allowed = (HttpMethods.IsPost(context.Request.Method) && path.Equals(ApiRoutes.Patch, StringComparison.OrdinalIgnoreCase))
+        var allowed = ((HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method))
+                && path.StartsWithSegments(ApiRoutes.PatchSessionPrefix, StringComparison.OrdinalIgnoreCase))
+            || (HttpMethods.IsPost(context.Request.Method) && path.Equals(ApiRoutes.GitBundle, StringComparison.OrdinalIgnoreCase))
             || (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase));
         if (!allowed)
         {

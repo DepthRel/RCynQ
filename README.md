@@ -110,7 +110,7 @@ RCynQ.Dbs.SQLite.DbMigrator --database <data>/rcynq.db --list   # список �
 
 ## Безопасность
 
-- Управляющий API доступен только на loopback и требует токен из `keys/api.token`. Без токена работают только `GET /health` и `POST /patch`; `/patch` проверяет link-токен, подпись и защиту от повторов.
+- Управляющий API доступен только на loopback и требует токен из `keys/api.token`. Без токена работают только `GET /health` и маршруты сессии передачи (`/patch/sessions/...`); они проверяют link-токен, подпись манифеста и защиту от повторов.
 - SSH-ключи ограничиваются через `authorized_keys`:
   - для Git — `restrict,command="git-upload-pack '<repo>'"`;
   - для форвардов — `restrict,port-forwarding,permitopen=...,command="exit 1"`.

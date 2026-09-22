@@ -68,11 +68,11 @@ public sealed class StorageTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies saving and reading patch payload files.
+    /// Verifies saving and reading the diff of a patch.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task PatchFileStorage_Saves_And_Reads()
+    public async Task PatchFileStorage_Saves_And_Reads_The_Diff()
     {
         var storage = new PatchFileStorage(_database.AppData);
         var id = Guid.NewGuid();
@@ -81,13 +81,113 @@ public sealed class StorageTests : IDisposable
         var readMissing = () => storage.ReadDiffAsync(id);
         await readMissing.Should().ThrowAsync<SyncBridgeException>();
 
-        await storage.SaveAsync(id, new byte[] { 1, 2, 3 }, new byte[] { 4, 5 });
+        await storage.SaveDiffAsync(id, new byte[] { 1, 2, 3 });
 
         (await storage.ExistsAsync(id)).Should().BeTrue();
         (await storage.ReadDiffAsync(id)).Should().Equal(1, 2, 3);
-        (await storage.ReadBundleAsync(id)).Should().Equal(4, 5);
-        Directory.GetFiles(storage.GetPatchDirectory(id)).Should().HaveCount(2, "temporary files are removed");
+        Directory.GetFiles(storage.GetPatchDirectory(id)).Should().ContainSingle("temporary files are removed");
     }
+
+    /// <summary>
+    /// Verifies that verified uploads are staged for a patch, read back and deleted, and that the diff survives.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchFileStorage_Uploads_Are_Staged_Read_And_Deleted()
+    {
+        var storage = new PatchFileStorage(_database.AppData);
+        var id = Guid.NewGuid();
+        var content = "hello\n"u8.ToArray();
+        var hash = Hash(content);
+
+        (await storage.HasContentAsync(id, hash)).Should().BeFalse();
+        await storage.SaveUploadAsync(hash, new MemoryStream(content), content.Length);
+        (await storage.HasContentAsync(id, hash)).Should().BeTrue("the upload is available to any patch");
+
+        await storage.SaveDiffAsync(id, new byte[] { 9 });
+        await storage.StageContentAsync(id, new[] { hash });
+        await using (var stream = await storage.OpenContentAsync(id, hash))
+        {
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy);
+            copy.ToArray().Should().Equal(content);
+        }
+
+        (await storage.HasContentAsync(Guid.NewGuid(), hash)).Should().BeFalse("staging moved the upload into the patch");
+
+        await storage.DeleteContentAsync(id);
+
+        (await storage.HasContentAsync(id, hash)).Should().BeFalse();
+        (await storage.ReadDiffAsync(id)).Should().Equal(9);
+    }
+
+    /// <summary>
+    /// Verifies that content with a wrong hash, or larger than announced, is refused and leaves nothing behind.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchFileStorage_Refuses_Wrong_Or_Oversized_Uploads()
+    {
+        var storage = new PatchFileStorage(_database.AppData);
+        var content = "hello\n"u8.ToArray();
+        var hash = Hash(content);
+
+        var wrongHash = () => storage.SaveUploadAsync(hash, new MemoryStream("other\n"u8.ToArray()), 100);
+        var tooLarge = () => storage.SaveUploadAsync(hash, new MemoryStream(content), content.Length - 1);
+
+        await wrongHash.Should().ThrowAsync<FormatException>();
+        await tooLarge.Should().ThrowAsync<FormatException>();
+        (await storage.HasContentAsync(Guid.NewGuid(), hash)).Should().BeFalse();
+        var uploads = Path.Combine(_database.AppData.Create().PatchesDirectory, PatchFileStorage.UploadsDirectoryName);
+        Directory.GetFiles(uploads).Should().BeEmpty("partial files are removed");
+    }
+
+    /// <summary>
+    /// Verifies that only well-formed hashes reach the file system, so a hash cannot name a path outside the storage.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData("../../evil")]
+    [InlineData("abc")]
+    [InlineData("")]
+    public async Task PatchFileStorage_Refuses_Malformed_Hashes(string hash)
+    {
+        var storage = new PatchFileStorage(_database.AppData);
+
+        var save = () => storage.SaveUploadAsync(hash, new MemoryStream(new byte[1]), 1);
+        var open = () => storage.OpenContentAsync(Guid.NewGuid(), hash);
+
+        await save.Should().ThrowAsync<ArgumentException>();
+        await open.Should().ThrowAsync<ArgumentException>();
+    }
+
+    /// <summary>
+    /// Verifies that staging content that was never uploaded fails and that old uploads are pruned.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchFileStorage_Stage_Fails_For_Missing_Content_And_Prunes_Old_Uploads()
+    {
+        var storage = new PatchFileStorage(_database.AppData);
+        var content = "old\n"u8.ToArray();
+        var hash = Hash(content);
+        var missing = () => storage.StageContentAsync(Guid.NewGuid(), new[] { hash });
+        await missing.Should().ThrowAsync<SyncBridgeException>();
+
+        await storage.SaveUploadAsync(hash, new MemoryStream(content), content.Length);
+        await storage.PruneUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
+        (await storage.HasContentAsync(Guid.NewGuid(), hash)).Should().BeTrue("a fresh upload is kept");
+
+        await storage.PruneUploadsAsync(DateTimeOffset.UtcNow.AddHours(1));
+        (await storage.HasContentAsync(Guid.NewGuid(), hash)).Should().BeFalse("an upload older than the limit is deleted");
+    }
+
+    /// <summary>
+    /// Computes the SHA-256 hash of a buffer as lowercase hex.
+    /// </summary>
+    /// <param name="content">The buffer.</param>
+    /// <returns>The hash.</returns>
+    private static string Hash(byte[] content) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content)).ToLowerInvariant();
 
     /// <summary>
     /// Deletes the test database.

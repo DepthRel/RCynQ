@@ -120,20 +120,33 @@ public sealed partial class SyncViewModel : PageViewModelBase
     }
 
     /// <summary>
-    /// Creates the baseline after confirmation.
+    /// Forces a fresh check of what is pending, without waiting for the next tab switch or server event.
     /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task ScanAsync() => await RefreshAsync();
+
+    /// <summary>
+    /// Creates or replaces the baseline after confirmation.
+    /// </summary>
+    /// <remarks>
+    /// The confirmation text and the result message differ depending on whether a baseline already exists: replacing one is a
+    /// materially different action (it can quietly hide already-differing files from future sends) and gets a stronger warning.
+    /// </remarks>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
     private async Task CreateBaselineAsync()
     {
-        if (!await _dialogs.ConfirmAsync(Texts.Get("Sync.BaselineTitle"), Texts.Get("Sync.BaselineConfirm")))
+        var wasInitialized = BaselineInitialized;
+        var confirmText = wasInitialized ? Texts.Get("Sync.BaselineRecreateConfirm") : Texts.Get("Sync.BaselineConfirm");
+        if (!await _dialogs.ConfirmAsync(Texts.Get("Sync.BaselineTitle"), confirmText))
         {
             return;
         }
 
         if (await RunSafeAsync(async () => await _api.CreateBaselineAsync()))
         {
-            InfoMessage = Texts.Get("Sync.BaselineCreated");
+            InfoMessage = Texts.Get(wasInitialized ? "Sync.BaselineRecreated" : "Sync.BaselineCreated");
             await RefreshAsync();
         }
     }

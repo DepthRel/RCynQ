@@ -1,3 +1,4 @@
+using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Validation;
 
@@ -7,9 +8,11 @@ namespace RCynQ.Core.Patches;
 /// A live patch exchanged between Source and Dest.
 /// </summary>
 /// <remarks>
-/// The envelope carries the file manifest, the unified binary diff and a zip bundle with the complete
-/// incoming content of added and modified files. Base64 encoding is a concern of the HTTP DTO.
-/// The <see cref="Signature"/> covers the canonical payload of every other field.
+/// The envelope carries the file manifest only. The content of added and modified files travels separately, one file
+/// per request, and is verified against the SHA-256 hashes of the manifest; the unified diff is never transferred, the
+/// receiver builds it from its own sync base when it is needed.
+/// The <see cref="Signature"/> covers the canonical payload of every other field, so the signed manifest also
+/// authenticates every file that is sent afterwards.
 /// </remarks>
 public sealed record PatchEnvelope
 {
@@ -23,8 +26,6 @@ public sealed record PatchEnvelope
     /// <param name="baseStateHash">The state hash of the sender's sync base.</param>
     /// <param name="incomingStateHash">The state hash of the sender's working tree at build time.</param>
     /// <param name="manifest">The ordered file changes.</param>
-    /// <param name="diff">The unified binary diff bytes.</param>
-    /// <param name="bundle">The zip bundle bytes.</param>
     /// <param name="signature">The signature bytes, or <see langword="null"/> for an unsigned envelope.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A node identifier is empty, the identifier is empty or a hash is blank.</exception>
@@ -36,8 +37,6 @@ public sealed record PatchEnvelope
         string baseStateHash,
         string incomingStateHash,
         IReadOnlyList<FileChange> manifest,
-        byte[] diff,
-        byte[] bundle,
         byte[]? signature = null)
     {
         if (id == Guid.Empty)
@@ -62,8 +61,6 @@ public sealed record PatchEnvelope
         BaseStateHash = Guard.NotBlank(baseStateHash, nameof(baseStateHash));
         IncomingStateHash = Guard.NotBlank(incomingStateHash, nameof(incomingStateHash));
         Manifest = Guard.NotNull(manifest, nameof(manifest));
-        Diff = Guard.NotNull(diff, nameof(diff));
-        Bundle = Guard.NotNull(bundle, nameof(bundle));
         Signature = signature ?? Array.Empty<byte>();
     }
 
@@ -103,14 +100,17 @@ public sealed record PatchEnvelope
     public IReadOnlyList<FileChange> Manifest { get; }
 
     /// <summary>
-    /// Gets the unified binary diff bytes.
+    /// Gets the distinct SHA-256 hashes of the file content the receiver needs, in manifest order.
     /// </summary>
-    public byte[] Diff { get; }
-
-    /// <summary>
-    /// Gets the zip bundle bytes.
-    /// </summary>
-    public byte[] Bundle { get; }
+    /// <remarks>
+    /// Added and modified entries need content; a symbolic link needs the UTF-8 text of its target. Entries with the
+    /// same content share one hash, so the content is sent once.
+    /// </remarks>
+    public IReadOnlyList<string> ContentHashes => Manifest
+        .Where(change => change.Kind != ChangeKind.Deleted && change.Sha256 is not null)
+        .Select(change => change.Sha256!)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     /// <summary>
     /// Gets the signature bytes; empty for an unsigned envelope.
@@ -131,6 +131,6 @@ public sealed record PatchEnvelope
     public PatchEnvelope WithSignature(byte[] signature)
     {
         ArgumentNullException.ThrowIfNull(signature);
-        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, Diff, Bundle, signature);
+        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, signature);
     }
 }

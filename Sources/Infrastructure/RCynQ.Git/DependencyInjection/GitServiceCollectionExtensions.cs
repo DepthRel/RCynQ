@@ -8,7 +8,6 @@ using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
-using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Git.Paths;
@@ -23,7 +22,7 @@ namespace RCynQ.Git.DependencyInjection;
 public static class GitServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers process execution, path handling, hashing, manifest, diff, bundle, patch building and Git channel services.
+    /// Registers process execution, path handling, hashing, manifest (with .gitignore support), diff, patch building and Git channel services.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection.</returns>
@@ -35,12 +34,16 @@ public static class GitServiceCollectionExtensions
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
         services.TryAddSingleton<IPathUtility, PathUtility>();
         services.TryAddSingleton<IStateHasher, DefaultStateHasher>();
-        services.TryAddSingleton(provider => new SnapshotFilter(provider.GetRequiredService<SyncBridgeOptions>().ExcludedDirectories));
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<SyncBridgeOptions>();
+            return new SnapshotFilter(options.ExcludedDirectories, options.RespectGitIgnore);
+        });
         services.TryAddSingleton<IFileManifestBuilder, DefaultFileManifestBuilder>();
         services.TryAddSingleton(provider => new GitOptions { GitExecutable = provider.GetRequiredService<SyncBridgeOptions>().Ssh.GitExecutable });
         services.TryAddSingleton<IGitCommandRunner, GitCommandRunner>();
         services.TryAddSingleton<IGitDiffBuilder, GitDiffBuilder>();
-        services.TryAddSingleton<IFileBundleBuilder, FileBundleBuilder>();
+        services.TryAddSingleton<IPatchDiffBuilder, PatchDiffBuilder>();
         services.TryAddSingleton<IPatchBuilder, DefaultPatchBuilder>();
         services.TryAddSingleton<PatchEnvelopeSerializer>();
         services.TryAddSingleton<IGitRepositoryService, GitRepositoryService>();

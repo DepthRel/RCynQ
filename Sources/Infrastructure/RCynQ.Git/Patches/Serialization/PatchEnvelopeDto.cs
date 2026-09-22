@@ -1,7 +1,7 @@
 namespace RCynQ.Git.Patches.Serialization;
 
 /// <summary>
-/// HTTP transfer object of a patch envelope.
+/// HTTP transfer object of a patch envelope: the manifest and the signature; file content travels in separate requests.
 /// </summary>
 public sealed class PatchEnvelopeDto
 {
@@ -25,12 +25,6 @@ public sealed class PatchEnvelopeDto
 
     /// <summary>Gets or sets the file changes.</summary>
     public List<FileChangeDto> Changes { get; set; } = new();
-
-    /// <summary>Gets or sets the Base64 unified diff.</summary>
-    public string UnifiedDiffBase64 { get; set; } = string.Empty;
-
-    /// <summary>Gets or sets the Base64 file bundle.</summary>
-    public string IncomingFileBundleBase64 { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the Base64 signature.</summary>
     public string? Signature { get; set; }

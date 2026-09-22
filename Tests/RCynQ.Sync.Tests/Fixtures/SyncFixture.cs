@@ -1,6 +1,7 @@
 using NSubstitute;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Patches;
+using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Data.Storage;
@@ -8,16 +9,20 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
+using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
-using RCynQ.Git.Patches.Bundles;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Paths;
+using RCynQ.Git.Processes;
+using RCynQ.Git.Repository;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
 using RCynQ.Sync.Baseline;
 using RCynQ.Sync.Conflicts;
+using RCynQ.Sync.Content;
+using RCynQ.Sync.GitChannel;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
@@ -41,6 +46,15 @@ public sealed class SyncFixture : IDisposable
     /// <summary>The shared link token.</summary>
     public const string Token = "0123456789abcdef-link-token";
 
+    /// <summary>The real Git repository service, shared by both nodes (stateless).</summary>
+    private static readonly IGitRepositoryService GitRepository = new GitRepositoryService(new GitCommandRunner(new SystemProcessRunner(), new GitOptions()));
+
+    /// <summary>The Source node data directories.</summary>
+    private readonly AppDataFactory _sourceAppData;
+
+    /// <summary>The Dest node data directories.</summary>
+    private readonly AppDataFactory _destAppData;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncFixture"/> class.
     /// </summary>
@@ -53,8 +67,10 @@ public sealed class SyncFixture : IDisposable
         SourceNode = new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, SourceWork);
         DestNode = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, DestWork, null);
         DestOptions = new SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = DestWork, LinkToken = Token };
-        SourcePaths = new SyncPaths(new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "source-data"))), SourceNode);
-        DestPaths = new SyncPaths(new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "dest-data"))), DestNode);
+        _sourceAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "source-data")));
+        _destAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "dest-data")));
+        SourcePaths = new SyncPaths(_sourceAppData, SourceNode);
+        DestPaths = new SyncPaths(_destAppData, DestNode);
         Directory.CreateDirectory(DestPaths.SyncBase);
 
         foreach (var dir in new[] { SourceWork, SourceBaseForBuild, DestWork, DestPaths.SyncBase })
@@ -97,8 +113,11 @@ public sealed class SyncFixture : IDisposable
     /// <summary>Gets the path utility.</summary>
     public PathUtility Paths { get; } = new();
 
-    /// <summary>Gets the bundle builder.</summary>
-    public FileBundleBuilder Bundles => new(Paths);
+    /// <summary>Gets the diff builder that works on the mocked git diff.</summary>
+    public PatchDiffBuilder Diffs => new(DiffBuilder, Paths);
+
+    /// <summary>Gets the applier that writes incoming content.</summary>
+    public ContentOverwriteApplier Applier => new(Paths);
 
     /// <summary>Gets the Source signer.</summary>
     public EcdsaSignatureService SourceSigner { get; } = new(new InMemorySecretStore());
@@ -153,11 +172,11 @@ public sealed class SyncFixture : IDisposable
     }
 
     /// <summary>
-    /// Creates a patch builder with the mocked diff builder.
+    /// Creates a patch builder.
     /// </summary>
     /// <returns>The builder.</returns>
     public DefaultPatchBuilder CreateBuilder()
-        => new(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), DiffBuilder, Bundles, Paths, TimeProvider.System);
+        => new(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), TimeProvider.System);
 
     /// <summary>
     /// Builds an envelope from <see cref="SourceBaseForBuild"/> to <see cref="SourceWork"/>, signed by the Source key.
@@ -194,13 +213,14 @@ public sealed class SyncFixture : IDisposable
             new LinkTokenProvider(DestOptions, new InMemorySecretStore()),
             Patches,
             Storage,
-            Bundles,
+            Diffs,
             new ConflictDetector(Paths),
-            new BundleOverwriteApplier(Bundles, Paths),
+            Applier,
             CreateOutcomes(),
-            CreateTracker(DestNode, DestPaths),
+            CreateTracker(DestNode, DestPaths, _destAppData),
             DestPaths,
-            new WorkingTreeLock());
+            new WorkingTreeLock(),
+            TimeProvider.System);
 
     /// <summary>
     /// Creates the Dest conflict resolver.
@@ -209,10 +229,11 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The resolver.</returns>
     public DefaultConflictResolver CreateResolver(Git.Commands.IGitCommandRunner git)
     {
-        var applier = new BundleOverwriteApplier(Bundles, Paths);
+        var applier = Applier;
         return new DefaultConflictResolver(
             applier,
             new GitPatchApplier(git, new Git.Repository.GitRepositoryService(git), Paths),
+            Diffs,
             new BackupService(DestPaths, Paths, TimeProvider.System),
             DestPaths);
     }
@@ -226,7 +247,7 @@ public sealed class SyncFixture : IDisposable
     public PatchService CreateSourceService(IPatchSender sender, IChainLinkRepository chain)
     {
         var workingTreeLock = new WorkingTreeLock();
-        var tracker = CreateTracker(SourceNode, SourcePaths);
+        var tracker = CreateTracker(SourceNode, SourcePaths, _sourceAppData);
         var manifest = new DefaultFileManifestBuilder(new SnapshotFilter());
         return new PatchService(
             SourceNode,
@@ -238,13 +259,42 @@ public sealed class SyncFixture : IDisposable
             Substitute.For<IPatchReceiver>(),
             Substitute.For<IConflictResolver>(),
             new ConflictDetector(Paths),
-            new BundleOverwriteApplier(Bundles, Paths),
+            new SyncBaseUpdater(Applier, Paths),
+            Diffs,
+            Paths,
             Patches,
             Storage,
             CreateOutcomes(),
             tracker,
             new BaselineService(SourceNode, SourcePaths, manifest, new DefaultStateHasher(), Substitute.For<ISnapshotRepository>(), Paths, tracker, workingTreeLock, TimeProvider.System),
-            workingTreeLock);
+            workingTreeLock,
+            CreateBaseResolver(SourceNode, SourcePaths, _sourceAppData));
+    }
+
+    /// <summary>
+    /// Gets the reader of the Source working tree, the content a sender streams.
+    /// </summary>
+    public WorkdirPatchContent SourceContent => new(SourceWork, Paths);
+
+    /// <summary>
+    /// Delivers an envelope to a receiver the way the sender does: opens the session, uploads the missing content from the
+    /// Source working tree and commits.
+    /// </summary>
+    /// <param name="receiver">The receiver.</param>
+    /// <param name="envelope">The signed envelope.</param>
+    /// <param name="context">The request context.</param>
+    /// <returns>The result of the commit.</returns>
+    public async Task<PatchApplyResult> DeliverAsync(IPatchReceiver receiver, PatchEnvelope envelope, PatchReceiveContext context)
+    {
+        var session = await receiver.OpenSessionAsync(envelope, context);
+        foreach (var hash in session.MissingContent)
+        {
+            var change = envelope.Manifest.First(candidate => candidate.Kind != ChangeKind.Deleted && candidate.Sha256 == hash);
+            await using var stream = await SourceContent.OpenReadAsync(change);
+            await receiver.ReceiveContentAsync(envelope.Id, hash, stream, context);
+        }
+
+        return await receiver.CommitAsync(envelope.Id, context);
     }
 
     /// <summary>
@@ -271,6 +321,10 @@ public sealed class SyncFixture : IDisposable
         {
             // Best effort cleanup.
         }
+        catch (UnauthorizedAccessException)
+        {
+            // Git keeps object files read-only on some systems; best effort cleanup.
+        }
     }
 
     /// <summary>
@@ -284,9 +338,32 @@ public sealed class SyncFixture : IDisposable
     /// </summary>
     /// <param name="node">The node.</param>
     /// <param name="paths">The paths.</param>
+    /// <param name="appData">The node data directories.</param>
     /// <returns>The tracker.</returns>
-    private StateTracker CreateTracker(NodeConfig node, SyncPaths paths)
-        => new(StateStore, new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), paths, node, TimeProvider.System);
+    private StateTracker CreateTracker(NodeConfig node, SyncPaths paths, AppDataFactory appData)
+        => new(StateStore, new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), paths, node, TimeProvider.System, CreateBaseResolver(node, paths, appData));
+
+    /// <summary>
+    /// Creates the resolver of the directory to compare a node's working tree against, backed by the real Git plumbing so
+    /// tests that <c>git init</c> a working tree can exercise the Git-native path.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <param name="paths">The paths.</param>
+    /// <param name="appData">The node data directories.</param>
+    /// <returns>The resolver.</returns>
+    private static GitPendingChangesBaseResolver CreateBaseResolver(NodeConfig node, SyncPaths paths, AppDataFactory appData)
+        => new(node, paths, GitRepository, appData);
+
+    /// <summary>
+    /// Creates the resolver of the directory to compare <see cref="SourceNode"/> or <see cref="DestNode"/> against, for
+    /// tests that build a <see cref="Sync.Diagnostics.Checks.SnapshotIntegrityCheck"/> or similar directly.
+    /// </summary>
+    /// <param name="node">Either <see cref="SourceNode"/> or <see cref="DestNode"/>.</param>
+    /// <returns>The resolver.</returns>
+    public GitPendingChangesBaseResolver CreateBaseResolver(NodeConfig node)
+        => node.Id == SourceNode.Id
+            ? CreateBaseResolver(SourceNode, SourcePaths, _sourceAppData)
+            : CreateBaseResolver(DestNode, DestPaths, _destAppData);
 
     /// <summary>
     /// Creates a directory below the root.

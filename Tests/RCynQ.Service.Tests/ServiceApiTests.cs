@@ -18,6 +18,7 @@ using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Patches.Serialization;
+using RCynQ.Sync.Transfer;
 using RCynQ.Service.Tests.Support;
 using RCynQ.Sync.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -82,7 +83,24 @@ public sealed class ServiceApiTests
     {
         await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, Substitute.For<IPatchService>()));
 
-        var response = await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.Patch, new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"));
+        var response = await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.PatchSessions, new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
+    }
+
+    /// <summary>
+    /// Verifies that a body announced as gzip but not valid gzip data is refused as malformed.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Patch_Corrupt_Gzip_Returns_400()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, Substitute.For<IPatchService>()));
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessions) { Content = new ByteArrayContent("this is not gzip"u8.ToArray()) };
+        request.Content.Headers.ContentEncoding.Add("gzip");
+
+        var response = await host.CreateClient(withApiToken: false).SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
@@ -101,35 +119,84 @@ public sealed class ServiceApiTests
     public async Task Patch_Rejections_Map_To_Status(PatchRejectionReason reason, HttpStatusCode status)
     {
         var patches = Substitute.For<IPatchService>();
-        patches.ReceiveAsync(Arg.Any<PatchEnvelope>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+        patches.OpenSessionAsync(Arg.Any<PatchEnvelope>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new PatchRejectedException(reason, "refused"));
+        patches.CommitAsync(Arg.Any<Guid>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new PatchRejectedException(reason, "refused"));
         await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
 
         var response = await PostEnvelopeAsync(host, "source-1", "presented-token");
+        var commit = await PostCommitAsync(host, Guid.NewGuid(), "source-1", "presented-token");
 
         response.StatusCode.Should().Be(status);
+        commit.StatusCode.Should().Be(status);
         (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(reason);
-        await patches.Received(1).ReceiveAsync(Arg.Any<PatchEnvelope>(), new PatchReceiveContext("source-1", "presented-token"), Arg.Any<CancellationToken>());
+        await patches.Received(1).OpenSessionAsync(Arg.Any<PatchEnvelope>(), new PatchReceiveContext("source-1", "presented-token"), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
-    /// Verifies a successful receive without the local API token.
+    /// Verifies the three routes of a session without the local API token: the manifest arrives decompressed, the content
+    /// arrives decompressed as a stream, and the commit returns the result.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Patch_Success_Returns_Result()
+    public async Task Session_Routes_Open_Receive_Content_And_Commit()
     {
         var patches = Substitute.For<IPatchService>();
-        patches.ReceiveAsync(Arg.Any<PatchEnvelope>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
-            .Returns(call => PatchApplyResult.Applied(call.Arg<PatchEnvelope>().Id, 2));
+        PatchEnvelope? opened = null;
+        patches.OpenSessionAsync(Arg.Any<PatchEnvelope>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                opened = call.Arg<PatchEnvelope>();
+                return new PatchSession(opened.Id, new[] { new string('b', 64) });
+            });
+        byte[]? received = null;
+        patches.ReceiveContentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                using var copy = new MemoryStream();
+                await call.Arg<Stream>().CopyToAsync(copy);
+                received = copy.ToArray();
+            });
+        patches.CommitAsync(Arg.Any<Guid>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+            .Returns(call => PatchApplyResult.Applied(call.Arg<Guid>(), 2));
         await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
 
-        var response = await PostEnvelopeAsync(host, "source-1", ServiceTestHost.LinkToken);
+        var open = await PostEnvelopeAsync(host, "source-1", ServiceTestHost.LinkToken);
+        open.StatusCode.Should().Be(HttpStatusCode.OK);
+        var session = await open.Content.ReadFromJsonAsync<PatchSession>(Json);
+        session!.PatchId.Should().Be(opened!.Id);
+        session.MissingContent.Should().Equal(new string('b', 64));
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<PatchApplyResult>(Json);
+        var content = string.Concat(Enumerable.Repeat("streamed content\n", 50_000));
+        var put = await PutContentAsync(host, opened.Id, new string('b', 64), content, "source-1", ServiceTestHost.LinkToken);
+        put.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        System.Text.Encoding.UTF8.GetString(received!).Should().Be(content, "the service decompresses the body before handing it over");
+        await patches.Received(1).ReceiveContentAsync(opened.Id, new string('b', 64), Arg.Any<Stream>(), new PatchReceiveContext("source-1", ServiceTestHost.LinkToken), Arg.Any<CancellationToken>());
+
+        var commit = await PostCommitAsync(host, opened.Id, "source-1", ServiceTestHost.LinkToken);
+        commit.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await commit.Content.ReadFromJsonAsync<PatchApplyResult>(Json);
         result!.Status.Should().Be(PatchStatus.Applied);
         result.AppliedFileCount.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Verifies that a content upload refused by the receiver is answered with the rejection reason.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Refused_Content_Returns_The_Rejection()
+    {
+        var patches = Substitute.For<IPatchService>();
+        patches.ReceiveContentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new PatchRejectedException(PatchRejectionReason.Malformed, "hash mismatch"));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+
+        var response = await PutContentAsync(host, Guid.NewGuid(), new string('c', 64), "x", "source-1", ServiceTestHost.LinkToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Error.Should().Contain("hash mismatch");
     }
 
     /// <summary>
@@ -169,9 +236,12 @@ public sealed class ServiceApiTests
         await using var host = await ServiceTestHost.StartAsync(NodeRole.Mediator, services => Replace(services, patches));
 
         (await PostEnvelopeAsync(host, "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PutContentAsync(host, Guid.NewGuid(), new string('a', 64), "x", "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PostCommitAsync(host, Guid.NewGuid(), "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await host.CreateClient().PostAsync(ApiRoutes.SendPatch, null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await host.CreateClient().GetFromJsonAsync<NodeConfigurationDto>(ApiRoutes.Config, Json))!.Capabilities.ShowsSyncTab.Should().BeFalse();
-        await patches.DidNotReceiveWithAnyArgs().ReceiveAsync(default!, default!, default);
+        await patches.DidNotReceiveWithAnyArgs().OpenSessionAsync(default!, default!, default);
+        await patches.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default);
     }
 
     /// <summary>
@@ -295,7 +365,7 @@ public sealed class ServiceApiTests
     }
 
     /// <summary>
-    /// Posts a valid unsigned envelope to <c>/patch</c>.
+    /// Posts a valid unsigned envelope, gzip-compressed, to <c>/patch/sessions</c>.
     /// </summary>
     /// <param name="host">The host.</param>
     /// <param name="sender">The X-Node-Id header value.</param>
@@ -304,10 +374,48 @@ public sealed class ServiceApiTests
     private static async Task<HttpResponseMessage> PostEnvelopeAsync(ServiceTestHost host, string sender, string token)
     {
         var hash = new string('a', 64);
-        var envelope = new PatchEnvelope(Guid.NewGuid(), new NodeId(sender), new NodeId("dest-1"), DateTimeOffset.UtcNow, hash, hash, Array.Empty<FileChange>(), Array.Empty<byte>(), Array.Empty<byte>());
-        var body = host.Services.GetRequiredService<PatchEnvelopeSerializer>().Serialize(envelope);
-        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.Patch) { Content = new ByteArrayContent(body) };
+        var envelope = new PatchEnvelope(Guid.NewGuid(), new NodeId(sender), new NodeId("dest-1"), DateTimeOffset.UtcNow, hash, hash, Array.Empty<FileChange>());
+        var body = GzipCodec.Compress(host.Services.GetRequiredService<PatchEnvelopeSerializer>().Serialize(envelope));
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessions) { Content = new ByteArrayContent(body) };
         request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        request.Content.Headers.ContentEncoding.Add(GzipCodec.ContentEncoding);
+        request.Headers.Add(ApiHeaders.NodeId, sender);
+        request.Headers.Add(ApiHeaders.LinkToken, token);
+        return await host.CreateClient(withApiToken: false).SendAsync(request);
+    }
+
+    /// <summary>
+    /// Uploads gzip-compressed text as the content of a file of a session, streamed the way the sender does.
+    /// </summary>
+    /// <param name="host">The host.</param>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="sha256">The hash in the route.</param>
+    /// <param name="text">The content.</param>
+    /// <param name="sender">The X-Node-Id header value.</param>
+    /// <param name="token">The X-Link-Token header value.</param>
+    /// <returns>The response.</returns>
+    private static async Task<HttpResponseMessage> PutContentAsync(ServiceTestHost host, Guid patchId, string sha256, string text, string sender, string token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, ApiRoutes.PatchSessionContentPath(patchId, sha256))
+        {
+            Content = new GzipStreamContent(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)))
+        };
+        request.Headers.Add(ApiHeaders.NodeId, sender);
+        request.Headers.Add(ApiHeaders.LinkToken, token);
+        return await host.CreateClient(withApiToken: false).SendAsync(request);
+    }
+
+    /// <summary>
+    /// Posts the commit of a session.
+    /// </summary>
+    /// <param name="host">The host.</param>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="sender">The X-Node-Id header value.</param>
+    /// <param name="token">The X-Link-Token header value.</param>
+    /// <returns>The response.</returns>
+    private static async Task<HttpResponseMessage> PostCommitAsync(ServiceTestHost host, Guid patchId, string sender, string token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessionCommitPath(patchId));
         request.Headers.Add(ApiHeaders.NodeId, sender);
         request.Headers.Add(ApiHeaders.LinkToken, token);
         return await host.CreateClient(withApiToken: false).SendAsync(request);

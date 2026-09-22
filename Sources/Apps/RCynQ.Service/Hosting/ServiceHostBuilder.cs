@@ -43,7 +43,7 @@ public static class ServiceHostBuilder
     public const string EnvironmentPrefix = "RCYNQ_";
 
     /// <summary>
-    /// The maximum accepted request body (patch envelopes carry whole files).
+    /// The maximum accepted request body: the compressed content of one file of a patch, or a compressed manifest.
     /// </summary>
     public const long MaxRequestBodyBytes = 512L * 1024 * 1024;
 

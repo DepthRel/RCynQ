@@ -14,6 +14,7 @@ using RCynQ.Core.State;
 using RCynQ.Git.Commands;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
+using RCynQ.Git.Processes;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
 using RCynQ.Sync.Diagnostics.AutoFix;
 using RCynQ.Sync.Diagnostics.Checks;
@@ -188,7 +189,7 @@ public sealed class DiagnosticsTests : IDisposable
         var manifest = new DefaultFileManifestBuilder(new SnapshotFilter());
         var hasher = new DefaultStateHasher();
         var state = Substitute.For<INodeStateStore>();
-        var check = new SnapshotIntegrityCheck(manifest, hasher, state);
+        var check = new SnapshotIntegrityCheck(manifest, hasher, state, _fixture.CreateBaseResolver(_fixture.DestNode));
         var paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "dest-data"));
         var context = new DiagnosticContext(_fixture.DestNode, new SyncBridgeOptions(), Array.Empty<ChainLinkConfig>(), paths);
         var actual = hasher.ComputeHash(await manifest.ScanAsync(paths.SyncBaseDirectory));
@@ -201,6 +202,37 @@ public sealed class DiagnosticsTests : IDisposable
 
         var noBase = context with { Paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "nowhere")) };
         (await check.RunAsync(noBase)).SuggestedFix.Should().Contain("baseline");
+    }
+
+    /// <summary>
+    /// Verifies that a Git-native Source (a Git working tree with a resolved Dest tracking ref) passes without a
+    /// sync-base snapshot, instead of being told to create one it does not need.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task SnapshotIntegrity_Check_Passes_A_Git_Native_Source_Without_A_Snapshot()
+    {
+        var probe = await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
+        if (probe.ExitCode != 0)
+        {
+            return;
+        }
+
+        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        await git.RunAsync(new[] { "init", "--quiet", "--initial-branch=main" }, _fixture.SourceWork);
+        await git.RunAsync(new[] { "add", "-A" }, _fixture.SourceWork);
+        await git.RunAsync(new[] { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "first" }, _fixture.SourceWork);
+        await git.RunAsync(new[] { "update-ref", "refs/remotes/dest/main", "HEAD" }, _fixture.SourceWork);
+
+        var check = new SnapshotIntegrityCheck(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), Substitute.For<INodeStateStore>(), _fixture.CreateBaseResolver(_fixture.SourceNode));
+        var paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "source-data"));
+        var context = new DiagnosticContext(_fixture.SourceNode, new SyncBridgeOptions(), Array.Empty<ChainLinkConfig>(), paths);
+
+        var result = await check.RunAsync(context);
+
+        result.Passed.Should().BeTrue();
+        result.Message.Should().Contain("no snapshot is needed");
+        Directory.Exists(paths.SyncBaseDirectory).Should().BeFalse();
     }
 
     /// <summary>

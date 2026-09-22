@@ -1,4 +1,5 @@
 using RCynQ.Core.Abstractions.Patches;
+using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Storage;
@@ -7,10 +8,13 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
+using RCynQ.Git.Patches.Diff;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Baseline;
 using RCynQ.Sync.Conflicts;
+using RCynQ.Sync.Content;
+using RCynQ.Sync.GitChannel;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
@@ -56,8 +60,14 @@ public sealed class PatchService : IPatchService
     /// <summary>The conflict detector.</summary>
     private readonly ConflictDetector _detector;
 
-    /// <summary>The bundle applier.</summary>
-    private readonly BundleOverwriteApplier _applier;
+    /// <summary>The updater of the sync base after a delivery.</summary>
+    private readonly SyncBaseUpdater _baseUpdater;
+
+    /// <summary>The diff builder.</summary>
+    private readonly IPatchDiffBuilder _diffs;
+
+    /// <summary>The path utility.</summary>
+    private readonly IPathUtility _pathUtility;
 
     /// <summary>The patch repository.</summary>
     private readonly IPatchRepository _patches;
@@ -77,6 +87,9 @@ public sealed class PatchService : IPatchService
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
 
+    /// <summary>The resolver of the directory to compare the working tree against.</summary>
+    private readonly IPendingChangesBaseResolver _sendBaseResolver;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchService"/> class.
     /// </summary>
@@ -89,13 +102,16 @@ public sealed class PatchService : IPatchService
     /// <param name="receiver">The receiver.</param>
     /// <param name="resolver">The conflict resolver.</param>
     /// <param name="detector">The conflict detector.</param>
-    /// <param name="applier">The bundle applier.</param>
+    /// <param name="baseUpdater">The updater of the sync base after a delivery.</param>
+    /// <param name="diffs">The diff builder.</param>
+    /// <param name="pathUtility">The path utility.</param>
     /// <param name="patches">The patch repository.</param>
     /// <param name="storage">The payload storage.</param>
     /// <param name="outcomes">The outcome recorder.</param>
     /// <param name="tracker">The state tracker.</param>
     /// <param name="baseline">The baseline service.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
+    /// <param name="sendBaseResolver">The resolver of the directory to compare the working tree against.</param>
     public PatchService(
         NodeConfig node,
         SyncPaths paths,
@@ -106,13 +122,16 @@ public sealed class PatchService : IPatchService
         IPatchReceiver receiver,
         IConflictResolver resolver,
         ConflictDetector detector,
-        BundleOverwriteApplier applier,
+        SyncBaseUpdater baseUpdater,
+        IPatchDiffBuilder diffs,
+        IPathUtility pathUtility,
         IPatchRepository patches,
         IPatchFileStorage storage,
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
         BaselineService baseline,
-        WorkingTreeLock workingTreeLock)
+        WorkingTreeLock workingTreeLock,
+        IPendingChangesBaseResolver sendBaseResolver)
     {
         _node = node;
         _paths = paths;
@@ -123,7 +142,10 @@ public sealed class PatchService : IPatchService
         _receiver = receiver;
         _resolver = resolver;
         _detector = detector;
-        _applier = applier;
+        _baseUpdater = baseUpdater;
+        _diffs = diffs;
+        _sendBaseResolver = sendBaseResolver;
+        _pathUtility = pathUtility;
         _patches = patches;
         _storage = storage;
         _outcomes = outcomes;
@@ -147,42 +169,48 @@ public sealed class PatchService : IPatchService
             throw new SyncBridgeException(ex.Message, ex);
         }
 
-        if (!_paths.BaselineInitialized)
-        {
-            throw new SyncBridgeException(Texts.Get("Patch.NoBaseline"));
-        }
-
         PatchEnvelope envelope;
-        using (await _lock.AcquireAsync(cancellationToken))
+        WorkdirPatchContent content;
+        bool isGitNativeBase;
+        await using (var sendBase = await _sendBaseResolver.ResolveAsync(cancellationToken)
+            ?? throw new SyncBridgeException(Texts.Get("Patch.NoBaseline")))
         {
-            envelope = await _builder.BuildAsync(_node.Id, route.Endpoint.Peer.Id, _paths.SyncBase, _paths.Workdir, cancellationToken);
+            using (await _lock.AcquireAsync(cancellationToken))
+            {
+                envelope = await _builder.BuildAsync(_node.Id, route.Endpoint.Peer.Id, sendBase.Directory, _paths.Workdir, cancellationToken);
+            }
+
+            if (envelope.Manifest.Count == 0)
+            {
+                return new SendPatchResult(false, null, null, Texts.Get("Patch.NothingToSend"));
+            }
+
+            envelope = envelope.WithSignature(await _signatures.SignAsync(PayloadCanonicalizer.Build(envelope), cancellationToken));
+            content = new WorkdirPatchContent(_paths.Workdir, _pathUtility);
+            await SaveDisplayDiffAsync(envelope, content, sendBase.Directory, cancellationToken);
+            isGitNativeBase = sendBase.IsGitNative;
         }
 
-        if (envelope.Manifest.Count == 0)
-        {
-            return new SendPatchResult(false, null, null, Texts.Get("Patch.NothingToSend"));
-        }
-
-        envelope = envelope.WithSignature(await _signatures.SignAsync(PayloadCanonicalizer.Build(envelope), cancellationToken));
-        await _storage.SaveAsync(envelope.Id, envelope.Diff, envelope.Bundle, cancellationToken);
         var metadata = PatchMetadata.FromEnvelope(envelope, PatchDirection.Outgoing);
         await _patches.UpsertAsync(metadata, cancellationToken);
 
         PatchApplyResult result;
         try
         {
-            result = await _sender.SendAsync(envelope, links, cancellationToken);
+            result = await _sender.SendAsync(envelope, content, links, cancellationToken);
         }
-        catch (SyncBridgeException ex)
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
         {
             result = PatchApplyResult.Failed(envelope.Id, ex.Message);
         }
 
-        if (result.Status == PatchStatus.Applied)
+        if (result.Status == PatchStatus.Applied && !isGitNativeBase)
         {
             using (await _lock.AcquireAsync(cancellationToken))
             {
-                await _applier.ApplyAsync(envelope, _paths.SyncBase, cancellationToken);
+                // Files edited while the patch was on its way stay out of the base and travel with the next patch.
+                // Not needed in Git-native mode: the comparison base is always freshly exported from what Dest last had.
+                await _baseUpdater.UpdateAsync(envelope, _paths.Workdir, _paths.SyncBase, cancellationToken);
             }
         }
 
@@ -192,8 +220,16 @@ public sealed class PatchService : IPatchService
     }
 
     /// <inheritdoc />
-    public Task<PatchApplyResult> ReceiveAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
-        => _receiver.ReceiveAsync(envelope, context, cancellationToken);
+    public Task<PatchSession> OpenSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => _receiver.OpenSessionAsync(envelope, context, cancellationToken);
+
+    /// <inheritdoc />
+    public Task ReceiveContentAsync(Guid patchId, string sha256, Stream content, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => _receiver.ReceiveContentAsync(patchId, sha256, content, context, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PatchApplyResult> CommitAsync(Guid patchId, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => _receiver.CommitAsync(patchId, context, cancellationToken);
 
     /// <inheritdoc />
     public async Task<PatchApplyResult> ResolveAsync(Guid patchId, ConflictPolicy policy, CancellationToken cancellationToken = default)
@@ -213,10 +249,7 @@ public sealed class PatchService : IPatchService
 
         var envelope = new PatchEnvelope(
             metadata.Id, metadata.SourceNode, metadata.TargetNode, metadata.CreatedAtUtc, metadata.BaseStateHash, metadata.IncomingStateHash,
-            metadata.Manifest,
-            await _storage.ReadDiffAsync(patchId, cancellationToken),
-            await _storage.ReadBundleAsync(patchId, cancellationToken),
-            metadata.Signature);
+            metadata.Manifest, metadata.Signature);
 
         PatchApplyResult result;
         using (await _lock.AcquireAsync(cancellationToken))
@@ -224,11 +257,17 @@ public sealed class PatchService : IPatchService
             try
             {
                 var conflicts = await _detector.DetectAsync(envelope.Manifest, _paths.Workdir, _paths.SyncBase, cancellationToken);
-                result = await _resolver.ResolveAsync(envelope, conflicts, policy, cancellationToken);
+                result = await _resolver.ResolveAsync(envelope, new StoredPatchContent(patchId, _storage), conflicts, policy, cancellationToken);
             }
-            catch (Exception ex) when (ex is PatchApplyException or IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is PatchApplyException or SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
             {
                 result = PatchApplyResult.Failed(patchId, ex.Message);
+            }
+
+            // A patch that is decided no longer needs its content; one that still waits for a decision keeps it.
+            if (result.Status is PatchStatus.ConflictResolved or PatchStatus.Rejected)
+            {
+                await _storage.DeleteContentAsync(patchId, cancellationToken);
             }
         }
 
@@ -244,7 +283,7 @@ public sealed class PatchService : IPatchService
         var pending = await _tracker.GetPendingChangesAsync(cancellationToken);
         var recent = await _patches.GetRecentAsync(500, cancellationToken);
         var conflicts = recent.Count(patch => patch.Direction == PatchDirection.Incoming && patch.Status == PatchStatus.ConflictPending);
-        var baseline = _node.ParticipatesInPatchChannel && _paths.BaselineInitialized;
+        var baseline = await _tracker.IsSendReadyAsync(cancellationToken);
         return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, state, baseline, pending, conflicts);
     }
 
@@ -263,6 +302,27 @@ public sealed class PatchService : IPatchService
     /// <inheritdoc />
     public Task<SnapshotInfo> InitializeBaselineAsync(CancellationToken cancellationToken = default)
         => _baseline.CreateBaselineAsync(cancellationToken);
+
+    /// <summary>
+    /// Builds and stores the diff shown to the user, before the patch changes the comparison base it is built from.
+    /// </summary>
+    /// <param name="envelope">The patch.</param>
+    /// <param name="content">The source of the incoming content.</param>
+    /// <param name="baseDirectory">The directory the patch was built against.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the diff is stored, or skipped because Git is not available.</returns>
+    private async Task SaveDisplayDiffAsync(PatchEnvelope envelope, IPatchContent content, string baseDirectory, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var diff = await _diffs.BuildAsync(envelope.Manifest, baseDirectory, content, PatchDiffLimits.Display, cancellationToken);
+            await _storage.SaveDiffAsync(envelope.Id, diff, cancellationToken);
+        }
+        catch (GitExecutionException)
+        {
+            // The diff is a convenience for the user; a missing Git must not stop the patch.
+        }
+    }
 
     /// <summary>
     /// Throws for nodes outside the patch channel.

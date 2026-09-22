@@ -4,7 +4,7 @@ using RCynQ.Core.Patches;
 namespace RCynQ.Core.Abstractions.Patches;
 
 /// <summary>
-/// Builds complete patch envelopes from two directory states.
+/// Builds patch envelopes (the signed manifest, without file content) from two directory states.
 /// </summary>
 public interface IPatchBuilder
 {
@@ -16,7 +16,7 @@ public interface IPatchBuilder
     /// <param name="baseDirectory">The path of the base (outgoing) directory.</param>
     /// <param name="incomingDirectory">The path of the incoming directory.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The complete patch envelope.</returns>
+    /// <returns>The patch envelope with the manifest and the state hashes.</returns>
     /// <exception cref="ArgumentException">A directory path is blank.</exception>
     Task<PatchEnvelope> BuildAsync(
         NodeId sourceNode,

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using RCynQ.Core.Abstractions.Events;
+using RCynQ.Core.Abstractions.Ssh;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Storage;
@@ -51,9 +52,10 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<ReplayGuard>();
         services.TryAddSingleton<LinkTokenProvider>();
         services.TryAddSingleton<ConflictDetector>();
-        services.TryAddSingleton<BundleOverwriteApplier>();
+        services.TryAddSingleton<ContentOverwriteApplier>();
+        services.TryAddSingleton<SyncBaseUpdater>();
         services.TryAddSingleton<GitPatchApplier>();
-        services.TryAddSingleton<IPatchApplier>(provider => provider.GetRequiredService<BundleOverwriteApplier>());
+        services.TryAddSingleton<IPatchApplier>(provider => provider.GetRequiredService<ContentOverwriteApplier>());
         services.TryAddSingleton<BackupService>();
         services.TryAddSingleton<IConflictResolver, DefaultConflictResolver>();
         services.TryAddSingleton<StateTracker>();
@@ -71,6 +73,12 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<INetworkInterfaceSource, SystemNetworkInterfaceSource>();
         services.TryAddSingleton<INodeEnvironmentProbe, NodeEnvironmentProbe>();
         services.TryAddSingleton<Configuration.Access.PeerAccessService>();
+        services.TryAddSingleton<GitChannel.GitBundleService>();
+        services.TryAddSingleton<GitChannel.GitPullBaseUpdater>();
+        services.TryAddSingleton<GitChannel.IPendingChangesBaseResolver, GitChannel.GitPendingChangesBaseResolver>();
+        services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<GitChannel.GitBundleClient>(
+            provider,
+            new PeerLinkFactory(new SocketsHttpHandler { UseProxy = false }, provider.GetRequiredService<ILocalForwardManager>())));
         services.TryAddSingleton<GitChannel.GitChannelService>();
         return services;
     }

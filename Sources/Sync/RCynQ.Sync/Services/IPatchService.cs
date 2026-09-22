@@ -19,14 +19,36 @@ public interface IPatchService
     Task<SendPatchResult> SendAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Receives a patch from the peer.
+    /// Opens (or resumes) the session of a patch from the peer with its signed manifest.
     /// </summary>
-    /// <param name="envelope">The envelope.</param>
+    /// <param name="envelope">The envelope with the manifest.</param>
+    /// <param name="context">The request context.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The session with the content that is still missing.</returns>
+    /// <exception cref="PatchRejectedException">The envelope was refused.</exception>
+    Task<PatchSession> OpenSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Receives the content of one file of an open session.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="sha256">The SHA-256 hash the content must have.</param>
+    /// <param name="content">The uncompressed content stream.</param>
+    /// <param name="context">The request context.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the content is stored.</returns>
+    /// <exception cref="PatchRejectedException">The request was refused or the content does not match the manifest.</exception>
+    Task ReceiveContentAsync(Guid patchId, string sha256, Stream content, PatchReceiveContext context, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies the patch of an open session.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
     /// <param name="context">The request context.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The processing result.</returns>
-    /// <exception cref="PatchRejectedException">The envelope was refused.</exception>
-    Task<PatchApplyResult> ReceiveAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default);
+    /// <exception cref="PatchRejectedException">The request was refused or the content is incomplete.</exception>
+    Task<PatchApplyResult> CommitAsync(Guid patchId, PatchReceiveContext context, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resolves an incoming patch that is waiting for a conflict decision or failed.

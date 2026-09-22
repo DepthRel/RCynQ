@@ -1,35 +1,36 @@
+using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Ssh;
+using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Patches.Serialization;
+using RCynQ.Localization;
 using RCynQ.Ssh.Routing;
-using RCynQ.Sync.Endpoint;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
-using RCynQ.Localization;
 
 namespace RCynQ.Sync.Transfer;
 
 /// <summary>
-/// <see cref="IPatchSender"/> that posts envelopes to the peer's loopback endpoint through an SSH local forward.
+/// <see cref="IPatchSender"/> that delivers a patch to the peer over HTTP as a session, one file per request.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Flow: validate the envelope and chain, sign, start <c>ssh -N -L</c> (with <c>-J</c> through the mediators),
-/// <c>POST http://127.0.0.1:&lt;forward&gt;/patch</c> with <c>X-Node-Id</c> and <c>X-Link-Token</c>, parse the
-/// <see cref="PatchApplyResult"/>, stop the forward.
+/// Flow: validate the envelope and chain, sign, start <c>ssh -N -L</c> (with <c>-J</c> through the mediators) when the peer is
+/// reached through SSH, then (1) <c>POST /patch/sessions</c> with the gzip-compressed signed manifest, which answers with the hashes of
+/// the content the peer still lacks, (2) <c>PUT /patch/sessions/{id}/content/{sha256}</c> once per missing file with the gzip-compressed
+/// content streamed from disk, (3) <c>POST /patch/sessions/{id}/commit</c>, which applies the patch on the peer. Finally the forward is stopped.
 /// </para>
 /// <para>
-/// Network failures and timeouts are retried once. If the retry is refused as a replay, the first attempt reached the
-/// peer and only its response was lost; the result is reported as <see cref="PatchStatus.Pending"/>.
+/// Every request carries <c>X-Node-Id</c> and <c>X-Link-Token</c>. A network failure or timeout of a request is retried once;
+/// files the peer already received are not sent again, also not by a later attempt. If the retry of the commit is refused as a replay,
+/// the first attempt reached the peer and only its response was lost; the result is reported as <see cref="PatchStatus.Pending"/>.
 /// </para>
 /// </remarks>
 public sealed class HttpPatchSender : IPatchSender, IDisposable
@@ -37,12 +38,12 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <summary>
     /// The sender node header.
     /// </summary>
-    public const string NodeIdHeader = "X-Node-Id";
+    public const string NodeIdHeader = ApiHeaders.NodeId;
 
     /// <summary>
     /// The link token header.
     /// </summary>
-    public const string LinkTokenHeader = "X-Link-Token";
+    public const string LinkTokenHeader = ApiHeaders.LinkToken;
 
     /// <summary>
     /// JSON options for responses.
@@ -50,14 +51,9 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// The HTTP client.
+    /// Opens the connections to the peer.
     /// </summary>
-    private readonly HttpClient _http;
-
-    /// <summary>
-    /// The forward manager.
-    /// </summary>
-    private readonly ILocalForwardManager _forwards;
+    private readonly PeerLinkFactory _links;
 
     /// <summary>
     /// The signature service.
@@ -85,16 +81,6 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     private readonly HttpPatchSenderOptions _options;
 
     /// <summary>
-    /// Creates a handler that accepts only the certificate with the given pinned fingerprint.
-    /// </summary>
-    private readonly Func<string, HttpMessageHandler> _pinnedHandlers;
-
-    /// <summary>
-    /// The clients per pinned fingerprint.
-    /// </summary>
-    private readonly Dictionary<string, HttpClient> _pinnedClients = new(StringComparer.Ordinal);
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="HttpPatchSender"/> class.
     /// </summary>
     /// <param name="handler">The HTTP handler; production code uses a handler with the system proxy disabled.</param>
@@ -118,9 +104,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         HttpPatchSenderOptions options,
         Func<string, HttpMessageHandler>? pinnedHandlers = null)
     {
-        _pinnedHandlers = pinnedHandlers ?? PinnedHandler;
-        _http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        _forwards = forwards;
+        _links = new PeerLinkFactory(handler, forwards, pinnedHandlers);
         _signatures = signatures;
         _serializer = serializer;
         _tokens = tokens;
@@ -128,55 +112,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         _options = options;
     }
 
-    /// <summary>
-    /// Gets the client for a destination: the shared one for loopback endpoints, a pinned one per fingerprint.
-    /// </summary>
-    /// <param name="tlsFingerprint">The pinned fingerprint, or <see langword="null"/>.</param>
-    /// <returns>The client.</returns>
-    private HttpClient Client(string? tlsFingerprint)
-    {
-        if (tlsFingerprint is null)
-        {
-            return _http;
-        }
-
-        lock (_pinnedClients)
-        {
-            if (!_pinnedClients.TryGetValue(tlsFingerprint, out var client))
-            {
-                client = new HttpClient(_pinnedHandlers(tlsFingerprint)) { Timeout = Timeout.InfiniteTimeSpan };
-                _pinnedClients[tlsFingerprint] = client;
-            }
-
-            return client;
-        }
-    }
-
-    /// <summary>
-    /// Creates a handler that accepts exactly one certificate and ignores the certificate authorities of the system.
-    /// </summary>
-    /// <param name="tlsFingerprint">The pinned fingerprint.</param>
-    /// <returns>The handler.</returns>
-    /// <remarks>
-    /// The peer signs its own certificate, so the usual chain and name checks say nothing. What matters is that the
-    /// certificate is the one published in the peer's export file, which is what this check compares.
-    /// </remarks>
-    private static HttpMessageHandler PinnedHandler(string tlsFingerprint)
-        => new SocketsHttpHandler
-        {
-            UseProxy = false,
-            SslOptions = new SslClientAuthenticationOptions
-            {
-                RemoteCertificateValidationCallback = (_, certificate, _, _) =>
-                    certificate is not null
-                    && NodeCertificateStore.Matches(new X509Certificate2(certificate), tlsFingerprint)
-            }
-        };
-
     /// <inheritdoc />
-    public async Task<PatchApplyResult> SendAsync(PatchEnvelope envelope, IReadOnlyList<ChainLinkConfig> chain, CancellationToken cancellationToken = default)
+    public async Task<PatchApplyResult> SendAsync(PatchEnvelope envelope, IPatchContent content, IReadOnlyList<ChainLinkConfig> chain, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(chain);
         if (envelope.SourceNode != _node.Id)
         {
@@ -200,27 +140,37 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             throw new SyncBridgeException(Texts.Get("Send.NoToken"));
         }
 
-        var body = _serializer.Serialize(envelope);
+        var uploads = UploadsOf(envelope);
+        var manifestBody = GzipCodec.Compress(_serializer.Serialize(envelope));
 
         // A peer without an SSH server is reached on its own TLS port: through a forward that stops at the mediator,
-        // or straight over the network when there is no mediator.
-        var port = route.UsesSsh
-            ? await _forwards.StartAsync(route.Target!, route.Jumps, route.Endpoint.LocalPort, route.RemoteHost, route.RemotePort, cancellationToken)
-            : route.RemotePort;
-        var host = route.UsesSsh ? "127.0.0.1" : route.RemoteHost;
+        // or straight over the network when there is no mediator. Disposing the link stops the forward.
+        await using var link = await _links.OpenAsync(route, cancellationToken);
+        var peer = new Peer(link, token);
         try
         {
-            for (var attempt = 1; ; attempt++)
+            var session = await WithRetryAsync(
+                (attempt, ct) => OpenSessionAsync(peer, envelope, manifestBody, ct),
+                cancellationToken);
+            foreach (var hash in session.MissingContent)
             {
-                try
+                if (!uploads.TryGetValue(hash, out var change))
                 {
-                    return await PostAsync(host, port, route.TlsFingerprint, body, token, attempt, envelope.Id, cancellationToken);
+                    throw new SyncBridgeException(Texts.Format("Send.UnknownContent", envelope.Id, hash));
                 }
-                catch (Exception ex) when (attempt == 1 && IsTransient(ex, cancellationToken))
-                {
-                    await Task.Delay(_options.RetryDelay, cancellationToken);
-                }
+
+                await WithRetryAsync(
+                    async (attempt, ct) =>
+                    {
+                        await UploadAsync(peer, envelope, change, content, ct);
+                        return true;
+                    },
+                    cancellationToken);
             }
+
+            return await WithRetryAsync(
+                (attempt, ct) => CommitAsync(peer, envelope.Id, attempt, ct),
+                cancellationToken);
         }
         catch (Exception ex) when (IsTransient(ex, cancellationToken))
         {
@@ -230,86 +180,223 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
                 : string.Empty;
             throw new SyncBridgeException(Texts.Format("Send.NotDelivered", envelope.Id, destination, ex.Message, hint), ex);
         }
-        finally
-        {
-            if (route.UsesSsh)
-            {
-                await _forwards.StopAsync(port, CancellationToken.None);
-            }
-        }
     }
 
     /// <summary>
-    /// Disposes the HTTP client.
+    /// Disposes the HTTP clients.
     /// </summary>
-    public void Dispose()
+    public void Dispose() => _links.Dispose();
+
+    /// <summary>
+    /// Finds the file to upload for each hash of the manifest and rejects files that are too large.
+    /// </summary>
+    /// <param name="envelope">The envelope.</param>
+    /// <returns>The first manifest entry of every distinct hash.</returns>
+    /// <exception cref="SyncBridgeException">A file is larger than the limit of one upload.</exception>
+    private Dictionary<string, FileChange> UploadsOf(PatchEnvelope envelope)
     {
-        _http.Dispose();
-        lock (_pinnedClients)
+        var uploads = new Dictionary<string, FileChange>(StringComparer.Ordinal);
+        foreach (var change in envelope.Manifest.Where(change => change.Kind != ChangeKind.Deleted && change.Sha256 is not null))
         {
-            foreach (var client in _pinnedClients.Values)
+            if (change.SizeBytes > _options.MaxFileBytes)
             {
-                client.Dispose();
+                throw new SyncBridgeException(Texts.Format("Send.FileTooLarge", change.Path, change.SizeBytes / (1024 * 1024), _options.MaxFileBytes / (1024 * 1024)));
             }
 
-            _pinnedClients.Clear();
+            uploads.TryAdd(change.Sha256!, change);
+        }
+
+        return uploads;
+    }
+
+    /// <summary>
+    /// Opens the session with the signed manifest.
+    /// </summary>
+    /// <param name="peer">The peer.</param>
+    /// <param name="envelope">The signed envelope.</param>
+    /// <param name="manifestBody">The compressed manifest.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The session with the content the peer lacks.</returns>
+    /// <exception cref="SyncBridgeException">The peer refused the manifest or answered with an invalid body.</exception>
+    private async Task<PatchSession> OpenSessionAsync(Peer peer, PatchEnvelope envelope, byte[] manifestBody, CancellationToken cancellationToken)
+    {
+        using var request = peer.Request(HttpMethod.Post, ApiRoutes.PatchSessions, _node.Id.Value);
+        request.Content = new ByteArrayContent(manifestBody);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        request.Content.Headers.ContentEncoding.Add(GzipCodec.ContentEncoding);
+
+        var (response, text) = await SendRequestAsync(peer, request, cancellationToken);
+        using (response)
+        {
+            // A peer of an older version answers the unknown route with an empty or a plain "route not found" 404,
+            // never with the rejection body a current peer sends.
+            if (response.StatusCode == HttpStatusCode.NotFound && !IsRejectionBody(text))
+            {
+                throw new SyncBridgeException(Texts.Format("Send.OlderPeer", envelope.Id));
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw Refusal(envelope.Id, response, text);
+            }
+
+            return Parse<PatchSession>(text, envelope.Id);
         }
     }
 
     /// <summary>
-    /// Performs one POST attempt.
+    /// Uploads the content of one file.
     /// </summary>
-    /// <param name="port">The local forward port.</param>
-    /// <param name="body">The JSON body.</param>
-    /// <param name="token">The link token.</param>
-    /// <param name="attempt">The attempt number.</param>
-    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="peer">The peer.</param>
+    /// <param name="envelope">The envelope.</param>
+    /// <param name="change">The manifest entry whose content is uploaded.</param>
+    /// <param name="content">The source of the content.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The peer's result.</returns>
-    /// <exception cref="SyncBridgeException">The peer refused the patch or answered with an invalid body.</exception>
-    private async Task<PatchApplyResult> PostAsync(
-        string host,
-        int port,
-        string? tlsFingerprint,
-        byte[] body,
-        string token,
-        int attempt,
-        Guid patchId,
-        CancellationToken cancellationToken)
+    /// <returns>A task that completes when the peer stored the file.</returns>
+    /// <exception cref="SyncBridgeException">The peer refused the content.</exception>
+    private async Task UploadAsync(Peer peer, PatchEnvelope envelope, FileChange change, IPatchContent content, CancellationToken cancellationToken)
+    {
+        using var request = peer.Request(HttpMethod.Put, ApiRoutes.PatchSessionContentPath(envelope.Id, change.Sha256!), _node.Id.Value);
+
+        // The stream is opened per attempt: a retry has to start reading from the beginning.
+        request.Content = new GzipStreamContent(await content.OpenReadAsync(change, cancellationToken));
+        var (response, text) = await SendRequestAsync(peer, request, cancellationToken);
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw Refusal(envelope.Id, response, text);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks the peer to apply the patch.
+    /// </summary>
+    /// <param name="peer">The peer.</param>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="attempt">The attempt number.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The result of the peer.</returns>
+    /// <exception cref="SyncBridgeException">The peer refused the request or answered with an invalid body.</exception>
+    private async Task<PatchApplyResult> CommitAsync(Peer peer, Guid patchId, int attempt, CancellationToken cancellationToken)
+    {
+        using var request = peer.Request(HttpMethod.Post, ApiRoutes.PatchSessionCommitPath(patchId), _node.Id.Value);
+        var (response, text) = await SendRequestAsync(peer, request, cancellationToken);
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
+            {
+                return Parse<PatchApplyResult>(text, patchId);
+            }
+
+            var rejection = TryParseRejection(text);
+            if (attempt > 1 && rejection?.Reason == PatchRejectionReason.Replay)
+            {
+                return new PatchApplyResult(patchId, PatchStatus.Pending, 0, Array.Empty<ConflictFile>(), Texts.Get("Send.ResponseLost"));
+            }
+
+            throw Refusal(patchId, response, text);
+        }
+    }
+
+    /// <summary>
+    /// Sends a request with the request timeout and reads the whole response.
+    /// </summary>
+    /// <param name="peer">The peer.</param>
+    /// <param name="request">The request.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The response and its body text.</returns>
+    private async Task<(HttpResponseMessage Response, string Text)> SendRequestAsync(Peer peer, HttpRequestMessage request, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.RequestTimeout);
-        var scheme = tlsFingerprint is null ? "http" : "https";
-        var authority = host.Contains(':', StringComparison.Ordinal) && !host.StartsWith('[') ? $"[{host}]" : host;
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{scheme}://{authority}:{port}/patch") { Content = new ByteArrayContent(body) };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        request.Headers.Add(NodeIdHeader, _node.Id.Value);
-        request.Headers.Add(LinkTokenHeader, token);
+        var response = await peer.Client.SendAsync(request, timeout.Token);
+        try
+        {
+            return (response, await response.Content.ReadAsStringAsync(timeout.Token));
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
+    }
 
-        using var response = await Client(tlsFingerprint).SendAsync(request, timeout.Token);
-        var text = await response.Content.ReadAsStringAsync(timeout.Token);
-        if (response.IsSuccessStatusCode)
+    /// <summary>
+    /// Runs a request and retries it once after a network failure.
+    /// </summary>
+    /// <typeparam name="T">The result type.</typeparam>
+    /// <param name="action">The request; it receives the attempt number.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The result.</returns>
+    private async Task<T> WithRetryAsync<T>(Func<int, CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return JsonSerializer.Deserialize<PatchApplyResult>(text, JsonOptions)
-                    ?? throw new SyncBridgeException(Texts.Format("Send.EmptyResult", patchId));
+                return await action(attempt, cancellationToken);
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (attempt == 1 && IsTransient(ex, cancellationToken))
             {
-                throw new SyncBridgeException(Texts.Format("Send.InvalidResult", patchId, ex.Message), ex);
+                await Task.Delay(_options.RetryDelay, cancellationToken);
             }
         }
+    }
 
+    /// <summary>
+    /// Builds the error for a refused request.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="response">The response.</param>
+    /// <param name="text">The body text.</param>
+    /// <returns>The exception.</returns>
+    private static SyncBridgeException Refusal(Guid patchId, HttpResponseMessage response, string text)
+    {
         var rejection = TryParseRejection(text);
-        if (attempt > 1 && rejection?.Reason == PatchRejectionReason.Replay)
-        {
-            return new PatchApplyResult(patchId, PatchStatus.Pending, 0, Array.Empty<ConflictFile>(),
-                Texts.Get("Send.ResponseLost"));
-        }
-
         var reason = rejection is null ? text : $"{rejection.Reason}: {rejection.Error}";
-        throw new SyncBridgeException(Texts.Format("Send.Refused", patchId, (int)response.StatusCode, reason).Trim());
+        return new SyncBridgeException(Texts.Format("Send.Refused", patchId, (int)response.StatusCode, reason).Trim());
+    }
+
+    /// <summary>
+    /// Parses a successful response.
+    /// </summary>
+    /// <typeparam name="T">The body type.</typeparam>
+    /// <param name="text">The body text.</param>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <returns>The body.</returns>
+    /// <exception cref="SyncBridgeException">The body is empty or invalid.</exception>
+    private static T Parse<T>(string text, Guid patchId)
+        where T : class
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(text, JsonOptions)
+                ?? throw new SyncBridgeException(Texts.Format("Send.EmptyResult", patchId));
+        }
+        catch (JsonException ex)
+        {
+            throw new SyncBridgeException(Texts.Format("Send.InvalidResult", patchId, ex.Message), ex);
+        }
+    }
+
+    /// <summary>
+    /// Checks whether a response body is the rejection a patch endpoint answers with, and not a generic error.
+    /// </summary>
+    /// <param name="text">The body.</param>
+    /// <returns><see langword="true"/> when the body is JSON with a <c>reason</c> property.</returns>
+    private static bool IsRejectionBody(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.EnumerateObject().Any(property => string.Equals(property.Name, "reason", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -337,4 +424,26 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <returns><see langword="true"/> for transient failures.</returns>
     private static bool IsTransient(Exception exception, CancellationToken cancellationToken)
         => exception is HttpRequestException || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested);
+
+    /// <summary>
+    /// The connection to the peer and the link token for one send.
+    /// </summary>
+    /// <param name="Link">The connection.</param>
+    /// <param name="Token">The link token.</param>
+    private sealed record Peer(PeerLink Link, string Token)
+    {
+        /// <summary>
+        /// Gets the HTTP client.
+        /// </summary>
+        public HttpClient Client => Link.Client;
+
+        /// <summary>
+        /// Creates a request with the authentication headers.
+        /// </summary>
+        /// <param name="method">The HTTP method.</param>
+        /// <param name="path">The path.</param>
+        /// <param name="nodeId">The identifier of the sending node.</param>
+        /// <returns>The request.</returns>
+        public HttpRequestMessage Request(HttpMethod method, string path, string nodeId) => Link.CreateRequest(method, path, nodeId, Token);
+    }
 }

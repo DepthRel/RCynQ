@@ -121,9 +121,11 @@ public sealed class DirectDeliveryTests : IDisposable
 
         await sender.SendAsync(
             await _fixture.BuildSignedEnvelopeAsync(),
+            _fixture.SourceContent,
             new[] { Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000) });
 
-        recorder.LastUri.Should().Be(new Uri("https://192.168.10.20:18444/patch"));
+        recorder.Uris.Should().OnlyContain(uri => uri.Scheme == "https" && uri.Host == "192.168.10.20" && uri.Port == 18444);
+        recorder.Uris[0].AbsolutePath.Should().Be("/patch/sessions");
         recorder.PinnedFingerprint.Should().Be(Fingerprint, "the certificate of the peer is pinned");
         await _forwards.DidNotReceiveWithAnyArgs().StartAsync(default!, default!, default, default!, default);
     }
@@ -140,7 +142,7 @@ public sealed class DirectDeliveryTests : IDisposable
             .Returns(19001);
         var sender = Create(recorder);
 
-        await sender.SendAsync(await _fixture.BuildSignedEnvelopeAsync(), new[]
+        await sender.SendAsync(await _fixture.BuildSignedEnvelopeAsync(), _fixture.SourceContent, new[]
         {
             Link("relay", Peer("mediator-1", NodeRole.Mediator, "203.0.113.4"), 22, 10),
             Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
@@ -153,7 +155,7 @@ public sealed class DirectDeliveryTests : IDisposable
             "192.168.10.20",
             18444,
             Arg.Any<CancellationToken>());
-        recorder.LastUri.Should().Be(new Uri("https://127.0.0.1:19001/patch"), "the forward is local, the certificate is still the peer's");
+        recorder.Uris.Should().OnlyContain(uri => uri.Scheme == "https" && uri.Host == "127.0.0.1" && uri.Port == 19001, "the forward is local, the certificate is still the peers");
         recorder.PinnedFingerprint.Should().Be(Fingerprint);
         await _forwards.Received(1).StopAsync(19001, Arg.Any<CancellationToken>());
     }
@@ -202,12 +204,12 @@ public sealed class DirectDeliveryTests : IDisposable
     public void Dispose() => _fixture.Dispose();
 
     /// <summary>
-    /// An HTTP handler that records the request and answers with an accepted patch.
+    /// An HTTP handler that records the requests and answers like a peer that has all the content and accepts the patch.
     /// </summary>
     private sealed class RequestRecorder : HttpMessageHandler
     {
-        /// <summary>Gets the URI of the last request.</summary>
-        public Uri? LastUri { get; private set; }
+        /// <summary>Gets the URIs of the requests in the order they were made.</summary>
+        public List<Uri> Uris { get; } = new();
 
         /// <summary>Gets the fingerprint the pinned handler was built for.</summary>
         public string? PinnedFingerprint { get; private set; }
@@ -226,7 +228,15 @@ public sealed class DirectDeliveryTests : IDisposable
         /// <inheritdoc />
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            LastUri = request.RequestUri;
+            Uris.Add(request.RequestUri!);
+            if (!request.RequestUri!.AbsolutePath.EndsWith("/commit", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"patchId":"00000000-0000-0000-0000-000000000000","missingContent":[]}""")
+                });
+            }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"patchId":"00000000-0000-0000-0000-000000000000","status":"Applied","filesChanged":0,"conflicts":[],"message":"ok"}""")

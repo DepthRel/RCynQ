@@ -16,15 +16,24 @@ public sealed class PublicEndpointMiddlewareTests
     private const int LocalPort = 18443;
 
     /// <summary>
-    /// Verifies that the network listener serves only the two routes a neighbour needs.
+    /// Verifies that the network listener serves only the routes a neighbour needs: the patch session, the branch bundle and the health probe.
     /// </summary>
     /// <param name="method">The request method.</param>
     /// <param name="path">The request path.</param>
     /// <param name="expected">Whether the request reaches the rest of the pipeline.</param>
     /// <returns>A task representing the test.</returns>
     [Theory]
-    [InlineData("POST", "/patch", true)]
-    [InlineData("POST", "/PATCH", true)]
+    [InlineData("POST", "/patch/sessions", true)]
+    [InlineData("POST", "/PATCH/SESSIONS", true)]
+    [InlineData("PUT", "/patch/sessions/6f9619ff-8b86-d011-b42d-00cf4fc964ff/content/abc", true)]
+    [InlineData("POST", "/patch/sessions/6f9619ff-8b86-d011-b42d-00cf4fc964ff/commit", true)]
+    [InlineData("GET", "/patch/sessions", false)]
+    [InlineData("DELETE", "/patch/sessions/6f9619ff-8b86-d011-b42d-00cf4fc964ff", false)]
+    [InlineData("POST", "/patch", false)]
+    [InlineData("POST", "/git/bundle", true)]
+    [InlineData("GET", "/git/bundle", false)]
+    [InlineData("POST", "/git/fetch", false)]
+    [InlineData("POST", "/git/pull", false)]
     [InlineData("GET", "/health", true)]
     [InlineData("GET", "/patch", false)]
     [InlineData("POST", "/patches/send", false)]
@@ -34,7 +43,7 @@ public sealed class PublicEndpointMiddlewareTests
     [InlineData("GET", "/hub/sync", false)]
     [InlineData("POST", "/ssh/authorized-keys", false)]
     [InlineData("POST", "/service/shutdown", false)]
-    public async Task Public_Port_Serves_Only_Patch_And_Health(string method, string path, bool expected)
+    public async Task Public_Port_Serves_Only_Patch_Sessions_Bundles_And_Health(string method, string path, bool expected)
     {
         var reached = await InvokeAsync(PublicPort, method, path);
 
