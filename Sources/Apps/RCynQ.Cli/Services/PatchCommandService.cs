@@ -32,7 +32,7 @@ public sealed class PatchCommandService
     /// <returns>The report and whether the patch reached a successful state (or nothing had to be sent).</returns>
     public async Task<(string Text, bool Succeeded)> SendAsync(CancellationToken cancellationToken = default)
     {
-        var result = await _patches.SendAsync(cancellationToken);
+        var result = await _patches.SendAsync(null, cancellationToken);
         var text = new StringBuilder(result.Message).Append('\n');
         if (result.PatchId is { } id)
         {
@@ -106,14 +106,14 @@ public sealed class PatchCommandService
     }
 
     /// <summary>
-    /// Creates the baseline.
+    /// Takes a manual snapshot as the sync base, for a working tree without Git.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A summary.</returns>
     public async Task<string> BaselineAsync(CancellationToken cancellationToken = default)
     {
-        var snapshot = await _patches.InitializeBaselineAsync(cancellationToken);
-        return $"Sync base created from the working tree; state {TextFormat.Hash(snapshot.StateHash)}.\n";
+        var snapshot = await _patches.RebuildBaselineAsync(cancellationToken);
+        return $"Sync base rebuilt; state {TextFormat.Hash(snapshot.StateHash)}.\n";
     }
 
     /// <summary>

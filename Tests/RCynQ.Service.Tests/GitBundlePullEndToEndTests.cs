@@ -18,8 +18,10 @@ using RCynQ.Service.Tests.Support;
 using RCynQ.Ssh.Commands;
 using RCynQ.Sync.Endpoint;
 using RCynQ.Sync.GitChannel;
+using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.Security;
+using RCynQ.Sync.SyncBase;
 using RCynQ.Sync.Transfer;
 
 namespace RCynQ.Service.Tests;
@@ -51,6 +53,12 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
     /// <summary>The forward manager, replaced by a direct connection.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
+
+    /// <summary>The working tree lock of the simulated Source.</summary>
+    private readonly WorkingTreeLock _sourceLock = new();
+
+    /// <summary>The sync base manager of the simulated Source, created on first use.</summary>
+    private SyncBaseManager? _sourceSyncBase;
 
     /// <summary>
     /// Starts Dest with a repository and registers Source as its peer.
@@ -271,11 +279,8 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        var syncBase = new SyncPaths(SourceAppData(), new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork)).SyncBase;
-        foreach (var relative in new[] { "readme.txt", "src/app.cs" })
-        {
-            Write(syncBase, relative, Read(_sourceWork, relative));
-        }
+        var syncBase = SourcePaths().SyncBase;
+        Read(syncBase, "readme.txt").Should().Be("first\n", "the first Pull builds the sync base from the cloned commit");
 
         Write(_sourceWork, "my-notes.txt", "typed on the Source\n");
         Write(_destRepo, "readme.txt", "second\n");
@@ -286,12 +291,137 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
         var pull = await channel.PullAsync();
 
         pull.Succeeded.Should().BeTrue(pull.Output);
-        pull.Output.Should().Contain("brought in line");
+        pull.Output.Should().Contain("sync base now follows commit");
         Read(syncBase, "readme.txt").Should().Be("second\n");
         Read(syncBase, "docs/new.md").Should().Be("new file\n");
         File.Exists(Path.Combine(syncBase, "src", "app.cs")).Should().BeFalse();
-        var pending = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(syncBase, _sourceWork);
-        pending.Select(change => change.Path).Should().Equal("my-notes.txt");
+        (await PendingAsync()).Should().Equal("my-notes.txt");
+    }
+
+    /// <summary>
+    /// Verifies that a local edit Dest already has in its new commit does not block the Pull: it is replaced by Dest's version.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Pull_Replaces_A_Local_Edit_That_Dest_Already_Committed()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        var channel = CreateChannel();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+        Write(_sourceWork, "readme.txt", "second\n");
+        Write(_destRepo, "readme.txt", "second\n");
+        await CommitAsync("the same edit on Dest");
+
+        var pull = await channel.PullAsync();
+
+        pull.Succeeded.Should().BeTrue(pull.Output);
+        pull.Branch!.Behind.Should().Be(0);
+        Read(_sourceWork, "readme.txt").Should().Be("second\n");
+        // As the user's own git status sees it: with the line-ending settings of the repository.
+        (await _git.RunInWorkingTreeAsync(new[] { "status", "--porcelain" }, _sourceWork)).StandardOutput.Trim().Should().BeEmpty();
+        (await PendingAsync()).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies that a Pull that would overwrite a local edit not yet sent to Dest is refused, lists the file and changes nothing.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Pull_Refuses_To_Overwrite_An_Unsent_Local_Edit()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        var channel = CreateChannel();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+        var before = (await RunGitAsync(_sourceWork, "rev-parse", "HEAD")).Trim();
+        Write(_sourceWork, "readme.txt", "mine, not sent yet\n");
+        Write(_destRepo, "readme.txt", "second\n");
+        await CommitAsync("dest edits the same file");
+
+        var pull = await channel.PullAsync();
+
+        pull.Succeeded.Should().BeFalse();
+        pull.Output.Should().Contain("readme.txt").And.Contain("not been sent");
+        Read(_sourceWork, "readme.txt").Should().Be("mine, not sent yet\n");
+        (await RunGitAsync(_sourceWork, "rev-parse", "HEAD")).Trim().Should().Be(before);
+        pull.Branch!.Behind.Should().Be(1, "the fetch still brought the new commit in");
+    }
+
+    /// <summary>
+    /// Verifies that a Fetch alone does not move the sync base, so Dest's new commit is not offered back as a revert.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Fetch_Alone_Does_Not_Offer_Dest_Commits_Back()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        var channel = CreateChannel();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+        Write(_destRepo, "readme.txt", "second\n");
+        await CommitAsync("dest moves on");
+
+        (await channel.FetchAsync()).Succeeded.Should().BeTrue();
+
+        (await PendingAsync()).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Brings the sync base of the simulated Source up to date and lists the files it would send.
+    /// </summary>
+    /// <returns>The pending paths.</returns>
+    private async Task<IReadOnlyList<string>> PendingAsync()
+    {
+        using (await _sourceLock.AcquireAsync())
+        {
+            var status = await SourceSyncBase().EnsureAsync();
+            status.IsReady.Should().BeTrue(status.Problem);
+            var pending = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(SourcePaths().SyncBase, _sourceWork);
+            return pending.Select(change => change.Path).ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Gets the node of the simulated Source.
+    /// </summary>
+    /// <returns>The node.</returns>
+    private NodeConfig SourceNode() => new(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork);
+
+    /// <summary>
+    /// Gets the sync paths of the simulated Source.
+    /// </summary>
+    /// <returns>The paths.</returns>
+    private SyncPaths SourcePaths() => new(SourceAppData(), SourceNode());
+
+    /// <summary>
+    /// Gets the sync base manager of the simulated Source, shared by every channel of a test.
+    /// </summary>
+    /// <returns>The manager.</returns>
+    private SyncBaseManager SourceSyncBase()
+    {
+        var git = new GitRepositoryService(_git);
+        return _sourceSyncBase ??= new SyncBaseManager(
+            SourceNode(),
+            SourcePaths(),
+            new GitSyncBaseLocator(SourceNode(), git),
+            git,
+            new SyncBaseMetadataStore(SourceAppData()),
+            new DefaultFileManifestBuilder(new SnapshotFilter()),
+            new RCynQ.Git.Hashing.DefaultStateHasher(),
+            Substitute.For<ISnapshotRepository>(),
+            new PathUtility(),
+            _sourceLock,
+            TimeProvider.System);
     }
 
     /// <summary>
@@ -307,7 +437,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     /// <returns>The channel.</returns>
     private GitChannelService CreateChannel(string token = ServiceTestHost.LinkToken)
     {
-        var node = new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork);
+        var node = SourceNode();
         var fingerprint = FingerprintOfDest();
         var chain = new[]
         {
@@ -330,7 +460,10 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
             new SshCommandBuilder(new SshClientOptions()),
             bundles,
             SourceAppData(),
-            new GitPullBaseUpdater(new SyncPaths(SourceAppData(), node), new PathUtility()));
+            SourceSyncBase(),
+            SourcePaths(),
+            new PathUtility(),
+            _sourceLock);
     }
 
     /// <summary>
@@ -410,5 +543,6 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     /// <param name="directory">The directory.</param>
     /// <param name="relative">The relative path.</param>
     /// <returns>The content.</returns>
-    private static string Read(string directory, string relative) => File.ReadAllText(Path.Combine(directory, relative));
+    private static string Read(string directory, string relative)
+        => File.ReadAllText(Path.Combine(directory, relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 }

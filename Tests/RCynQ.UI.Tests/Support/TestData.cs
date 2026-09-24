@@ -78,7 +78,12 @@ public static class TestData
     /// <param name="role">The role.</param>
     /// <returns>The status.</returns>
     public static NodeSyncStatus Status(NodeRole role = NodeRole.Source)
-        => new(new NodeId("node-1"), "Node", role, new SyncState(HashA, HashA, null, null), true, Array.Empty<FileChange>(), 0);
+        => new(new NodeId("node-1"), "Node", role, new SyncState(HashA, HashA, null, null), GitSyncBase, Array.Empty<FileChange>(), 0);
+
+    /// <summary>
+    /// Gets a ready sync base built from Git.
+    /// </summary>
+    public static SyncBaseStatus GitSyncBase { get; } = new(SyncBaseMode.Git, "main", new string('e', 40), null, false);
 
     /// <summary>
     /// Creates metadata of an incoming patch waiting for a conflict decision.

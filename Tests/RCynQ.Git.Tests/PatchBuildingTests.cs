@@ -231,7 +231,12 @@ public class PatchBuildingTests
         var hash = new string('c', 64);
         var envelope = new PatchEnvelope(
             Guid.NewGuid(), new NodeId("source"), new NodeId("dest"), DateTimeOffset.UtcNow, hash, hash,
-            new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false), new FileChange(ChangeKind.Deleted, "b.txt", null, null, false) },
+            new[]
+            {
+                new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false, new string('d', 64)),
+                new FileChange(ChangeKind.Deleted, "b.txt", null, null, false, new string('e', 64)),
+                new FileChange(ChangeKind.Added, "c.txt", hash, 1, false)
+            },
             new byte[] { 9, 9 });
 
         var json = serializer.Serialize(envelope);
@@ -241,6 +246,11 @@ public class PatchBuildingTests
         var back = serializer.Deserialize(json);
         back.Id.Should().Be(envelope.Id);
         back.Manifest.Should().BeEquivalentTo(envelope.Manifest);
+        back.Manifest[0].BaseSha256.Should().Be(new string('d', 64), "the base hash travels with the manifest");
+
+        var addedWithBase = serializer.ToDto(envelope);
+        addedWithBase.Changes[2].BaseSha256 = hash;
+        serializer.FromDto(addedWithBase).Manifest[2].BaseSha256.Should().BeNull("an added file has no base");
         back.Signature.Should().Equal(9, 9);
 
         var traversal = serializer.ToDto(envelope);

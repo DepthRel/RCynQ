@@ -59,6 +59,10 @@ public sealed class NodeConfigurationTransfer
     /// <param name="peers">The peer repository.</param>
     /// <param name="links">The link repository.</param>
     /// <param name="timeProvider">The clock.</param>
+    /// <param name="tlsFingerprint">
+    /// Returns the fingerprint of the node's TLS certificate for the export file, or <see langword="null"/> when the node uses its
+    /// SSH server; <see langword="null"/> when no certificate is published.
+    /// </param>
     public NodeConfigurationTransfer(
         NodeConfig node,
         SyncBridgeOptions options,

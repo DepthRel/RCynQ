@@ -72,7 +72,8 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     }
 
     /// <inheritdoc />
-    public Task<SendPatchResult> SendPatchAsync(CancellationToken cancellationToken = default) => PostAsync<SendPatchResult>(ApiRoutes.SendPatch, null, cancellationToken, longRunning: true);
+    public Task<SendPatchResult> SendPatchAsync(IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
+        => PostAsync<SendPatchResult>(ApiRoutes.SendPatch, paths is null ? null : new SendPatchRequest(paths), cancellationToken, longRunning: true);
 
     /// <inheritdoc />
     public Task<SnapshotInfo> CreateBaselineAsync(CancellationToken cancellationToken = default) => PostAsync<SnapshotInfo>(ApiRoutes.Baseline, null, cancellationToken, longRunning: true);

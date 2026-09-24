@@ -189,10 +189,10 @@ public sealed class DiagnosticsTests : IDisposable
         var manifest = new DefaultFileManifestBuilder(new SnapshotFilter());
         var hasher = new DefaultStateHasher();
         var state = Substitute.For<INodeStateStore>();
-        var check = new SnapshotIntegrityCheck(manifest, hasher, state, _fixture.CreateBaseResolver(_fixture.DestNode));
+        var check = new SnapshotIntegrityCheck(manifest, hasher, state, _fixture.DestSyncBase, _fixture.DestLock);
         var paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "dest-data"));
         var context = new DiagnosticContext(_fixture.DestNode, new SyncBridgeOptions(), Array.Empty<ChainLinkConfig>(), paths);
-        var actual = hasher.ComputeHash(await manifest.ScanAsync(paths.SyncBaseDirectory));
+        var actual = hasher.ComputeHash(await manifest.ScanAsync(paths.SyncBaseDirectory, _fixture.DestWork));
 
         state.GetAsync(Arg.Any<CancellationToken>()).Returns(new SyncState(null, actual, null, null));
         (await check.RunAsync(context)).Passed.Should().BeTrue();
@@ -200,13 +200,15 @@ public sealed class DiagnosticsTests : IDisposable
         state.GetAsync(Arg.Any<CancellationToken>()).Returns(new SyncState(null, new string('0', 64), null, null));
         (await check.RunAsync(context)).Message.Should().Contain("does not match");
 
-        var noBase = context with { Paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "nowhere")) };
-        (await check.RunAsync(noBase)).SuggestedFix.Should().Contain("baseline");
+        Directory.Delete(paths.SyncBaseDirectory, recursive: true);
+        var missing = await check.RunAsync(context);
+        missing.Passed.Should().BeFalse("a working tree without Git and without a manual baseline has no sync base");
+        missing.SuggestedFix.Should().Contain("baseline");
     }
 
     /// <summary>
-    /// Verifies that a Git-native Source (a Git working tree with a resolved Dest tracking ref) passes without a
-    /// sync-base snapshot, instead of being told to create one it does not need.
+    /// Verifies that a Source whose working tree is a Git repository pulled from Dest passes: its sync base is built from the
+    /// commit automatically, instead of the user being told to create a baseline.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -224,15 +226,15 @@ public sealed class DiagnosticsTests : IDisposable
         await git.RunAsync(new[] { "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "first" }, _fixture.SourceWork);
         await git.RunAsync(new[] { "update-ref", "refs/remotes/dest/main", "HEAD" }, _fixture.SourceWork);
 
-        var check = new SnapshotIntegrityCheck(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), Substitute.For<INodeStateStore>(), _fixture.CreateBaseResolver(_fixture.SourceNode));
+        var check = new SnapshotIntegrityCheck(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), Substitute.For<INodeStateStore>(), _fixture.SourceSyncBase, _fixture.SourceLock);
         var paths = AppDataPaths.FromRoot(Path.Combine(_fixture.Root, "source-data"));
         var context = new DiagnosticContext(_fixture.SourceNode, new SyncBridgeOptions(), Array.Empty<ChainLinkConfig>(), paths);
 
         var result = await check.RunAsync(context);
 
-        result.Passed.Should().BeTrue();
-        result.Message.Should().Contain("no snapshot is needed");
-        Directory.Exists(paths.SyncBaseDirectory).Should().BeFalse();
+        result.Passed.Should().BeTrue(result.Message);
+        result.Message.Should().Contain("built from Git commit").And.Contain("main");
+        SyncFixture.Read(paths.SyncBaseDirectory, "a.txt").Should().Be("v1\n", "the sync base is exported from the commit");
     }
 
     /// <summary>

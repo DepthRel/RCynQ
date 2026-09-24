@@ -50,7 +50,7 @@ public class GitBundleRepositoryTests
         await service.FetchBundleAsync(target.Path, full, "dest");
         (await service.GetKnownCommitsAsync(target.Path, "dest")).Should().BeEmpty("nothing is checked out yet, and no local branch exists");
         await service.AdoptRemoteBranchAsync(target.Path, "dest", "main", keepWorkingFiles: false);
-        File.ReadAllText(Path.Combine(target.Path, "b.txt")).Should().Be("two\n");
+        File.ReadAllText(Path.Combine(target.Path, "b.txt")).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("two\n");
         (await service.GetKnownCommitsAsync(target.Path, "dest")).Should().Equal(second);
     }
 
@@ -155,7 +155,7 @@ public class GitBundleRepositoryTests
 
         (await _runner.RunAsync(new[] { "checkout", "feature/x" }, target.Path)).ExitCode.Should().Be(0, "plain checkout now finds the branch through the registered remote");
         (await service.GetCurrentBranchAsync(target.Path)).Should().Be("feature/x");
-        File.ReadAllText(Path.Combine(target.Path, "b.txt")).Should().Be("two\n");
+        File.ReadAllText(Path.Combine(target.Path, "b.txt")).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("two\n");
         (await _runner.RunAsync(new[] { "checkout", "main" }, target.Path)).ExitCode.Should().Be(0, "switching back to the already-adopted branch keeps working");
     }
 

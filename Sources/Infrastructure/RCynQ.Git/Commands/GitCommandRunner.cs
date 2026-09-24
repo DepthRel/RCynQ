@@ -6,7 +6,9 @@ namespace RCynQ.Git.Commands;
 /// Default <see cref="IGitCommandRunner"/>.
 /// </summary>
 /// <remarks>
-/// Every command runs with <c>core.autocrlf=false</c> and <c>core.safecrlf=false</c> so diffs and applies are byte exact,
+/// <see cref="RunAsync"/> runs with <c>core.autocrlf=false</c> and <c>core.safecrlf=false</c> so diffs and applies are byte exact;
+/// <see cref="RunInWorkingTreeAsync"/> keeps the line-ending settings of the repository for commands that touch the user's files.
+/// Every command runs
 /// with <c>GIT_TERMINAL_PROMPT=0</c> so git never blocks on credentials, and with <c>GIT_ALLOW_PROTOCOL=ssh:file</c> so
 /// dangerous transports such as <c>ext::</c> can never be used.
 /// </remarks>
@@ -19,6 +21,16 @@ public sealed class GitCommandRunner : IGitCommandRunner
     {
         "-c", "core.autocrlf=false",
         "-c", "core.safecrlf=false",
+        "-c", "core.quotepath=false",
+        "-c", "color.ui=never"
+    };
+
+    /// <summary>
+    /// Configuration overrides passed before commands that touch the working tree: no line-ending override, so the files come
+    /// out exactly as the user's own Git writes and reads them.
+    /// </summary>
+    public static readonly IReadOnlyList<string> WorkingTreeConfigPrefix = new[]
+    {
         "-c", "core.quotepath=false",
         "-c", "color.ui=never"
     };
@@ -50,6 +62,31 @@ public sealed class GitCommandRunner : IGitCommandRunner
         string? workingDirectory,
         IReadOnlyDictionary<string, string>? environment = null,
         CancellationToken cancellationToken = default)
+        => RunWithPrefixAsync(ConfigPrefix, arguments, workingDirectory, environment, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<ProcessResult> RunInWorkingTreeAsync(
+        IReadOnlyList<string> arguments,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken cancellationToken = default)
+        => RunWithPrefixAsync(WorkingTreeConfigPrefix, arguments, workingDirectory, environment, cancellationToken);
+
+    /// <summary>
+    /// Runs git with the given configuration overrides.
+    /// </summary>
+    /// <param name="prefix">The configuration overrides.</param>
+    /// <param name="arguments">The git arguments.</param>
+    /// <param name="workingDirectory">The working directory, or <see langword="null"/>.</param>
+    /// <param name="environment">Additional environment variables, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token to cancel the command.</param>
+    /// <returns>The captured result.</returns>
+    private Task<ProcessResult> RunWithPrefixAsync(
+        IReadOnlyList<string> prefix,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string>? environment,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -68,7 +105,7 @@ public sealed class GitCommandRunner : IGitCommandRunner
 
         var spec = new ProcessSpec(
             _options.GitExecutable,
-            ConfigPrefix.Concat(arguments).ToArray(),
+            prefix.Concat(arguments).ToArray(),
             workingDirectory,
             env,
             _options.CommandTimeout);

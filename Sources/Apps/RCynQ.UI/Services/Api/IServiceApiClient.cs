@@ -37,9 +37,10 @@ public interface IServiceApiClient
     Task<string> GetPatchDiffAsync(Guid patchId, CancellationToken cancellationToken = default);
 
     /// <summary>Sends the local changes.</summary>
+    /// <param name="paths">The relative paths of the files to send, or <see langword="null"/> to send every changed file.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The send result.</returns>
-    Task<SendPatchResult> SendPatchAsync(CancellationToken cancellationToken = default);
+    Task<SendPatchResult> SendPatchAsync(IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default);
 
     /// <summary>Creates the sync base from the working tree.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>

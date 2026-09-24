@@ -57,7 +57,8 @@ public sealed class PatchEnvelopeSerializer
                 Path = change.Path,
                 Sha256 = change.Sha256,
                 SizeBytes = change.SizeBytes,
-                IsSymlink = change.IsSymlink
+                IsSymlink = change.IsSymlink,
+                BaseSha256 = change.BaseSha256
             }).ToList(),
             Signature = envelope.IsSigned ? Convert.ToBase64String(envelope.Signature) : null
         };
@@ -98,7 +99,9 @@ public sealed class PatchEnvelopeSerializer
                     throw new FormatException(Texts.Format("Envelope.NeedsSize", change.Path));
                 }
 
-                return new FileChange(change.Kind, normalized, change.Sha256, change.SizeBytes, change.IsSymlink);
+                // An added file has no base content; a base hash on it means nothing and is dropped.
+                var baseHash = change.Kind == ChangeKind.Added ? null : change.BaseSha256;
+                return new FileChange(change.Kind, normalized, change.Sha256, change.SizeBytes, change.IsSymlink, baseHash);
             }).ToArray();
 
             if (manifest.Select(change => change.Path).Distinct(StringComparer.Ordinal).Count() != manifest.Length)

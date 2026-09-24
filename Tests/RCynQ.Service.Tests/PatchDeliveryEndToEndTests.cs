@@ -74,7 +74,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
                 .UpsertAsync(new PeerDescriptor(new NodeId("source-1"), "Source", NodeRole.Source, "source.local", 22, "rcynq", signingPublicKey: key));
         }
 
-        await _host.Services.GetRequiredService<IPatchService>().InitializeBaselineAsync();
+        await _host.Services.GetRequiredService<IPatchService>().RebuildBaselineAsync();
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_host.BaseAddress.Port);
     }

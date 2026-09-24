@@ -16,7 +16,8 @@ public static class PayloadCanonicalizer
     /// <summary>
     /// The payload format version.
     /// </summary>
-    public const string Version = "rcynq-patch-v2";
+    /// <remarks>v3 adds the hash of each file in the sender's sync base, which decides conflicts on the receiver.</remarks>
+    public const string Version = "rcynq-patch-v3";
 
     /// <summary>
     /// Builds the canonical payload of an envelope (the signature itself is excluded).
@@ -42,6 +43,7 @@ public static class PayloadCanonicalizer
             Append(builder, change.Sha256 ?? "-");
             Append(builder, change.SizeBytes?.ToString(CultureInfo.InvariantCulture) ?? "-");
             Append(builder, change.IsSymlink ? "1" : "0");
+            Append(builder, change.BaseSha256 ?? "-");
         }
 
         return Encoding.UTF8.GetBytes(builder.ToString());

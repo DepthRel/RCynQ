@@ -9,6 +9,7 @@ using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Commands;
 using RCynQ.Localization;
+using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.Tests.Fixtures;
 
@@ -294,6 +295,65 @@ public sealed class ReceiverAndResolverTests : IDisposable
         result.Status.Should().Be(PatchStatus.Rejected);
         SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("local edit\n");
         SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().BeNull();
+        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n", "the peer keeps its version, so the base records it and the local one is offered back");
+    }
+
+    /// <summary>
+    /// Verifies that the base the sender reports decides a conflict: a Dest file that equals Dest's own base but not what the
+    /// sender built from was changed on Dest (for example committed there) and must not be overwritten.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Sender_Base_Decides_Even_When_The_Local_Base_Agrees_With_The_Local_File()
+    {
+        await _fixture.RegisterSourcePeerAsync();
+        SyncFixture.Write(_fixture.DestWork, "a.txt", "committed on Dest\n");
+        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "committed on Dest\n");
+        var envelope = await _fixture.BuildSignedEnvelopeAsync();
+        envelope.Manifest.Single(change => change.Path == "a.txt").BaseSha256.Should().NotBeNull();
+
+        var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), envelope, Context());
+
+        result.Status.Should().Be(PatchStatus.ConflictPending);
+        result.Conflicts.Should().ContainSingle().Which.Path.Should().Be("a.txt");
+        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("committed on Dest\n");
+    }
+
+    /// <summary>
+    /// Verifies that a Dest file that still has exactly the content the sender built from is overwritten, even when Dest's own
+    /// base holds something else.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Local_File_Equal_To_The_Sender_Base_Is_Overwritten()
+    {
+        await _fixture.RegisterSourcePeerAsync();
+        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "stale base\n");
+
+        var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), await _fixture.BuildSignedEnvelopeAsync(), Context());
+
+        result.Status.Should().Be(PatchStatus.Applied);
+        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v2\n");
+        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n");
+    }
+
+    /// <summary>
+    /// Verifies that a patch whose sender reports no base (an older version) is judged against the local sync base.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Patch_Without_Sender_Base_Falls_Back_To_The_Local_Base()
+    {
+        var detector = new ConflictDetector(_fixture.Paths);
+        var incoming = new string('a', 64);
+        var legacy = new[] { new FileChange(ChangeKind.Modified, "a.txt", incoming, 3, false) };
+        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "local edit\n");
+        SyncFixture.Write(_fixture.DestWork, "a.txt", "local edit\n");
+
+        (await detector.DetectAsync(legacy, _fixture.DestWork, _fixture.DestPaths.SyncBase)).Should().BeEmpty("the local file equals the local base");
+
+        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "v1\n");
+        (await detector.DetectAsync(legacy, _fixture.DestWork, _fixture.DestPaths.SyncBase)).Should().ContainSingle();
     }
 
     /// <summary>

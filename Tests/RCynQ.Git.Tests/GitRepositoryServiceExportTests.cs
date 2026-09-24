@@ -42,8 +42,9 @@ public class GitRepositoryServiceExportTests
         var service = new GitRepositoryService(git);
         await service.ExportTreeAsync(repo.Path, commit, destination.Path);
 
-        File.ReadAllText(destination["a.txt"]).Should().Be("v1\n");
-        File.ReadAllText(destination["sub/b.txt"]).Should().Be("v1\n");
+        // A checkout may write CRLF (core.autocrlf of the machine); the content is what matters here.
+        File.ReadAllText(destination["a.txt"]).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("v1\n");
+        File.ReadAllText(destination["sub/b.txt"]).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("v1\n");
         File.Exists(destination["untracked.txt"]).Should().BeFalse();
         Directory.Exists(destination[".git"]).Should().BeFalse();
     }

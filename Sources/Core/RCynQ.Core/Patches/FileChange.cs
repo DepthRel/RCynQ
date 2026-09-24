@@ -6,9 +6,15 @@ namespace RCynQ.Core.Patches;
 /// Describes a single file-level change between a base state and an incoming state.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <see cref="Sha256"/> and <see cref="SizeBytes"/> are <see langword="null"/>
 /// for <see cref="ChangeKind.Deleted"/> changes because the file no longer exists
 /// in the incoming state.
+/// </para>
+/// <para>
+/// <see cref="BaseSha256"/> is the content the sender believed the receiver has for the path: the receiver applies the change
+/// cleanly when its own file still has that content, and reports a conflict otherwise.
+/// </para>
 /// </remarks>
 public sealed record FileChange
 {
@@ -30,18 +36,24 @@ public sealed record FileChange
     /// <param name="isSymlink">
     /// <see langword="true"/> when the file is a symbolic link; otherwise <see langword="false"/>.
     /// </param>
+    /// <param name="baseSha256">
+    /// The SHA-256 hash (lowercase hex) of the file in the sender's sync base, that is the content the sender believed the
+    /// receiver has; <see langword="null"/> for added files and for patches of senders that do not report it.
+    /// When present, must be 64 hex characters.
+    /// </param>
     /// <exception cref="ArgumentException">
-    /// <paramref name="path"/> is blank, <paramref name="sha256"/> is malformed, or
+    /// <paramref name="path"/> is blank, <paramref name="sha256"/> or <paramref name="baseSha256"/> is malformed, or
     /// <paramref name="sizeBytes"/> is negative.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is negative.</exception>
-    public FileChange(ChangeKind kind, string path, string? sha256, long? sizeBytes, bool isSymlink)
+    public FileChange(ChangeKind kind, string path, string? sha256, long? sizeBytes, bool isSymlink, string? baseSha256 = null)
     {
         Kind = kind;
         Path = ValidatePath(path);
         Sha256 = ValidateHash(sha256);
         SizeBytes = ValidateSize(sizeBytes);
         IsSymlink = isSymlink;
+        BaseSha256 = ValidateHash(baseSha256);
     }
 
     /// <summary>
@@ -70,6 +82,22 @@ public sealed record FileChange
     /// Gets a value indicating whether the file is a symbolic link.
     /// </summary>
     public bool IsSymlink { get; }
+
+    /// <summary>
+    /// Gets the SHA-256 hash of the file in the sender's sync base, or <see langword="null"/> for added files and for patches
+    /// of senders that do not report it.
+    /// </summary>
+    public string? BaseSha256 { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the sender reported the content it built the change from.
+    /// </summary>
+    /// <remarks>
+    /// An added file was built from "no file", which needs no hash. A modified or deleted file without <see cref="BaseSha256"/>
+    /// comes from a sender of an older version; the receiver then falls back to its own sync base.
+    /// </remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasKnownBase => Kind == ChangeKind.Added || BaseSha256 is not null;
 
     /// <summary>
     /// Validates that the given relative path is not <see langword="null"/> or blank.

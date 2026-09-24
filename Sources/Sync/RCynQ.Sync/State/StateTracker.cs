@@ -3,14 +3,20 @@ using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
-using RCynQ.Sync.GitChannel;
+using RCynQ.Git.Manifest;
+using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
+using RCynQ.Sync.SyncBase;
 
 namespace RCynQ.Sync.State;
 
 /// <summary>
-/// Maintains the persisted <see cref="SyncState"/> of the local node.
+/// Maintains the persisted <see cref="SyncState"/> of the local node and finds the changes the peer does not have yet.
 /// </summary>
+/// <remarks>
+/// Every capture takes the <see cref="WorkingTreeLock"/> while it brings the sync base up to date and reads it, so it never sees a
+/// base that a patch, a Pull or a new export is changing. Callers must therefore not hold the lock themselves.
+/// </remarks>
 public sealed class StateTracker
 {
     /// <summary>
@@ -44,9 +50,14 @@ public sealed class StateTracker
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
-    /// The resolver of the directory to compare the working tree against.
+    /// The sync base manager.
     /// </summary>
-    private readonly IPendingChangesBaseResolver _baseResolver;
+    private readonly SyncBaseManager _base;
+
+    /// <summary>
+    /// The working tree lock.
+    /// </summary>
+    private readonly WorkingTreeLock _lock;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StateTracker"/> class.
@@ -57,8 +68,17 @@ public sealed class StateTracker
     /// <param name="paths">The sync paths.</param>
     /// <param name="node">The local node.</param>
     /// <param name="timeProvider">The clock.</param>
-    /// <param name="baseResolver">The resolver of the directory to compare the working tree against.</param>
-    public StateTracker(INodeStateStore store, IFileManifestBuilder manifest, IStateHasher hasher, SyncPaths paths, NodeConfig node, TimeProvider timeProvider, IPendingChangesBaseResolver baseResolver)
+    /// <param name="syncBase">The sync base manager.</param>
+    /// <param name="workingTreeLock">The working tree lock.</param>
+    public StateTracker(
+        INodeStateStore store,
+        IFileManifestBuilder manifest,
+        IStateHasher hasher,
+        SyncPaths paths,
+        NodeConfig node,
+        TimeProvider timeProvider,
+        SyncBaseManager syncBase,
+        WorkingTreeLock workingTreeLock)
     {
         _store = store;
         _manifest = manifest;
@@ -66,46 +86,67 @@ public sealed class StateTracker
         _paths = paths;
         _node = node;
         _timeProvider = timeProvider;
-        _baseResolver = baseResolver;
+        _base = syncBase;
+        _lock = workingTreeLock;
     }
 
     /// <summary>
-    /// Gets the persisted state without rescanning.
+    /// Gets the persisted state without recomputing it.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The state.</returns>
     public Task<SyncState> GetAsync(CancellationToken cancellationToken = default) => _store.GetAsync(cancellationToken);
 
     /// <summary>
-    /// Recomputes <see cref="SyncState.LocalStateHash"/> and <see cref="SyncState.SyncBaseHash"/> and persists them.
+    /// Brings the sync base up to date, recomputes the state hashes, stores them and finds the pending changes.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The updated state; the stored state for a Mediator.</returns>
-    public async Task<SyncState> RefreshAsync(CancellationToken cancellationToken = default)
+    /// <returns>The state, the sync base status and the changes the peer does not have yet.</returns>
+    public async Task<SyncSnapshot> CaptureAsync(CancellationToken cancellationToken = default)
     {
         var current = await _store.GetAsync(cancellationToken);
         if (!_node.ParticipatesInPatchChannel)
         {
-            return current;
+            return new SyncSnapshot(current, SyncBaseStatus.NotApplicable, Array.Empty<FileChange>(), Array.Empty<ChangedFile>());
         }
 
-        var local = _hasher.ComputeHash(await _manifest.ScanAsync(_paths.Workdir, cancellationToken));
-        string? syncBase = null;
-        await using (var sendBase = await _baseResolver.ResolveAsync(cancellationToken))
+        SyncBaseStatus status;
+        IReadOnlyList<FileEntry> local;
+        IReadOnlyList<FileEntry>? syncBase = null;
+        IReadOnlyList<FileChange> pending = Array.Empty<FileChange>();
+        IReadOnlyList<ChangedFile> changed = Array.Empty<ChangedFile>();
+        using (await _lock.AcquireAsync(cancellationToken))
         {
-            if (sendBase is not null)
+            status = await _base.EnsureAsync(cancellationToken);
+            local = await _manifest.ScanAsync(_paths.Workdir, cancellationToken);
+            if (status.IsReady)
             {
-                syncBase = _hasher.ComputeHash(await _manifest.ScanAsync(sendBase.Directory, _paths.Workdir, cancellationToken));
+                // The base is read with the rules of the working tree, see IFileManifestBuilder.BuildAsync.
+                syncBase = await _manifest.ScanAsync(_paths.SyncBase, _paths.Workdir, cancellationToken);
+                pending = await _base.SelectPendingAsync(DefaultFileManifestBuilder.Compare(syncBase, local), status, cancellationToken);
+                changed = await _base.ListChangedAsync(pending, status, cancellationToken);
             }
         }
 
-        var updated = new SyncState(local, syncBase, current.LastSentAtUtc, current.LastReceivedAtUtc);
+        var updated = new SyncState(
+            _hasher.ComputeHash(local),
+            syncBase is null ? null : _hasher.ComputeHash(syncBase),
+            current.LastSentAtUtc,
+            current.LastReceivedAtUtc);
         await _store.SaveAsync(updated, cancellationToken);
-        return updated;
+        return new SyncSnapshot(updated, status, pending, changed);
     }
 
     /// <summary>
-    /// Records that a patch was sent and refreshes the hashes.
+    /// Recomputes and stores the state hashes.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The updated state.</returns>
+    public async Task<SyncState> RefreshAsync(CancellationToken cancellationToken = default)
+        => (await CaptureAsync(cancellationToken)).State;
+
+    /// <summary>
+    /// Records that a patch was sent now and refreshes the state.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The updated state.</returns>
@@ -117,7 +158,7 @@ public sealed class StateTracker
     }
 
     /// <summary>
-    /// Records that a patch was received and refreshes the hashes.
+    /// Records that a patch was received now and refreshes the state.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The updated state.</returns>
@@ -127,40 +168,13 @@ public sealed class StateTracker
         await _store.SaveAsync(new SyncState(current.LocalStateHash, current.SyncBaseHash, current.LastSentAtUtc, _timeProvider.GetUtcNow()), cancellationToken);
         return await RefreshAsync(cancellationToken);
     }
-
-    /// <summary>
-    /// Lists local changes between the comparison base (the branch last pulled from Dest, or the sync-base snapshot) and the
-    /// working tree.
-    /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The pending changes; empty for a Mediator or when nothing to compare against exists yet.</returns>
-    public async Task<IReadOnlyList<FileChange>> GetPendingChangesAsync(CancellationToken cancellationToken = default)
-    {
-        if (!_node.ParticipatesInPatchChannel)
-        {
-            return Array.Empty<FileChange>();
-        }
-
-        await using var sendBase = await _baseResolver.ResolveAsync(cancellationToken);
-        return sendBase is null
-            ? Array.Empty<FileChange>()
-            : await _manifest.BuildAsync(sendBase.Directory, _paths.Workdir, cancellationToken);
-    }
-
-    /// <summary>
-    /// Checks whether this node is ready to send: a comparison base exists, either the branch last pulled from Dest or the
-    /// sync-base snapshot.
-    /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns><see langword="true"/> when a comparison base is available; always <see langword="false"/> for a Mediator.</returns>
-    public async Task<bool> IsSendReadyAsync(CancellationToken cancellationToken = default)
-    {
-        if (!_node.ParticipatesInPatchChannel)
-        {
-            return false;
-        }
-
-        await using var sendBase = await _baseResolver.ResolveAsync(cancellationToken);
-        return sendBase is not null;
-    }
 }
+
+/// <summary>
+/// The result of <see cref="StateTracker.CaptureAsync"/>.
+/// </summary>
+/// <param name="State">The stored state.</param>
+/// <param name="SyncBase">The status of the sync base.</param>
+/// <param name="PendingChanges">The changes of the working tree the peer does not have yet; empty without a sync base.</param>
+/// <param name="ChangedFiles">Every file that differs from the Git commit, including those the peer already has; empty without a sync base.</param>
+public sealed record SyncSnapshot(SyncState State, SyncBaseStatus SyncBase, IReadOnlyList<FileChange> PendingChanges, IReadOnlyList<ChangedFile> ChangedFiles);

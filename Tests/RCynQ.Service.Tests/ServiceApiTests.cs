@@ -45,7 +45,7 @@ public sealed class ServiceApiTests
     public async Task Health_Is_Public_And_Management_Requires_Token()
     {
         var patches = Substitute.For<IPatchService>();
-        patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(new NodeId("dest-1"), "dest-1", NodeRole.Dest, new SyncState("a", "b", null, null), true, Array.Empty<FileChange>(), 0));
+        patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(new NodeId("dest-1"), "dest-1", NodeRole.Dest, new SyncState("a", "b", null, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('d', 40), null, false), Array.Empty<FileChange>(), 0));
         await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
 
         (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.Health)).StatusCode.Should().Be(HttpStatusCode.OK);

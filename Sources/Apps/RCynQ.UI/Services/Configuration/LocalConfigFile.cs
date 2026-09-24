@@ -131,12 +131,6 @@ public static class LocalConfigFile
     }
 
     /// <summary>
-    /// Sets or removes a property, replacing an existing property with different casing.
-    /// </summary>
-    /// <param name="section">The section.</param>
-    /// <param name="name">The property name.</param>
-    /// <param name="value">The value, or <see langword="null"/> to remove the property.</param>
-    /// <summary>
     /// Gets a nested object of the section, creating it when it is missing or holds something else.
     /// </summary>
     /// <param name="section">The section.</param>

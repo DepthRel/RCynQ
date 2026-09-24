@@ -81,6 +81,12 @@ public sealed record AppDataPaths
     public string SyncBaseDirectory => Path.Combine(SnapshotsDirectory, "base");
 
     /// <summary>
+    /// Gets the file that records where the sync base came from (a Git commit or a manual snapshot) and which of its files
+    /// were exchanged with the peer since.
+    /// </summary>
+    public string SyncBaseMetadataPath => Path.Combine(SnapshotsDirectory, "base.json");
+
+    /// <summary>
     /// Gets the path of the file with the local management API token used by the UI and CLI.
     /// </summary>
     public string ApiTokenPath => Path.Combine(KeysDirectory, "api.token");

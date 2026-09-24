@@ -1,5 +1,6 @@
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
 using RCynQ.Git.Patches.Diff;
@@ -12,6 +13,11 @@ namespace RCynQ.Sync.Conflicts;
 /// <summary>
 /// <see cref="IConflictResolver"/> implementing the user-selectable conflict policies.
 /// </summary>
+/// <remarks>
+/// Whatever the policy, the peer keeps the incoming content, so the sync base takes it once the patch is decided. With
+/// <see cref="ConflictPolicy.KeepLocal"/> the local file then differs from the base and is offered to be sent, and the peer can apply
+/// that answer without a new conflict: it names exactly what the peer has.
+/// </remarks>
 public sealed class DefaultConflictResolver : IConflictResolver
 {
     /// <summary>
@@ -65,6 +71,15 @@ public sealed class DefaultConflictResolver : IConflictResolver
         switch (Guard.Defined(policy, nameof(policy)))
         {
             case ConflictPolicy.KeepLocal:
+                try
+                {
+                    await _contentApplier.ApplyAsync(envelope, content, _paths.SyncBase, cancellationToken);
+                }
+                catch (Exception ex) when (ex is SyncBridgeException or IOException)
+                {
+                    // The content of a patch that failed early may be gone; rejecting it must still work, the base just stays as it was.
+                }
+
                 return new PatchApplyResult(envelope.Id, PatchStatus.Rejected, 0, Array.Empty<ConflictFile>(), null);
 
             case ConflictPolicy.ApplyIncomingOverLocal:

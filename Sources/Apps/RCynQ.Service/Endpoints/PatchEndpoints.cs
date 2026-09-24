@@ -249,9 +249,10 @@ public static class PatchEndpoints
     /// </summary>
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
+    /// <param name="request">The optional body naming the files to send; without it every changed file is sent.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The send result.</returns>
-    private static async Task<IResult> SendAsync(NodeConfig node, IPatchService patches, CancellationToken cancellationToken)
+    private static async Task<IResult> SendAsync(NodeConfig node, IPatchService patches, SendPatchRequest? request, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).SendsPatches)
         {
@@ -260,7 +261,7 @@ public static class PatchEndpoints
 
         try
         {
-            return Results.Ok(await patches.SendAsync(cancellationToken));
+            return Results.Ok(await patches.SendAsync(request?.Paths, cancellationToken));
         }
         catch (SyncBridgeException ex)
         {
@@ -284,7 +285,7 @@ public static class PatchEndpoints
 
         try
         {
-            return Results.Ok(await patches.InitializeBaselineAsync(cancellationToken));
+            return Results.Ok(await patches.RebuildBaselineAsync(cancellationToken));
         }
         catch (SyncBridgeException ex)
         {

@@ -84,6 +84,9 @@
   <Style Selector="ItemsControl.rows > ContentPresenter:nth-last-child(1) > Border.row">
     <Setter Property="BorderThickness" Value="0" />
   </Style>
+  <Style Selector="Border.row.selected">
+    <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+  </Style>
   <Style Selector="Border.row TextBlock, Border.header-row TextBlock">
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
@@ -180,6 +183,17 @@
   <Style Selector="Button.outline:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{StaticResource PressedBackgroundBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderHoverBrush}" />
+  </Style>
+  <!-- A pressed-in outline button: the mode it switches on is active. Must follow the pointerover styles above. -->
+  <Style Selector="Button.outline.toggled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+  </Style>
+  <Style Selector="Button.outline.toggled:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AccentHoverBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
   </Style>
   <Style Selector="Button.accent">
     <Setter Property="Background" Value="{StaticResource AccentBrush}" />

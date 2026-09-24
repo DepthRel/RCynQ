@@ -179,7 +179,7 @@ public static class NodeCertificateStore
 
         using (loaded)
         {
-            return new X509Certificate2(loaded.Export(X509ContentType.Pkcs12));
+            return X509CertificateLoader.LoadPkcs12(loaded.Export(X509ContentType.Pkcs12), null);
         }
     }
 }

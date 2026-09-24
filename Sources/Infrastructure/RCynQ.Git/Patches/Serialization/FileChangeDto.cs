@@ -21,4 +21,7 @@ public sealed class FileChangeDto
 
     /// <summary>Gets or sets a value indicating whether the entry is a symbolic link.</summary>
     public bool IsSymlink { get; set; }
+
+    /// <summary>Gets or sets the SHA-256 of the file in the sender's sync base; absent for added files and from older senders.</summary>
+    public string? BaseSha256 { get; set; }
 }

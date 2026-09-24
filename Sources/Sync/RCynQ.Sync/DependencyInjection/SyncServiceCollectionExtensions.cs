@@ -9,7 +9,6 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
-using RCynQ.Sync.Baseline;
 using RCynQ.Sync.Configuration.Probing;
 using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.History;
@@ -59,7 +58,9 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<BackupService>();
         services.TryAddSingleton<IConflictResolver, DefaultConflictResolver>();
         services.TryAddSingleton<StateTracker>();
-        services.TryAddSingleton<BaselineService>();
+        services.TryAddSingleton<SyncBase.SyncBaseMetadataStore>();
+        services.TryAddSingleton<SyncBase.IGitSyncBaseLocator, SyncBase.GitSyncBaseLocator>();
+        services.TryAddSingleton<SyncBase.SyncBaseManager>();
         services.TryAddSingleton<PatchOutcomeRecorder>();
         services.TryAddSingleton(new HttpPatchSenderOptions());
         services.TryAddSingleton<IPatchSender>(provider => ActivatorUtilities.CreateInstance<HttpPatchSender>(
@@ -74,8 +75,6 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<INodeEnvironmentProbe, NodeEnvironmentProbe>();
         services.TryAddSingleton<Configuration.Access.PeerAccessService>();
         services.TryAddSingleton<GitChannel.GitBundleService>();
-        services.TryAddSingleton<GitChannel.GitPullBaseUpdater>();
-        services.TryAddSingleton<GitChannel.IPendingChangesBaseResolver, GitChannel.GitPendingChangesBaseResolver>();
         services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<GitChannel.GitBundleClient>(
             provider,
             new PeerLinkFactory(new SocketsHttpHandler { UseProxy = false }, provider.GetRequiredService<ILocalForwardManager>())));

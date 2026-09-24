@@ -140,9 +140,9 @@ public sealed class ContentAndTransferTests : IDisposable
         SyncFixture.Write(_fixture.SourceWork, "a.txt", "v3, typed while sending\n");
         var syncBase = _fixture.SourceBaseForBuild;
 
-        var skipped = await new Apply.SyncBaseUpdater(_fixture.Applier, _fixture.Paths).UpdateAsync(envelope, _fixture.SourceWork, syncBase);
+        var accepted = await new Apply.SyncBaseUpdater(_fixture.Applier, _fixture.Paths).UpdateAsync(envelope, _fixture.SourceWork, syncBase);
 
-        skipped.Should().Be(1);
+        accepted.Select(change => change.Path).Should().BeEquivalentTo("b.txt", "new.txt");
         SyncFixture.Read(syncBase, "a.txt").Should().Be("v1\n", "the peer received v2, not v3, so the base must not claim v3");
         SyncFixture.Read(syncBase, "new.txt").Should().Be("new\n");
         SyncFixture.Read(syncBase, "b.txt").Should().BeNull("deletions are applied");

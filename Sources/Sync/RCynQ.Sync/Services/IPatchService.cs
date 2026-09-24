@@ -11,12 +11,16 @@ namespace RCynQ.Sync.Services;
 public interface IPatchService
 {
     /// <summary>
-    /// Builds a patch from the sync base to the working tree and sends it to the chain endpoint.
+    /// Builds a patch from the changed files of the working tree and sends it to the chain endpoint.
     /// </summary>
+    /// <param name="paths">
+    /// The relative paths of the files to send, or <see langword="null"/> to send every changed file, also those the peer already
+    /// has. Paths that are not changed files are ignored.
+    /// </param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The send result; <see cref="SendPatchResult.Sent"/> is <see langword="false"/> when there are no changes.</returns>
-    /// <exception cref="SyncBridgeException">The node cannot send (role, missing chain or baseline).</exception>
-    Task<SendPatchResult> SendAsync(CancellationToken cancellationToken = default);
+    /// <returns>The send result; <see cref="SendPatchResult.Sent"/> is <see langword="false"/> when there is nothing to send.</returns>
+    /// <exception cref="SyncBridgeException">The node cannot send (role, missing chain, or no sync base yet).</exception>
+    Task<SendPatchResult> SendAsync(IReadOnlyCollection<string>? paths = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Opens (or resumes) the session of a patch from the peer with its signed manifest.
@@ -94,9 +98,11 @@ public interface IPatchService
     Task<byte[]> ReadDiffAsync(Guid patchId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Replaces the sync base with the current working tree.
+    /// Takes a manual snapshot of the working tree as the sync base. Only for a working tree without Git: the base of a Git
+    /// working tree is built from its commits automatically.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The recorded snapshot.</returns>
-    Task<SnapshotInfo> InitializeBaselineAsync(CancellationToken cancellationToken = default);
+    /// <exception cref="SyncBridgeException">The working tree is a Git repository, is missing, or the snapshot failed.</exception>
+    Task<SnapshotInfo> RebuildBaselineAsync(CancellationToken cancellationToken = default);
 }

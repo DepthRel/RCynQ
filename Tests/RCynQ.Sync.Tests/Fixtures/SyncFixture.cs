@@ -19,7 +19,6 @@ using RCynQ.Git.Processes;
 using RCynQ.Git.Repository;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
-using RCynQ.Sync.Baseline;
 using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.GitChannel;
@@ -30,6 +29,7 @@ using RCynQ.Sync.Security;
 using RCynQ.Sync.Services;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
+using RCynQ.Sync.SyncBase;
 using RCynQ.Sync.Tests.Fakes;
 using RCynQ.Sync.Transfer;
 
@@ -47,13 +47,19 @@ public sealed class SyncFixture : IDisposable
     public const string Token = "0123456789abcdef-link-token";
 
     /// <summary>The real Git repository service, shared by both nodes (stateless).</summary>
-    private static readonly IGitRepositoryService GitRepository = new GitRepositoryService(new GitCommandRunner(new SystemProcessRunner(), new GitOptions()));
+    public static readonly IGitRepositoryService GitRepository = new GitRepositoryService(new GitCommandRunner(new SystemProcessRunner(), new GitOptions()));
 
     /// <summary>The Source node data directories.</summary>
     private readonly AppDataFactory _sourceAppData;
 
     /// <summary>The Dest node data directories.</summary>
     private readonly AppDataFactory _destAppData;
+
+    /// <summary>The sync base manager of the Source node, created on first use.</summary>
+    private SyncBaseManager? _sourceSyncBase;
+
+    /// <summary>The sync base manager of the Dest node, created on first use.</summary>
+    private SyncBaseManager? _destSyncBase;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncFixture"/> class.
@@ -168,7 +174,8 @@ public sealed class SyncFixture : IDisposable
     public static string? Read(string directory, string relative)
     {
         var full = Path.Combine(directory, relative);
-        return File.Exists(full) ? File.ReadAllText(full) : null;
+        // Compared by content: a checkout may write CRLF where the test wrote LF (core.autocrlf of the machine).
+        return File.Exists(full) ? File.ReadAllText(full).Replace("\r\n", "\n", StringComparison.Ordinal) : null;
     }
 
     /// <summary>
@@ -217,9 +224,10 @@ public sealed class SyncFixture : IDisposable
             new ConflictDetector(Paths),
             Applier,
             CreateOutcomes(),
-            CreateTracker(DestNode, DestPaths, _destAppData),
+            CreateTracker(DestNode),
             DestPaths,
-            new WorkingTreeLock(),
+            DestSyncBase,
+            DestLock,
             TimeProvider.System);
 
     /// <summary>
@@ -246,9 +254,6 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The service.</returns>
     public PatchService CreateSourceService(IPatchSender sender, IChainLinkRepository chain)
     {
-        var workingTreeLock = new WorkingTreeLock();
-        var tracker = CreateTracker(SourceNode, SourcePaths, _sourceAppData);
-        var manifest = new DefaultFileManifestBuilder(new SnapshotFilter());
         return new PatchService(
             SourceNode,
             SourcePaths,
@@ -265,10 +270,9 @@ public sealed class SyncFixture : IDisposable
             Patches,
             Storage,
             CreateOutcomes(),
-            tracker,
-            new BaselineService(SourceNode, SourcePaths, manifest, new DefaultStateHasher(), Substitute.For<ISnapshotRepository>(), Paths, tracker, workingTreeLock, TimeProvider.System),
-            workingTreeLock,
-            CreateBaseResolver(SourceNode, SourcePaths, _sourceAppData));
+            CreateTracker(SourceNode),
+            SourceLock,
+            SourceSyncBase);
     }
 
     /// <summary>
@@ -334,36 +338,77 @@ public sealed class SyncFixture : IDisposable
     private PatchOutcomeRecorder CreateOutcomes() => new(Patches, History, Events, TimeProvider.System);
 
     /// <summary>
-    /// Creates a state tracker.
+    /// Gets the working tree lock of the Source node, shared by everything the fixture builds for it.
     /// </summary>
-    /// <param name="node">The node.</param>
-    /// <param name="paths">The paths.</param>
-    /// <param name="appData">The node data directories.</param>
+    public WorkingTreeLock SourceLock { get; } = new();
+
+    /// <summary>
+    /// Gets the working tree lock of the Dest node, shared by everything the fixture builds for it.
+    /// </summary>
+    public WorkingTreeLock DestLock { get; } = new();
+
+    /// <summary>
+    /// Gets the sync base manager of the Source node, backed by the real Git plumbing so tests that <c>git init</c> the
+    /// working tree exercise the Git sync base.
+    /// </summary>
+    public SyncBaseManager SourceSyncBase => _sourceSyncBase ??= CreateSyncBase(SourceNode, SourcePaths, _sourceAppData, SourceLock);
+
+    /// <summary>
+    /// Gets the sync base manager of the Dest node.
+    /// </summary>
+    public SyncBaseManager DestSyncBase => _destSyncBase ??= CreateSyncBase(DestNode, DestPaths, _destAppData, DestLock);
+
+    /// <summary>
+    /// Gets the working tree lock of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// </summary>
+    /// <param name="node">Either node.</param>
+    /// <returns>The lock.</returns>
+    public WorkingTreeLock LockOf(NodeConfig node) => node.Id == SourceNode.Id ? SourceLock : DestLock;
+
+    /// <summary>
+    /// Gets the sync base manager of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// </summary>
+    /// <param name="node">Either node.</param>
+    /// <returns>The manager.</returns>
+    public SyncBaseManager SyncBaseOf(NodeConfig node) => node.Id == SourceNode.Id ? SourceSyncBase : DestSyncBase;
+
+    /// <summary>
+    /// Creates a state tracker of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// </summary>
+    /// <param name="node">Either node.</param>
     /// <returns>The tracker.</returns>
-    private StateTracker CreateTracker(NodeConfig node, SyncPaths paths, AppDataFactory appData)
-        => new(StateStore, new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), paths, node, TimeProvider.System, CreateBaseResolver(node, paths, appData));
+    public StateTracker CreateTracker(NodeConfig node)
+        => new(
+            StateStore,
+            new DefaultFileManifestBuilder(new SnapshotFilter()),
+            new DefaultStateHasher(),
+            node.Id == SourceNode.Id ? SourcePaths : DestPaths,
+            node,
+            TimeProvider.System,
+            SyncBaseOf(node),
+            LockOf(node));
 
     /// <summary>
-    /// Creates the resolver of the directory to compare a node's working tree against, backed by the real Git plumbing so
-    /// tests that <c>git init</c> a working tree can exercise the Git-native path.
+    /// Creates a sync base manager.
     /// </summary>
     /// <param name="node">The node.</param>
     /// <param name="paths">The paths.</param>
     /// <param name="appData">The node data directories.</param>
-    /// <returns>The resolver.</returns>
-    private static GitPendingChangesBaseResolver CreateBaseResolver(NodeConfig node, SyncPaths paths, AppDataFactory appData)
-        => new(node, paths, GitRepository, appData);
-
-    /// <summary>
-    /// Creates the resolver of the directory to compare <see cref="SourceNode"/> or <see cref="DestNode"/> against, for
-    /// tests that build a <see cref="Sync.Diagnostics.Checks.SnapshotIntegrityCheck"/> or similar directly.
-    /// </summary>
-    /// <param name="node">Either <see cref="SourceNode"/> or <see cref="DestNode"/>.</param>
-    /// <returns>The resolver.</returns>
-    public GitPendingChangesBaseResolver CreateBaseResolver(NodeConfig node)
-        => node.Id == SourceNode.Id
-            ? CreateBaseResolver(SourceNode, SourcePaths, _sourceAppData)
-            : CreateBaseResolver(DestNode, DestPaths, _destAppData);
+    /// <param name="workingTreeLock">The working tree lock of the node.</param>
+    /// <returns>The manager.</returns>
+    private SyncBaseManager CreateSyncBase(NodeConfig node, SyncPaths paths, AppDataFactory appData, WorkingTreeLock workingTreeLock)
+        => new(
+            node,
+            paths,
+            new GitSyncBaseLocator(node, GitRepository),
+            GitRepository,
+            new SyncBaseMetadataStore(appData),
+            new DefaultFileManifestBuilder(new SnapshotFilter()),
+            new DefaultStateHasher(),
+            Substitute.For<ISnapshotRepository>(),
+            Paths,
+            workingTreeLock,
+            TimeProvider.System);
 
     /// <summary>
     /// Creates a directory below the root.

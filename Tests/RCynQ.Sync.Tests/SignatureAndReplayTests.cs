@@ -53,9 +53,9 @@ public class SignatureAndReplayTests
     {
         var created = new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero);
         var id = Guid.NewGuid();
-        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, long size = 1, string target = "dest")
+        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, long size = 1, string target = "dest", string? baseHash = null)
             => new(id, new NodeId("source"), new NodeId(target), at ?? created, Hash, Hash,
-                new[] { new FileChange(ChangeKind.Modified, path, Hash, size, false) });
+                new[] { new FileChange(ChangeKind.Modified, path, Hash, size, false, baseHash) });
 
         var baseline = PayloadCanonicalizer.Build(Envelope());
         PayloadCanonicalizer.Build(Envelope()).Should().Equal(baseline);
@@ -64,6 +64,7 @@ public class SignatureAndReplayTests
         PayloadCanonicalizer.Build(Envelope(at: created.AddTicks(1))).Should().NotEqual(baseline);
         PayloadCanonicalizer.Build(Envelope(size: 2)).Should().NotEqual(baseline, "the size bounds the upload, so it is signed too");
         PayloadCanonicalizer.Build(Envelope(target: "other")).Should().NotEqual(baseline);
+        PayloadCanonicalizer.Build(Envelope(baseHash: new string('c', 64))).Should().NotEqual(baseline, "the base hash decides conflicts on the receiver, so it is signed too");
     }
 
     /// <summary>

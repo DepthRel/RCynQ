@@ -166,7 +166,7 @@ public sealed class DefaultFileManifestBuilder : IFileManifestBuilder
     /// </summary>
     /// <param name="baseEntries">The base state.</param>
     /// <param name="incomingEntries">The incoming state.</param>
-    /// <returns>The file changes ordered by path (ordinal).</returns>
+    /// <returns>The file changes ordered by path (ordinal); modified and deleted files carry their hash in the base state.</returns>
     public static IReadOnlyList<FileChange> Compare(IReadOnlyList<FileEntry> baseEntries, IReadOnlyList<FileEntry> incomingEntries)
     {
         ArgumentNullException.ThrowIfNull(baseEntries);
@@ -183,13 +183,13 @@ public sealed class DefaultFileManifestBuilder : IFileManifestBuilder
             }
             else if (existing.Sha256 != incoming.Sha256 || existing.IsSymlink != incoming.IsSymlink)
             {
-                changes.Add(new FileChange(ChangeKind.Modified, incoming.Path, incoming.Sha256, incoming.SizeBytes, incoming.IsSymlink));
+                changes.Add(new FileChange(ChangeKind.Modified, incoming.Path, incoming.Sha256, incoming.SizeBytes, incoming.IsSymlink, existing.Sha256));
             }
         }
 
         foreach (var removed in baseEntries.Where(entry => !incomingByPath.ContainsKey(entry.Path)))
         {
-            changes.Add(new FileChange(ChangeKind.Deleted, removed.Path, null, null, removed.IsSymlink));
+            changes.Add(new FileChange(ChangeKind.Deleted, removed.Path, null, null, removed.IsSymlink, removed.Sha256));
         }
 
         return changes.OrderBy(change => change.Path, StringComparer.Ordinal).ToArray();

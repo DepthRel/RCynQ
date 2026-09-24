@@ -1,7 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="using:RCynQ.UI.Localization"
-             xmlns:sys="using:System"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Controls"
@@ -20,6 +19,10 @@
             <TextBlock Classes="muted" Text="{loc:Loc Overview.LastSync}" />
             <TextBlock Classes="value mono" Text="{Binding LastSyncText}" />
           </StackPanel>
+          <StackPanel Spacing="2" Margin="0,0,32,0" ToolTip.Tip="{loc:Loc Sync.BaseTip}">
+            <TextBlock Classes="muted" Text="{loc:Loc Sync.Base}" />
+            <TextBlock Classes="value mono" Text="{Binding SyncBaseText}" />
+          </StackPanel>
           <StackPanel Spacing="2" IsVisible="{Binding HasConflicts}">
             <TextBlock Classes="muted" Text="{loc:Loc Sync.Conflicts}" />
             <TextBlock Classes="value danger" Text="{Binding ConflictCount}" />
@@ -33,39 +36,74 @@
         </Button>
       </Grid>
 
-      <Border Classes="banner warning" IsVisible="{Binding NeedsBaseline}">
+      <Border Classes="banner warning" IsVisible="{Binding NeedsSyncBase}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" />
           <TextBlock Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
-                     Text="{loc:Loc Sync.BaselineMissing}" />
-          <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Content="{loc:Loc Sync.CreateBaseline}" Command="{Binding CreateBaselineCommand}" />
+                     Text="{Binding SyncBaseProblem}" />
+          <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Content="{loc:Loc Sync.CreateBaseline}"
+                  IsVisible="{Binding CanCreateManualBaseline}" Command="{Binding CreateBaselineCommand}" />
         </Grid>
       </Border>
 
       <StackPanel>
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Classes="section" Text="{loc:Loc Sync.Pending}" />
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,14">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Sync.Pending}" />
+            <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding CountText}" />
+          </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Classes="outline" Classes.toggled="{Binding IsSelectionMode}" ToolTip.Tip="{loc:Loc Sync.SelectFilesTip}"
+                    Command="{Binding ToggleSelectionModeCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:IconView Classes="small" IconKey="Icon.Check" />
+                <TextBlock Text="{loc:Loc Sync.SelectFiles}" />
+              </StackPanel>
+            </Button>
             <Button Classes="outline" IsEnabled="{Binding !IsBusy}" Content="{loc:Loc Sync.Scan}" ToolTip.Tip="{loc:Loc Sync.ScanTip}" Command="{Binding ScanCommand}" />
-            <Button Classes="outline" IsEnabled="{Binding !IsBusy}" Content="{loc:Loc Sync.RecreateBaseline}" ToolTip.Tip="{loc:Loc Sync.BaselineTitle}"
-                    IsVisible="{Binding BaselineInitialized}" Command="{Binding CreateBaselineCommand}" />
+            <Button Classes="outline" IsEnabled="{Binding !IsBusy}" Content="{Binding RebuildButtonText}" ToolTip.Tip="{loc:Loc Sync.RebuildTip}"
+                    IsVisible="{Binding CanRebuildBaseline}" Command="{Binding CreateBaselineCommand}" />
           </StackPanel>
         </Grid>
         <Border Classes="card">
-          <Panel>
-            <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoPendingFiles}" Text="{loc:Loc Sync.NoPending}" />
-            <ScrollViewer MaxHeight="240">
-              <ItemsControl Classes="rows" ItemsSource="{Binding PendingFiles}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="sys:String">
-                    <Border Classes="row" Padding="16,6">
-                      <TextBlock Classes="mono secondary" FontSize="12.5" Text="{Binding}" TextTrimming="CharacterEllipsis" />
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
-          </Panel>
+          <StackPanel>
+            <Border IsVisible="{Binding IsSelectionMode}" Padding="12,8" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Sync.SelectAll}" Command="{Binding SelectAllCommand}" />
+                <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Sync.ClearSelection}" Command="{Binding ClearSelectionCommand}" />
+              </StackPanel>
+            </Border>
+            <Panel>
+              <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoChangedFiles}" Text="{loc:Loc Sync.NoPending}" />
+              <ScrollViewer MaxHeight="240">
+                <ItemsControl Classes="rows" ItemsSource="{Binding ChangedFiles}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="items:ChangedFileItemViewModel">
+                      <Border Classes="row" Classes.selected="{Binding IsSelected}" Padding="16,6">
+                        <Panel>
+                          <Grid ColumnDefinitions="22,*,Auto" IsVisible="{Binding !IsSelectable}">
+                            <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
+                            <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                                       Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                          </Grid>
+                          <CheckBox IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsSelected}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="0" Padding="8,0,0,0">
+                            <Grid ColumnDefinitions="22,*,Auto">
+                              <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
+                              <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                                         Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                            </Grid>
+                          </CheckBox>
+                        </Panel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Panel>
+          </StackPanel>
         </Border>
       </StackPanel>
 

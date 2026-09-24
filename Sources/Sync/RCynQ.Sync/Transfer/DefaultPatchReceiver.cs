@@ -18,6 +18,7 @@ using RCynQ.Sync.Paths;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
+using RCynQ.Sync.SyncBase;
 
 namespace RCynQ.Sync.Transfer;
 
@@ -78,6 +79,9 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <summary>The sync paths.</summary>
     private readonly SyncPaths _paths;
 
+    /// <summary>The sync base manager.</summary>
+    private readonly SyncBaseManager _syncBase;
+
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
 
@@ -100,6 +104,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <param name="outcomes">The outcome recorder.</param>
     /// <param name="tracker">The state tracker.</param>
     /// <param name="paths">The sync paths.</param>
+    /// <param name="syncBase">The sync base manager.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The clock.</param>
     public DefaultPatchReceiver(
@@ -116,6 +121,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
         SyncPaths paths,
+        SyncBaseManager syncBase,
         WorkingTreeLock workingTreeLock,
         TimeProvider timeProvider)
     {
@@ -132,6 +138,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         _outcomes = outcomes;
         _tracker = tracker;
         _paths = paths;
+        _syncBase = syncBase;
         _lock = workingTreeLock;
         _timeProvider = timeProvider;
     }
@@ -202,6 +209,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         ArgumentNullException.ThrowIfNull(context);
         await AuthorizeSessionAsync(patchId, context, cancellationToken);
 
+        PatchApplyResult result;
         using (await _lock.AcquireAsync(cancellationToken))
         {
             // Read again under the lock: a duplicate commit that waited for the first one sees the finished patch.
@@ -227,18 +235,18 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
                 throw new PatchRejectedException(PatchRejectionReason.Malformed, Texts.Format("Receive.ContentIncomplete", missing, patchId));
             }
 
-            PatchApplyResult result;
             try
             {
                 await _storage.StageContentAsync(patchId, needed.ToArray(), cancellationToken);
                 var content = new StoredPatchContent(patchId, _storage);
-                await SaveDisplayDiffAsync(envelope, content, cancellationToken);
-                if (!_paths.BaselineInitialized)
+                var syncBase = await _syncBase.EnsureAsync(cancellationToken);
+                if (!syncBase.IsReady)
                 {
-                    result = PatchApplyResult.Failed(envelope.Id, LocalizedText.Encode("Receive.NoBaseline"));
+                    result = PatchApplyResult.Failed(envelope.Id, LocalizedText.Encode("Receive.NoBaseline", syncBase.Problem ?? string.Empty));
                 }
                 else
                 {
+                    await SaveDisplayDiffAsync(envelope, content, cancellationToken);
                     var conflicts = await _detector.DetectAsync(envelope.Manifest, _paths.Workdir, _paths.SyncBase, cancellationToken);
                     if (conflicts.Count > 0)
                     {
@@ -247,7 +255,10 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
                     else
                     {
                         result = await _applier.ApplyAsync(envelope, content, _paths.Workdir, cancellationToken);
+
+                        // Both nodes now have the incoming content, so it becomes the base on this side too.
                         await _applier.ApplyAsync(envelope, content, _paths.SyncBase, cancellationToken);
+                        await _syncBase.RecordExchangeAsync(envelope.Manifest.Select(change => change.Path), cancellationToken);
                     }
                 }
             }
@@ -263,9 +274,20 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             }
 
             await _outcomes.RecordAsync(metadata, result, null, cancellationToken);
-            await _tracker.MarkReceivedAsync(cancellationToken);
-            return result;
         }
+
+        // Outside the lock: the tracker takes it itself to read the sync base. The patch is already decided and recorded, so a
+        // failing refresh must not turn the answer to the sender into an error.
+        try
+        {
+            await _tracker.MarkReceivedAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
+        {
+            // The next status request refreshes the state again.
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -371,11 +393,6 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <returns>A task that completes when the diff is stored, or skipped because Git is not available.</returns>
     private async Task SaveDisplayDiffAsync(PatchEnvelope envelope, IPatchContent content, CancellationToken cancellationToken)
     {
-        if (!_paths.BaselineInitialized)
-        {
-            return;
-        }
-
         try
         {
             var diff = await _diffs.BuildAsync(envelope.Manifest, _paths.SyncBase, content, PatchDiffLimits.Display, cancellationToken);

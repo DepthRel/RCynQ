@@ -11,14 +11,19 @@ namespace RCynQ.Core.State;
 /// <param name="Name">The node display name.</param>
 /// <param name="Role">The node role.</param>
 /// <param name="State">The persisted synchronization state.</param>
-/// <param name="BaselineInitialized">Whether the sync base snapshot exists.</param>
-/// <param name="PendingChanges">The local changes not yet synchronized.</param>
+/// <param name="SyncBase">The sync base of the node and whether it is ready.</param>
+/// <param name="PendingChanges">The local changes the peer does not have yet.</param>
 /// <param name="ConflictPendingCount">The number of incoming patches waiting for conflict resolution.</param>
+/// <param name="ChangedFiles">
+/// Every file that differs from the Git commit, including those the peer already has; <see langword="null"/> when the service is of
+/// an older version that reports only <paramref name="PendingChanges"/>.
+/// </param>
 public sealed record NodeSyncStatus(
     NodeId NodeId,
     string Name,
     NodeRole Role,
     SyncState State,
-    bool BaselineInitialized,
+    SyncBaseStatus SyncBase,
     IReadOnlyList<FileChange> PendingChanges,
-    int ConflictPendingCount);
+    int ConflictPendingCount,
+    IReadOnlyList<ChangedFile>? ChangedFiles = null);

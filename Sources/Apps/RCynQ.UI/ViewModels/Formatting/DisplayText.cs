@@ -65,6 +65,28 @@ public static class DisplayText
     };
 
     /// <summary>
+    /// Words a count with the plural forms of the text of a key.
+    /// </summary>
+    /// <param name="key">The key of a text with the forms separated by <c>|</c>, each using <c>{0}</c> for the count: two forms
+    /// (one, other) or three (one, few, many, as in Slavic languages).</param>
+    /// <param name="count">The count.</param>
+    /// <returns>The text with the form that fits the count.</returns>
+    public static string Count(string key, int count)
+    {
+        var forms = Texts.Get(key).Split('|');
+        var last = Math.Abs(count) % 10;
+        var lastTwo = Math.Abs(count) % 100;
+        var index = forms.Length switch
+        {
+            >= 3 when last == 1 && lastTwo != 11 => 0,
+            >= 3 when last is >= 2 and <= 4 && lastTwo is < 12 or > 14 => 1,
+            >= 3 => 2,
+            _ => count == 1 ? 0 : forms.Length - 1
+        };
+        return string.Format(CultureInfo.InvariantCulture, forms[index], count);
+    }
+
+    /// <summary>
     /// Gets the label of a transport: how the neighbour becomes reachable over the network.
     /// </summary>
     /// <remarks>

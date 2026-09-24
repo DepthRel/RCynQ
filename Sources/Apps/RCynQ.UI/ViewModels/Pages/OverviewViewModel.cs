@@ -138,9 +138,12 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         Problems.Clear();
         if (_status is { Role: not NodeRole.Mediator })
         {
-            if (!_status.BaselineInitialized)
+            if (!_status.SyncBase.IsReady)
             {
-                Problems.Add(new ProblemItemViewModel(Texts.Get("Overview.Problem.NoBaseline"), TabKey.Sync));
+                var problem = _status.SyncBase.Problem is { Length: > 0 } reason
+                    ? Texts.Format("Overview.Problem.NoSyncBase", reason)
+                    : Texts.Get("Overview.Problem.NoBaseline");
+                Problems.Add(new ProblemItemViewModel(problem, _status.Role == NodeRole.Source && !_status.SyncBase.CanCreateManual ? TabKey.Branches : TabKey.Sync));
             }
 
             if (_status.ConflictPendingCount > 0)

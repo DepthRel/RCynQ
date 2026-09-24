@@ -90,7 +90,7 @@ public sealed class CliCommandTests : IDisposable
         var hash = new string('b', 64);
         var patches = Substitute.For<IPatchService>();
         patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(
-            new NodeId("source-1"), "Laptop", NodeRole.Source, new SyncState(hash, hash, DateTimeOffset.UtcNow, null), true,
+            new NodeId("source-1"), "Laptop", NodeRole.Source, new SyncState(hash, hash, DateTimeOffset.UtcNow, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('c', 40), null, false),
             new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false) }, 1));
         patches.GetRecentAsync(5, Arg.Any<CancellationToken>()).Returns(new[]
         {
@@ -103,7 +103,7 @@ public sealed class CliCommandTests : IDisposable
 
         code.Should().Be(0);
         output.Should().Contain("source-1 (Source) Laptop")
-            .And.Contain("Baseline:       initialized")
+            .And.Contain("Sync base:      Git main @ cccccccccccc")
             .And.Contain("M src/a.cs")
             .And.Contain("patch resolve")
             .And.Contain("relay")

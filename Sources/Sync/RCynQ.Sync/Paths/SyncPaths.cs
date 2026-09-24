@@ -47,9 +47,4 @@ public sealed class SyncPaths
     /// Gets the backups directory.
     /// </summary>
     public string Backups => _appData.Create().BackupsDirectory;
-
-    /// <summary>
-    /// Gets a value indicating whether the sync base exists.
-    /// </summary>
-    public bool BaselineInitialized => Directory.Exists(SyncBase);
 }

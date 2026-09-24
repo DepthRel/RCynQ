@@ -13,6 +13,10 @@ public sealed class AddressOptionViewModel
     /// Initializes a new instance of the <see cref="AddressOptionViewModel"/> class.
     /// </summary>
     /// <param name="info">The detected address.</param>
+    /// <param name="checkedOnOwnPort">
+    /// <see langword="true"/> when reachability was checked on the node's own RCynQ port rather than on its SSH server; it only changes
+    /// the wording of <see cref="StatusText"/>.
+    /// </param>
     public AddressOptionViewModel(NetworkAddressInfo info, bool checkedOnOwnPort = false)
     {
         Info = info ?? throw new ArgumentNullException(nameof(info));

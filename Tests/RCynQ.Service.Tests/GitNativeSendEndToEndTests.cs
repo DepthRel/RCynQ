@@ -72,10 +72,6 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
         await RunGitAsync(_destWork, "add", "-A");
         await RunGitAsync(_destWork, "-c", "user.name=tester", "-c", "user.email=tester@example.com", "commit", "--quiet", "-m", "first commit");
 
-        // Dest is not Git-native (out of scope for this redesign, see the plan): it still needs its own baseline to accept
-        // an incoming patch, unrelated to whether Source needed one.
-        await _dest.Services.GetRequiredService<IPatchService>().InitializeBaselineAsync();
-
         _source = await ServiceTestHost.StartAsync(
             NodeRole.Source,
             configureServices: services =>
@@ -122,15 +118,15 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
         }
     }
 
+
     /// <summary>
-    /// Verifies that once Source has pulled from Dest, it reports ready to send and can send a local edit straight away,
-    /// without a sync-base snapshot ever existing on disk — the bug class this redesign eliminates. Also verifies the
-    /// resulting behavior once Dest commits what it received: the file stops being pending only after Source pulls that
-    /// commit, since the patch channel itself never commits on Dest.
+    /// Verifies the whole Git cycle without any manual baseline on either node: Source clones Dest by Pull, sends an edit,
+    /// Dest applies it and does not offer it back, Dest commits it together with its own edit, and the next Pull on Source
+    /// goes through even though the sent file is still modified on Source, leaving nothing pending on either side.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Source_Sends_After_Pull_Without_Ever_Creating_A_Baseline()
+    public async Task Source_And_Dest_Sync_Through_Git_Without_A_Baseline()
     {
         if (_dest is null || _source is null)
         {
@@ -140,47 +136,75 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
         using var scope = _source.Services.CreateScope();
         var channel = scope.ServiceProvider.GetRequiredService<GitChannelService>();
         var patches = scope.ServiceProvider.GetRequiredService<IPatchService>();
-        var syncBaseDirectory = scope.ServiceProvider.GetRequiredService<IAppDataFactory>().Create().SyncBaseDirectory;
+        var destPatches = _dest.Services.GetRequiredService<IPatchService>();
+
+        var destBefore = await destPatches.GetStateAsync();
+        destBefore.SyncBase.Mode.Should().Be(SyncBaseMode.Git, destBefore.SyncBase.Problem);
+        destBefore.PendingChanges.Should().BeEmpty();
 
         var pull = await channel.PullAsync();
         pull.Succeeded.Should().BeTrue(pull.Output);
         Read(_sourceWork, "readme.txt").Should().Be("first\n");
-        Directory.Exists(syncBaseDirectory).Should().BeFalse("a Git-native Source never needs the snapshot baseline");
 
         var readyAfterPull = await patches.GetStateAsync();
-        readyAfterPull.BaselineInitialized.Should().BeTrue("a resolved Dest tracking ref is enough to be ready to send");
+        readyAfterPull.SyncBase.Mode.Should().Be(SyncBaseMode.Git, readyAfterPull.SyncBase.Problem);
         readyAfterPull.PendingChanges.Should().BeEmpty("nothing changed since the pull");
 
         Write(_sourceWork, "readme.txt", "edited on Source\n");
-        var afterEdit = await patches.GetStateAsync();
-        afterEdit.PendingChanges.Select(change => change.Path).Should().Equal("readme.txt");
+        (await patches.GetStateAsync()).PendingChanges.Select(change => change.Path).Should().Equal("readme.txt");
 
         var send = await patches.SendAsync();
 
         send.Sent.Should().BeTrue(send.Message);
-        send.Result!.Status.Should().Be(Core.Enums.PatchStatus.Applied, send.Result.Error);
+        send.Result!.Status.Should().Be(PatchStatus.Applied, send.Result.Error);
         Read(_destWork, "readme.txt").Should().Be("edited on Source\n");
-        Directory.Exists(syncBaseDirectory).Should().BeFalse("sending never had to fall back to the snapshot mechanism");
+        (await patches.GetStateAsync()).PendingChanges.Should().BeEmpty("Dest has the edit, even though it did not commit it yet");
 
-        // The patch channel writes straight to Dest's files without committing, so the comparison point (the branch last
-        // pulled from Dest) does not include this change yet: the file legitimately stays pending until Dest commits it and
-        // Source pulls that commit. This is a real behavioral consequence of comparing against Git truth, not a bug.
-        var readyRightAfterSend = await patches.GetStateAsync();
-        readyRightAfterSend.PendingChanges.Select(change => change.Path).Should().Equal("readme.txt");
+        // Dest offers only its own edit, not the one it received from Source.
+        Write(_destWork, "dest-notes.txt", "typed on Dest\n");
+        (await destPatches.GetStateAsync()).PendingChanges.Select(change => change.Path).Should().Equal("dest-notes.txt");
 
         await RunGitAsync(_destWork, "add", "-A");
         await RunGitAsync(_destWork, "-c", "user.name=tester", "-c", "user.email=tester@example.com", "commit", "--quiet", "-m", "commit what Source sent");
+        (await destPatches.GetStateAsync()).PendingChanges.Should().BeEmpty("after the commit Source gets dest-notes.txt by Pull");
 
-        // Source's own edit was never committed there either (the patch channel only ever sent its bytes). Committing the
-        // same content independently on both sides would diverge the histories instead of fast-forwarding, so instead the
-        // operator on Source discards the now-redundant local edit, expecting it back through the pull below.
-        await RunGitAsync(_sourceWork, "checkout", "--", "readme.txt");
-
+        // readme.txt is still modified on Source, but Dest has exactly that version: Pull replaces it instead of refusing.
         var secondPull = await channel.PullAsync();
         secondPull.Succeeded.Should().BeTrue(secondPull.Output);
+        Read(_sourceWork, "dest-notes.txt").Should().Be("typed on Dest\n");
+        Read(_sourceWork, "readme.txt").Should().Be("edited on Source\n");
 
-        var readyAfterDestCommits = await patches.GetStateAsync();
-        readyAfterDestCommits.PendingChanges.Should().BeEmpty("once Dest commits what it received and Source pulls that commit, Git truth agrees again");
+        var afterSecondPull = await patches.GetStateAsync();
+        afterSecondPull.PendingChanges.Should().BeEmpty("both nodes are on the same commit and nothing else changed");
+        afterSecondPull.SyncBase.Commit.Should().Be((await RunGitOutputAsync(_destWork, "rev-parse", "HEAD")).Trim());
+    }
+
+    /// <summary>
+    /// Verifies that Dest detects a conflict when Source changes a file that Dest has changed and committed on its own since the
+    /// commit Source is built on, instead of silently overwriting Dest's version.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Dest_Commit_Of_Its_Own_Edit_Is_Not_Overwritten_By_Source()
+    {
+        if (_dest is null || _source is null)
+        {
+            return;
+        }
+
+        using var scope = _source.Services.CreateScope();
+        var channel = scope.ServiceProvider.GetRequiredService<GitChannelService>();
+        var patches = scope.ServiceProvider.GetRequiredService<IPatchService>();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+
+        Write(_destWork, "readme.txt", "edited and committed on Dest\n");
+        await RunGitAsync(_destWork, "-c", "user.name=tester", "-c", "user.email=tester@example.com", "commit", "--quiet", "-am", "dest edit");
+        Write(_sourceWork, "readme.txt", "edited on Source\n");
+
+        var send = await patches.SendAsync();
+
+        send.Result!.Status.Should().Be(PatchStatus.ConflictPending, send.Result.Error);
+        Read(_destWork, "readme.txt").Should().Be("edited and committed on Dest\n");
     }
 
     /// <summary>
@@ -203,6 +227,19 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
     {
         var result = await _git.RunAsync(arguments, directory);
         result.ExitCode.Should().Be(0, $"git {string.Join(' ', arguments)}: {result.StandardError}");
+    }
+
+    /// <summary>
+    /// Runs git, asserts success and returns its output.
+    /// </summary>
+    /// <param name="directory">The working directory.</param>
+    /// <param name="arguments">The arguments.</param>
+    /// <returns>The standard output.</returns>
+    private async Task<string> RunGitOutputAsync(string directory, params string[] arguments)
+    {
+        var result = await _git.RunAsync(arguments, directory);
+        result.ExitCode.Should().Be(0, $"git {string.Join(' ', arguments)}: {result.StandardError}");
+        return result.StandardOutput;
     }
 
     /// <summary>
@@ -240,5 +277,6 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
     /// <param name="directory">The directory.</param>
     /// <param name="relative">The relative path.</param>
     /// <returns>The content.</returns>
-    private static string Read(string directory, string relative) => File.ReadAllText(Path.Combine(directory, relative));
+    private static string Read(string directory, string relative)
+        => File.ReadAllText(Path.Combine(directory, relative)).Replace("\r\n", "\n", StringComparison.Ordinal);
 }

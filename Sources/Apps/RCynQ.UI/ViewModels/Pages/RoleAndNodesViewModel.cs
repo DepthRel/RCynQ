@@ -86,6 +86,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="elevation">Runs the SSH access update with administrator rights, or <see langword="null"/> when unavailable.</param>
+    /// <param name="settings">The settings kept in the configuration file (link token, endpoint mode), or <see langword="null"/> when the page must not edit them.</param>
     public RoleAndNodesViewModel(
         IServiceApiClient api,
         IDialogService dialogs,

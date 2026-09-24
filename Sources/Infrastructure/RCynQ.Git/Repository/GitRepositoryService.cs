@@ -1,6 +1,6 @@
-using System.IO.Compression;
 using System.Text.RegularExpressions;
 using RCynQ.Core.Config;
+using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
 using RCynQ.Core.Validation;
@@ -66,7 +66,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
             throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
         }
 
-        var result = await _git.RunAsync(new[] { "merge", "--ff-only", info.TrackingRef }, directory, cancellationToken: cancellationToken);
+        var result = await _git.RunInWorkingTreeAsync(new[] { "merge", "--ff-only", info.TrackingRef }, directory, cancellationToken: cancellationToken);
         EnsureSuccess(result, "git merge --ff-only");
         return (result.StandardOutput + result.StandardError).Trim();
     }
@@ -330,7 +330,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
 
         var head = await _git.RunAsync(new[] { "symbolic-ref", "HEAD", "refs/heads/" + branch }, directory, cancellationToken: cancellationToken);
         EnsureSuccess(head, "git symbolic-ref");
-        var reset = await _git.RunAsync(new[] { "reset", "--quiet", keepWorkingFiles ? "--mixed" : "--hard", tracking }, directory, cancellationToken: cancellationToken);
+        var reset = await _git.RunInWorkingTreeAsync(new[] { "reset", "--quiet", keepWorkingFiles ? "--mixed" : "--hard", tracking }, directory, cancellationToken: cancellationToken);
         EnsureSuccess(reset, "git reset");
     }
 
@@ -377,18 +377,25 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         Guard.NotBlank(destinationDirectory, nameof(destinationDirectory));
 
         Directory.CreateDirectory(destinationDirectory);
-        var zipPath = Path.Combine(Path.GetTempPath(), $"rcynq-export-{Guid.NewGuid():N}.zip");
+
+        // A private index filled with the commit and checked out under a prefix gives exactly the files a checkout of that commit
+        // writes: the same line endings, filters and attributes as the user's working tree. (git archive does not: it ignores the
+        // line-ending settings RCynQ overrides and honours export-ignore / export-subst, which a checkout does not.)
+        var indexPath = Path.Combine(Path.GetTempPath(), $"rcynq-export-{Guid.NewGuid():N}.index");
+        var environment = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = indexPath };
+        var prefix = Path.GetFullPath(destinationDirectory).Replace('\\', '/').TrimEnd('/') + "/";
         try
         {
-            var result = await _git.RunAsync(new[] { "archive", "--format=zip", "-o", zipPath, treeish }, directory, cancellationToken: cancellationToken);
-            EnsureSuccess(result, "git archive");
-            ZipFile.ExtractToDirectory(zipPath, destinationDirectory, overwriteFiles: true);
+            var read = await _git.RunInWorkingTreeAsync(new[] { "read-tree", treeish }, directory, environment, cancellationToken);
+            EnsureSuccess(read, "git read-tree");
+            var checkout = await _git.RunInWorkingTreeAsync(new[] { "checkout-index", "--all", "--force", "--prefix=" + prefix }, directory, environment, cancellationToken);
+            EnsureSuccess(checkout, "git checkout-index");
         }
         finally
         {
             try
             {
-                File.Delete(zipPath);
+                File.Delete(indexPath);
             }
             catch (IOException)
             {
@@ -408,6 +415,214 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         ValidateTreeish(treeish);
         var result = await _git.RunAsync(new[] { "rev-parse", "--verify", "--quiet", treeish + "^{commit}" }, directory, cancellationToken: cancellationToken);
         return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetMergeBaseAsync(string directory, string first, string second, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateTreeish(first);
+        ValidateTreeish(second);
+        var result = await _git.RunAsync(new[] { "merge-base", first, second }, directory, cancellationToken: cancellationToken);
+        var commit = result.StandardOutput.Trim();
+        return result.ExitCode == 0 && CommitName().IsMatch(commit) ? commit : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsAncestorAsync(string directory, string ancestor, string descendant, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateTreeish(ancestor);
+        ValidateTreeish(descendant);
+        var result = await _git.RunAsync(new[] { "merge-base", "--is-ancestor", ancestor, descendant }, directory, cancellationToken: cancellationToken);
+        return result.ExitCode == 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetDirtyPathsAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        var result = await _git.RunInWorkingTreeAsync(
+            new[] { "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(result, "git status");
+
+        // With -z every entry is "XY path" followed by NUL; without renames there is no second path, and paths are never quoted.
+        return result.StandardOutput
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Where(entry => entry.Length > 3)
+            .Select(entry => entry[3..].Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyCollection<string>> GetChangedSinceAsync(string directory, string commit, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateTreeish(commit);
+        var changed = await _git.RunInWorkingTreeAsync(
+            new[] { "diff", "--name-only", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(changed, "git diff");
+        var untracked = await _git.RunInWorkingTreeAsync(
+            new[] { "ls-files", "--others", "--exclude-standard", "-z" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(untracked, "git ls-files");
+
+        return (changed.StandardOutput + "\0" + untracked.StandardOutput)
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, ChangeKind>> GetChangedFilesSinceAsync(string directory, string commit, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateTreeish(commit);
+        var changed = await _git.RunInWorkingTreeAsync(
+            new[] { "diff", "--name-status", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(changed, "git diff");
+        var untracked = await _git.RunInWorkingTreeAsync(
+            new[] { "ls-files", "--others", "--exclude-standard", "-z" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(untracked, "git ls-files");
+
+        var result = new Dictionary<string, ChangeKind>(StringComparer.Ordinal);
+
+        // With -z and without renames the output is "STATUS NUL path NUL" for every file.
+        var fields = changed.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i + 1 < fields.Length; i += 2)
+        {
+            var kind = fields[i] switch
+            {
+                "A" => ChangeKind.Added,
+                "D" => ChangeKind.Deleted,
+                _ => ChangeKind.Modified
+            };
+            result[fields[i + 1].Replace('\\', '/')] = kind;
+        }
+
+        foreach (var path in untracked.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            result.TryAdd(path.Replace('\\', '/'), ChangeKind.Added);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> MatchesCommitAsync(string directory, string commit, string path, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        if (!CommitName().IsMatch(commit ?? string.Empty))
+        {
+            throw new ArgumentException("The commit must be a full object name.", nameof(commit));
+        }
+
+        var full = ResolveWithin(directory, path);
+        var committed = await _git.RunAsync(new[] { "rev-parse", "--verify", "--quiet", $"{commit}:{path}" }, directory, cancellationToken: cancellationToken);
+        var committedBlob = committed.ExitCode == 0 ? committed.StandardOutput.Trim() : null;
+
+        var info = new FileInfo(full);
+        if (info.LinkTarget is not null || Directory.Exists(full))
+        {
+            return false;
+        }
+
+        if (!info.Exists)
+        {
+            return committedBlob is null;
+        }
+
+        if (committedBlob is null)
+        {
+            return false;
+        }
+
+        var local = await _git.RunInWorkingTreeAsync(new[] { "hash-object", "--", path }, directory, cancellationToken: cancellationToken);
+        return local.ExitCode == 0 && string.Equals(local.StandardOutput.Trim(), committedBlob, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public async Task DiscardLocalChangesAsync(string directory, IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ArgumentNullException.ThrowIfNull(paths);
+        var resolved = paths.Select(path => (Path: path, Full: ResolveWithin(directory, path))).ToArray();
+        foreach (var (path, full) in resolved)
+        {
+            // ":(literal)" keeps characters such as '*' or '[' in a file name from being read as a pattern.
+            var tracked = await _git.RunAsync(new[] { "cat-file", "-e", $"HEAD:{path}" }, directory, cancellationToken: cancellationToken);
+            if (tracked.ExitCode == 0)
+            {
+                var checkout = await _git.RunInWorkingTreeAsync(new[] { "checkout", "--quiet", "HEAD", "--", ":(literal)" + path }, directory, cancellationToken: cancellationToken);
+                EnsureSuccess(checkout, "git checkout");
+                continue;
+            }
+
+            var unstage = await _git.RunAsync(new[] { "rm", "--cached", "--quiet", "--ignore-unmatch", "--", ":(literal)" + path }, directory, cancellationToken: cancellationToken);
+            EnsureSuccess(unstage, "git rm --cached");
+            if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
+            {
+                File.Delete(full);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetRemoteHeadBranchAsync(string directory, string remoteUrl, string? sshCommand, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateRemoteUrl(remoteUrl);
+        var environment = sshCommand is null ? null : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand };
+        var result = await _git.RunAsync(new[] { "ls-remote", "--symref", remoteUrl, "HEAD" }, directory, environment, cancellationToken);
+        EnsureSuccess(result, "git ls-remote");
+
+        // The answer starts with "ref: refs/heads/<branch>\tHEAD" when HEAD is a branch.
+        const string prefix = "ref: refs/heads/";
+        var line = result.StandardOutput.Split('\n', StringSplitOptions.TrimEntries).FirstOrDefault(entry => entry.StartsWith(prefix, StringComparison.Ordinal));
+        if (line is null)
+        {
+            return null;
+        }
+
+        var branch = line[prefix.Length..].Split('\t')[0].Trim();
+        return SafeBranchName().IsMatch(branch) && !branch.Contains("..", StringComparison.Ordinal) ? branch : null;
+    }
+
+    /// <summary>
+    /// Resolves a repository-relative path inside the working tree, refusing Git metadata and paths that leave it.
+    /// </summary>
+    /// <param name="directory">The working tree.</param>
+    /// <param name="path">The relative path, with <c>/</c> separators.</param>
+    /// <returns>The full path.</returns>
+    /// <exception cref="ArgumentException">The path is unsafe or leaves the working tree.</exception>
+    private static string ResolveWithin(string directory, string path)
+    {
+        var relative = Guard.NotBlank(path, nameof(path));
+        if (relative.StartsWith('-') || relative.Any(char.IsControl) || Path.IsPathRooted(relative))
+        {
+            throw new ArgumentException($"'{path}' is not a safe relative path.", nameof(path));
+        }
+
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var segments = relative.Split('/', '\\');
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, comparison) || segments.Any(segment => segment.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException($"'{path}' leaves the working tree or points into Git metadata.", nameof(path));
+        }
+
+        return full;
     }
 
     /// <summary>

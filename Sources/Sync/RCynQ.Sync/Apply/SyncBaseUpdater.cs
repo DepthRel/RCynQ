@@ -15,7 +15,9 @@ namespace RCynQ.Sync.Apply;
 /// The sender streams files from its working tree, so a file can change between the moment its hash was put in the
 /// manifest and the moment the base is updated. The base must describe exactly what the peer received, therefore an added or
 /// modified file is copied only when the working tree still has the hash from the manifest. Otherwise the base keeps its old
-/// state for that file, and the next patch sends the newer version: nothing the user typed is ever lost from the diff.
+/// state for that file, and the next patch sends the newer version: nothing the user typed is ever lost from the diff. That next
+/// patch names the old base content, so the peer, which has the manifest version, asks the user to resolve it instead of
+/// overwriting silently.
 /// </para>
 /// <para>
 /// Deletions are applied as they are.
@@ -51,8 +53,8 @@ public sealed class SyncBaseUpdater
     /// <param name="workdir">The working tree the files were sent from.</param>
     /// <param name="syncBase">The sync base to update.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The number of entries left unchanged because the working tree changed after the manifest was built.</returns>
-    public async Task<int> UpdateAsync(PatchEnvelope envelope, string workdir, string syncBase, CancellationToken cancellationToken = default)
+    /// <returns>The entries written into the sync base; the others were left unchanged because the working tree changed after the manifest was built.</returns>
+    public async Task<IReadOnlyList<FileChange>> UpdateAsync(PatchEnvelope envelope, string workdir, string syncBase, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         var stable = new List<FileChange>();
@@ -68,7 +70,7 @@ public sealed class SyncBaseUpdater
         var accepted = new PatchEnvelope(
             envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, envelope.BaseStateHash, envelope.IncomingStateHash, stable, envelope.Signature);
         await _applier.ApplyAsync(accepted, new WorkdirPatchContent(workdir, _paths), syncBase, cancellationToken);
-        return envelope.Manifest.Count - stable.Count;
+        return stable;
     }
 
     /// <summary>

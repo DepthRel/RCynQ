@@ -1,6 +1,8 @@
 using System.Text;
 using RCynQ.Cli.Output;
 using RCynQ.Core.Abstractions.Repositories;
+using RCynQ.Core.Enums;
+using RCynQ.Core.State;
 using RCynQ.Sync.Services;
 
 namespace RCynQ.Cli.Services;
@@ -43,9 +45,9 @@ public sealed class StatusCommandService
         text.Append("Node:           ").Append(status.NodeId).Append(" (").Append(status.Role).Append(") ").Append(status.Name).Append('\n');
         if (status.Role != Core.Enums.NodeRole.Mediator)
         {
-            text.Append("Baseline:       ").Append(status.BaselineInitialized ? "initialized" : "missing (run 'patch baseline')").Append('\n');
+            text.Append("Sync base:      ").Append(DescribeSyncBase(status.SyncBase)).Append('\n');
             text.Append("Local state:    ").Append(TextFormat.Hash(status.State.LocalStateHash)).Append('\n');
-            text.Append("Sync base:      ").Append(TextFormat.Hash(status.State.SyncBaseHash)).Append('\n');
+            text.Append("Base state:     ").Append(TextFormat.Hash(status.State.SyncBaseHash)).Append('\n');
             text.Append("Last sent:      ").Append(TextFormat.Time(status.State.LastSentAtUtc)).Append('\n');
             text.Append("Last received:  ").Append(TextFormat.Time(status.State.LastReceivedAtUtc)).Append('\n');
             text.Append("Pending:        ").Append(status.PendingChanges.Count).Append(" file(s)\n");
@@ -92,4 +94,16 @@ public sealed class StatusCommandService
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// Describes where the sync base comes from, or why there is none.
+    /// </summary>
+    /// <param name="syncBase">The sync base status.</param>
+    /// <returns>The text.</returns>
+    private static string DescribeSyncBase(SyncBaseStatus syncBase) => syncBase.Mode switch
+    {
+        SyncBaseMode.Git => $"Git {syncBase.Branch ?? "HEAD"} @ {TextFormat.Hash(syncBase.Commit)}",
+        SyncBaseMode.Manual => "manual snapshot",
+        _ => $"not ready: {syncBase.Problem}" + (syncBase.CanCreateManual ? " (or run 'patch baseline')" : string.Empty)
+    };
 }

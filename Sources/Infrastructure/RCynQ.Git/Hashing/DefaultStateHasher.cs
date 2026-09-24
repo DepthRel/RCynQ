@@ -55,4 +55,89 @@ public sealed class DefaultStateHasher : IStateHasher
         var digest = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexString(digest).ToLowerInvariant();
     }
+
+    /// <summary>
+    /// How many leading bytes decide whether a file is text, as Git decides it: a NUL byte among them makes the file binary.
+    /// </summary>
+    public const int TextProbeLength = 8000;
+
+    /// <summary>
+    /// Computes the lowercase SHA-256 hex digest of a file with its line endings normalized: in a text file every CRLF counts as
+    /// LF, so the same content checked out on Windows and on Linux has the same digest. A binary file is hashed as it is.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The digest.</returns>
+    /// <remarks>
+    /// This digest compares content, never transfers it: patches still carry and verify the exact bytes (<see cref="Sha256FileAsync"/>).
+    /// </remarks>
+    public static async Task<string> Sha256TextNormalizedFileAsync(string path, CancellationToken cancellationToken = default)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
+        var buffer = new byte[81920];
+        var read = await ReadAtLeastAsync(stream, buffer, TextProbeLength, cancellationToken);
+        if (Array.IndexOf(buffer, (byte)0, 0, Math.Min(read, TextProbeLength)) >= 0)
+        {
+            stream.Position = 0;
+            return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
+        }
+
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var pendingCarriageReturn = false;
+        while (read > 0)
+        {
+            var start = 0;
+            if (pendingCarriageReturn)
+            {
+                // A CR that ended the previous chunk is kept unless this chunk starts with the LF that completes a CRLF.
+                if (buffer[0] != (byte)'\n')
+                {
+                    hash.AppendData("\r"u8);
+                }
+
+                pendingCarriageReturn = false;
+            }
+
+            for (var i = 0; i < read; i++)
+            {
+                if (buffer[i] != (byte)'\r')
+                {
+                    continue;
+                }
+
+                hash.AppendData(buffer, start, i - start);
+                if (i + 1 == read)
+                {
+                    pendingCarriageReturn = true;
+                }
+                else if (buffer[i + 1] != (byte)'\n')
+                {
+                    hash.AppendData("\r"u8);
+                }
+
+                start = i + 1;
+            }
+
+            hash.AppendData(buffer, start, read - start);
+            read = await stream.ReadAsync(buffer, cancellationToken);
+        }
+
+        if (pendingCarriageReturn)
+        {
+            hash.AppendData("\r"u8);
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Reads until the buffer holds at least the requested number of bytes or the stream ends.
+    /// </summary>
+    /// <param name="stream">The stream.</param>
+    /// <param name="buffer">The buffer.</param>
+    /// <param name="minimum">The number of bytes wanted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of bytes read.</returns>
+    private static async Task<int> ReadAtLeastAsync(Stream stream, byte[] buffer, int minimum, CancellationToken cancellationToken)
+        => await stream.ReadAtLeastAsync(buffer, Math.Min(minimum, buffer.Length), throwOnEndOfStream: false, cancellationToken);
 }

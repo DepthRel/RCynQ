@@ -42,9 +42,9 @@ public sealed class SourcePipeline : IRolePipeline
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var state = await _tracker.RefreshAsync(cancellationToken);
-        _logger.LogInformation("Source pipeline started for {Workdir}; baseline {Baseline}, local state {Hash}.",
-            _paths.Workdir, _paths.BaselineInitialized ? "initialized" : "missing", state.LocalStateHash);
+        var snapshot = await _tracker.CaptureAsync(cancellationToken);
+        _logger.LogInformation("Source pipeline started for {Workdir}; sync base {Mode} {Commit}, local state {Hash}.",
+            _paths.Workdir, snapshot.SyncBase.Mode, snapshot.SyncBase.Commit ?? snapshot.SyncBase.Problem, snapshot.State.LocalStateHash);
     }
 
     /// <inheritdoc />
