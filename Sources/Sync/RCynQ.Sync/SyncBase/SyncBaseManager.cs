@@ -39,8 +39,27 @@ namespace RCynQ.Sync.SyncBase;
 /// </remarks>
 public sealed class SyncBaseManager
 {
+    /// <summary>The suffix of the directory a new base is built in before it is swapped into place.</summary>
+    private const string StagingSuffix = ".new-";
+
+    /// <summary>The suffix of the directory the replaced base is parked in until it is deleted.</summary>
+    private const string RetiredSuffix = ".old-";
+
+    /// <summary>
+    /// How long a staging directory is left alone before it counts as the leftover of a process that was killed.
+    /// </summary>
+    /// <remarks>
+    /// The working tree lock only serializes exports inside one process, so the CLI may be exporting against the same data
+    /// root right now. No export of a working tree takes anywhere near this long, so waiting it out costs nothing and makes
+    /// the cleanup unable to delete a directory that is still being filled.
+    /// </remarks>
+    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromHours(1);
+
     /// <summary>The local node.</summary>
     private readonly NodeConfig _node;
+
+    /// <summary>Whether the leftovers of a killed process were already looked for; <c>1</c> once they were.</summary>
+    private int _stagingSwept;
 
     /// <summary>The sync paths.</summary>
     private readonly SyncPaths _paths;
@@ -124,6 +143,13 @@ public sealed class SyncBaseManager
         if (!_node.ParticipatesInPatchChannel)
         {
             return SyncBaseStatus.NotApplicable;
+        }
+
+        if (Interlocked.Exchange(ref _stagingSwept, 1) == 0)
+        {
+            // Once per process: leftovers can only appear when a process dies, and a node that never exports again
+            // would otherwise keep them for good.
+            DeleteAbandonedStaging();
         }
 
         var target = await _locator.LocateAsync(cancellationToken);
@@ -569,8 +595,9 @@ public sealed class SyncBaseManager
     private async Task ReplaceAsync(Func<string, Task> fill)
     {
         var target = _paths.SyncBase;
-        var staging = target + ".new-" + Guid.NewGuid().ToString("N");
-        var retired = target + ".old-" + Guid.NewGuid().ToString("N");
+        var staging = target + StagingSuffix + Guid.NewGuid().ToString("N");
+        var retired = target + RetiredSuffix + Guid.NewGuid().ToString("N");
+        DeleteAbandonedStaging();
         try
         {
             Directory.CreateDirectory(staging);
@@ -618,9 +645,66 @@ public sealed class SyncBaseManager
     }
 
     /// <summary>
-    /// Deletes a directory tree, ignoring failures.
+    /// Deletes the staging directories a killed process left next to the sync base.
+    /// </summary>
+    /// <remarks>
+    /// An export builds the new base in <see cref="StagingSuffix"/> and parks the replaced one in
+    /// <see cref="RetiredSuffix"/>, deleting both when it finishes. A process that is killed mid-export runs no cleanup, so
+    /// it leaves a partial copy of the working tree behind, once per killed start. Only directories untouched for
+    /// <see cref="AbandonedAfter"/> are removed; anything else beside the base is left alone.
+    /// </remarks>
+    private void DeleteAbandonedStaging()
+    {
+        var target = _paths.SyncBase;
+        var directory = Path.GetDirectoryName(target);
+        var prefix = Path.GetFileName(target);
+        if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(prefix) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var abandonedBefore = _timeProvider.GetUtcNow() - AbandonedAfter;
+        foreach (var candidate in EnumerateQuietly(directory))
+        {
+            var name = Path.GetFileName(candidate);
+            if (!name.StartsWith(prefix + StagingSuffix, StringComparison.Ordinal)
+                && !name.StartsWith(prefix + RetiredSuffix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // The newer of the two stamps, because a file system may not keep a creation time.
+            var touched = Directory.GetCreationTimeUtc(candidate) > Directory.GetLastWriteTimeUtc(candidate)
+                ? Directory.GetCreationTimeUtc(candidate)
+                : Directory.GetLastWriteTimeUtc(candidate);
+            if (touched < abandonedBefore.UtcDateTime)
+            {
+                DeleteQuietly(candidate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lists the subdirectories of a directory, returning nothing when it cannot be read.
     /// </summary>
     /// <param name="directory">The directory.</param>
+    /// <returns>The subdirectory paths.</returns>
+    private static IReadOnlyList<string> EnumerateQuietly(string directory)
+    {
+        try
+        {
+            return Directory.GetDirectories(directory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// Deletes a directory, ignoring failures.
+    /// </summary>
+    /// <param name="directory">The directory path.</param>
     private static void DeleteQuietly(string directory)
     {
         try

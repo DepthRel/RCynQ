@@ -70,6 +70,12 @@ public sealed class SyncBridgeOptions
     /// <summary>
     /// Gets or sets directory names excluded from working tree snapshots (the <c>.git</c> directory is always excluded).
     /// </summary>
+    /// <remarks>
+    /// Names configured for a node are <b>added</b> to the ones listed here, they do not replace them, so excluding one
+    /// extra directory never brings build output back into the snapshots. Names are matched at any depth, without regard
+    /// to case. This is a second mechanism next to <see cref="RespectGitIgnore"/>, for directories no
+    /// <c>.gitignore</c> describes.
+    /// </remarks>
     public List<string> ExcludedDirectories { get; set; } = new() { "bin", "obj", ".vs", ".idea", "node_modules" };
 
     /// <summary>

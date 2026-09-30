@@ -207,21 +207,29 @@ public static class ServiceHostBuilder
     }
 
     /// <summary>
-    /// Binds the <c>SyncBridge</c> section, replacing default collections when the configuration provides them.
+    /// Binds the <c>SyncBridge</c> section.
     /// </summary>
     /// <param name="configuration">The configuration.</param>
     /// <returns>The options.</returns>
+    /// <remarks>
+    /// <see cref="SyncBridgeOptions.ExcludedDirectories"/> adds to the built-in names rather than replacing them: a node
+    /// that excludes one extra directory must not start scanning build output again. Configuration binding appends to a
+    /// list, so the merge only needs the result to be trimmed and deduplicated.
+    /// </remarks>
     public static SyncBridgeOptions BindOptions(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var section = configuration.GetSection(SyncBridgeOptions.SectionName);
         var options = new SyncBridgeOptions();
-        if (section.GetSection(nameof(SyncBridgeOptions.ExcludedDirectories)).Exists())
-        {
-            options.ExcludedDirectories.Clear();
-        }
-
         section.Bind(options);
+
+        var excluded = options.ExcludedDirectories
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        options.ExcludedDirectories.Clear();
+        options.ExcludedDirectories.AddRange(excluded);
         return options;
     }
 

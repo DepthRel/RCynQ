@@ -356,8 +356,77 @@ public sealed class SyncBaseManagerTests : IDisposable
         await notPulled.Should().ThrowAsync<SyncBridgeException>("a Source repository that never pulled has no commit of Dest to build from");
     }
 
+    /// <summary>
+    /// Verifies that the staging directories a killed export left behind are deleted on the next <c>EnsureAsync</c>.
+    /// </summary>
+    /// <remarks>
+    /// A base is built in <c>base.new-&lt;id&gt;</c> and the old one is parked in <c>base.old-&lt;id&gt;</c>; both are removed
+    /// when the export finishes. A process killed mid-export runs no cleanup, so a full copy of the working tree is left on
+    /// disk, once per killed start.
+    /// </remarks>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Leftover_Staging_Directories_Are_Deleted()
+    {
+        var abandonedNew = Abandon(_fixture.SourcePaths.SyncBase + ".new-" + Guid.NewGuid().ToString("N"));
+        var abandonedOld = Abandon(_fixture.SourcePaths.SyncBase + ".old-" + Guid.NewGuid().ToString("N"));
+
+        await EnsureAsync(_fixture.SourceNode);
+
+        Directory.Exists(abandonedNew).Should().BeFalse("a staging directory of a killed export must not survive");
+        Directory.Exists(abandonedOld).Should().BeFalse("a retired base of a killed export must not survive");
+    }
+
+    /// <summary>
+    /// Verifies that a staging directory that is still being written is left alone, so the cleanup cannot break an export
+    /// running in another process (the CLI) against the same data root.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Recent_Staging_Directories_Are_Kept()
+    {
+        var inFlight = _fixture.SourcePaths.SyncBase + ".new-" + Guid.NewGuid().ToString("N");
+        SyncFixture.Write(inFlight, "a.txt", "being exported\n");
+
+        await EnsureAsync(_fixture.SourceNode);
+
+        Directory.Exists(inFlight).Should().BeTrue("an export that started moments ago may still be running");
+    }
+
+    /// <summary>
+    /// Verifies that the cleanup only removes its own staging directories and leaves the base and anything else alone.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Cleanup_Keeps_The_Base_And_Unrelated_Directories()
+    {
+        var unrelated = Path.Combine(Path.GetDirectoryName(_fixture.SourcePaths.SyncBase)!, "keep-me");
+        SyncFixture.Write(unrelated, "a.txt", "keep\n");
+        await _fixture.SourceSyncBase.RebuildAsync();
+
+        await EnsureAsync(_fixture.SourceNode);
+
+        Directory.Exists(_fixture.SourcePaths.SyncBase).Should().BeTrue("the base itself must stay");
+        SyncFixture.Read(_fixture.SourcePaths.SyncBase, "a.txt").Should().Be("v1\n");
+        Directory.Exists(unrelated).Should().BeTrue("only the staging directories of the base are cleaned up");
+    }
+
     /// <inheritdoc />
     public void Dispose() => _fixture.Dispose();
+
+    /// <summary>
+    /// Creates a staging directory and dates it far enough back to look like the leftover of a killed process.
+    /// </summary>
+    /// <param name="directory">The directory to create.</param>
+    /// <returns>The same path.</returns>
+    private static string Abandon(string directory)
+    {
+        SyncFixture.Write(directory, "big.bin", new string('x', 1024));
+        var longAgo = DateTime.UtcNow - TimeSpan.FromDays(1);
+        Directory.SetCreationTimeUtc(directory, longAgo);
+        Directory.SetLastWriteTimeUtc(directory, longAgo);
+        return directory;
+    }
 
     /// <summary>
     /// Brings the sync base of a node up to date with its lock held, as the service does.
