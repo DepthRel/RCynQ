@@ -21,13 +21,13 @@ public sealed class NodeIdJsonConverter : JsonConverter<NodeId>
     {
         if (reader.TokenType != JsonTokenType.String)
         {
-            throw new JsonException(Texts.Get("NodeId.NotString"));
+            throw LocalizedError.Create(message => new JsonException(message), "NodeId.NotString");
         }
 
         var text = reader.GetString();
         if (!NodeId.TryParse(text, out var nodeId))
         {
-            throw new JsonException(Texts.Format("NodeId.NotValid", text));
+            throw LocalizedError.Create(message => new JsonException(message), "NodeId.NotValid", text);
         }
 
         return nodeId;

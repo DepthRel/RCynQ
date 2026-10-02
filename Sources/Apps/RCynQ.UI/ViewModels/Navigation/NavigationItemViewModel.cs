@@ -30,14 +30,19 @@ public sealed partial class NavigationItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasAttention;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NavigationItemViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="key">The tab key.</param>
     /// <param name="iconKey">The resource key of the icon geometry.</param>
     /// <param name="page">The page shown by the tab.</param>
-    public NavigationItemViewModel(TabKey key, string iconKey, PageViewModelBase page)
+    public NavigationItemViewModel(ILocalizer localizer, TabKey key, string iconKey, PageViewModelBase page)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         Key = key;
         IconKey = iconKey;
         Page = page;
@@ -47,10 +52,10 @@ public sealed partial class NavigationItemViewModel : ObservableObject
     public TabKey Key { get; }
 
     /// <summary>Gets the tab title in the language of the user: the text <c>Nav.&lt;tab key&gt;</c>.</summary>
-    public string Title => Texts.Get($"Nav.{Key}");
+    public string Title => _localizer.Get($"Nav.{Key}");
 
     /// <summary>Gets why the tab is unavailable, or <see langword="null"/> when it is available.</summary>
-    public string? UnavailableReason => UnavailableForRole is { } role ? Texts.Format("Nav.UnavailableForRole", role) : null;
+    public string? UnavailableReason => UnavailableForRole is { } role ? _localizer.Format("Nav.UnavailableForRole", role) : null;
 
     /// <summary>Gets the resource key of the icon geometry.</summary>
     public string IconKey { get; }

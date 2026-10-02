@@ -37,8 +37,17 @@ public interface ILinkManager
     /// <param name="linkId">The link identifier.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The resulting state.</returns>
-    /// <exception cref="KeyNotFoundException">The link is not configured.</exception>
+    /// <exception cref="KeyNotFoundException">The link is not configured and was not started by this process.</exception>
     Task<LinkState> StopAsync(Guid linkId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stops a link this process started and forgets it. Unlike <see cref="StopAsync"/> it needs no stored configuration and
+    /// touches nothing this process did not start, so it is what a caller uses once a link was removed.
+    /// </summary>
+    /// <param name="linkId">The link identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns><see langword="true"/> when the link was running in this process and has been stopped.</returns>
+    Task<bool> ReleaseAsync(Guid linkId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the state of every configured link and publishes changes.

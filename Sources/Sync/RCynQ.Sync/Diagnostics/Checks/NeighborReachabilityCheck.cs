@@ -13,13 +13,18 @@ public sealed class NeighborReachabilityCheck : DiagnosticCheckBase
     /// <summary>The TCP probe.</summary>
     private readonly ITcpProbe _probe;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NeighborReachabilityCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="probe">The TCP probe.</param>
-    public NeighborReachabilityCheck(ITcpProbe probe)
+    public NeighborReachabilityCheck(ILocalizer localizer, ITcpProbe probe)
         : base("NeighborReachability", AllRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _probe = probe;
     }
 
@@ -28,21 +33,23 @@ public sealed class NeighborReachabilityCheck : DiagnosticCheckBase
     {
         if (context.Chain.Count == 0)
         {
-            return Fail("No chain links are configured.", Texts.Get("Diag.Neighbours.AddLinks"));
+            return Fail(_localizer.Get("Diag.Chain.None"), _localizer.Get("Diag.Neighbours.AddLinks"));
         }
 
         var neighbours = context.Node.Role == NodeRole.Mediator ? context.Chain : context.Chain.Take(1).ToArray();
         var unreachable = new List<string>();
         foreach (var link in neighbours)
         {
-            if (!await _probe.CanConnectAsync(link.Peer.Host, link.Peer.SshPort, TimeSpan.FromSeconds(5), cancellationToken))
+            // The port the neighbour really listens on: its own TLS port when it runs no SSH server.
+            var port = link.Peer.ReachablePort;
+            if (!await _probe.CanConnectAsync(link.Peer.Host, port, TimeSpan.FromSeconds(5), cancellationToken))
             {
-                unreachable.Add($"{link.Name} ({link.Peer.Host}:{link.Peer.SshPort})");
+                unreachable.Add($"{link.Name} ({link.Peer.Host}:{port})");
             }
         }
 
         return unreachable.Count == 0
-            ? Pass(Texts.Format("Diag.Neighbours.Ok", string.Join(", ", neighbours.Select(link => link.Name))))
-            : Fail(Texts.Format("Diag.Neighbours.Unreachable", string.Join(", ", unreachable)), Texts.Get("Diag.Neighbours.Fix"));
+            ? Pass(_localizer.Format("Diag.Neighbours.Ok", string.Join(", ", neighbours.Select(link => link.Name))))
+            : Fail(_localizer.Format("Diag.Neighbours.Unreachable", string.Join(", ", unreachable)), _localizer.Get("Diag.Neighbours.Fix"));
     }
 }

@@ -35,10 +35,10 @@ public static class PatchEndpoints
         app.MapPost(ApiRoutes.PatchSessions, OpenSessionAsync);
         app.MapPut(ApiRoutes.PatchSessionContent, ReceiveContentAsync);
         app.MapPost(ApiRoutes.PatchSessionCommit, CommitAsync);
-        app.MapGet(ApiRoutes.State, async (IPatchService patches, CancellationToken ct) => Results.Ok(await patches.GetStateAsync(ct)));
+        app.MapGet(ApiRoutes.State, GetStateAsync);
         app.MapGet(ApiRoutes.Patches, async (IPatchService patches, int? take, CancellationToken ct) => Results.Ok(await patches.GetRecentAsync(Math.Clamp(take ?? 50, 1, 500), ct)));
-        app.MapGet(ApiRoutes.PatchById, async (Guid id, IPatchService patches, CancellationToken ct) =>
-            await patches.GetAsync(id, ct) is { } patch ? Results.Ok(patch) : NotFound(Texts.Format("Patch.NotFound", id)));
+        app.MapGet(ApiRoutes.PatchById, async (Guid id, IPatchService patches, ILocalizer localizer, CancellationToken ct) =>
+            await patches.GetAsync(id, ct) is { } patch ? Results.Ok(patch) : NotFound(localizer.Format("Patch.NotFound", id)));
         app.MapGet(ApiRoutes.PatchDiff, GetDiffAsync);
         app.MapPost(ApiRoutes.ResolvePatch, ResolveAsync);
         app.MapPost(ApiRoutes.SendPatch, SendAsync);
@@ -60,13 +60,14 @@ public static class PatchEndpoints
     /// <param name="patches">The patch service.</param>
     /// <param name="serializer">The envelope serializer.</param>
     /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The session with the hashes of the content the receiver still lacks.</returns>
-    private static async Task<IResult> OpenSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, CancellationToken cancellationToken)
+    private static async Task<IResult> OpenSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
+            return Rejection(PatchRejectionReason.RoleNotAllowed, localizer.Format("Receive.RoleNotAllowed", node.Role));
         }
 
         var logger = loggers.CreateLogger(LoggerCategory);
@@ -78,7 +79,7 @@ public static class PatchEndpoints
         catch (Exception ex) when (ex is FormatException or InvalidDataException)
         {
             logger.LogWarning("Refused a malformed patch envelope: {Error}", ex.Message);
-            return Rejection(PatchRejectionReason.Malformed, ex.Message);
+            return Rejection(PatchRejectionReason.Malformed, localizer.Describe(ex));
         }
 
         var context = ContextOf(http);
@@ -89,7 +90,7 @@ public static class PatchEndpoints
         catch (PatchRejectedException ex)
         {
             logger.LogWarning("Refused patch {PatchId} from {Sender}: {Reason} {Error}", envelope.Id, context.SenderNodeId, ex.Reason, ex.Message);
-            return Rejection(ex.Reason, ex.Message);
+            return Rejection(ex.Reason, localizer.Describe(ex));
         }
     }
 
@@ -102,13 +103,14 @@ public static class PatchEndpoints
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
     /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>An empty success result, or the rejection.</returns>
-    private static async Task<IResult> ReceiveContentAsync(Guid id, string sha256, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, CancellationToken cancellationToken)
+    private static async Task<IResult> ReceiveContentAsync(Guid id, string sha256, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
+            return Rejection(PatchRejectionReason.RoleNotAllowed, localizer.Format("Receive.RoleNotAllowed", node.Role));
         }
 
         var logger = loggers.CreateLogger(LoggerCategory);
@@ -122,7 +124,7 @@ public static class PatchEndpoints
         catch (PatchRejectedException ex)
         {
             logger.LogWarning("Refused content {Hash} of patch {PatchId} from {Sender}: {Reason} {Error}", sha256, id, context.SenderNodeId, ex.Reason, ex.Message);
-            return Rejection(ex.Reason, ex.Message);
+            return Rejection(ex.Reason, localizer.Describe(ex));
         }
     }
 
@@ -134,13 +136,14 @@ public static class PatchEndpoints
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
     /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The processing result, or the rejection.</returns>
-    private static async Task<IResult> CommitAsync(Guid id, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, CancellationToken cancellationToken)
+    private static async Task<IResult> CommitAsync(Guid id, HttpContext http, NodeConfig node, IPatchService patches, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return Rejection(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", node.Role));
+            return Rejection(PatchRejectionReason.RoleNotAllowed, localizer.Format("Receive.RoleNotAllowed", node.Role));
         }
 
         var logger = loggers.CreateLogger(LoggerCategory);
@@ -152,7 +155,7 @@ public static class PatchEndpoints
         catch (PatchRejectedException ex)
         {
             logger.LogWarning("Refused to apply patch {PatchId} from {Sender}: {Reason} {Error}", id, context.SenderNodeId, ex.Reason, ex.Message);
-            return Rejection(ex.Reason, ex.Message);
+            return Rejection(ex.Reason, localizer.Describe(ex));
         }
     }
 
@@ -196,9 +199,10 @@ public static class PatchEndpoints
     /// </summary>
     /// <param name="id">The patch identifier.</param>
     /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The diff as text or 404.</returns>
-    private static async Task<IResult> GetDiffAsync(Guid id, IPatchService patches, CancellationToken cancellationToken)
+    private static async Task<IResult> GetDiffAsync(Guid id, IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
     {
         try
         {
@@ -206,7 +210,7 @@ public static class PatchEndpoints
         }
         catch (SyncBridgeException ex)
         {
-            return NotFound(ex.Message);
+            return NotFound(localizer.Describe(ex));
         }
     }
 
@@ -217,13 +221,14 @@ public static class PatchEndpoints
     /// <param name="request">The request body.</param>
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The resolution result.</returns>
-    private static async Task<IResult> ResolveAsync(Guid id, ResolvePatchRequest request, NodeConfig node, IPatchService patches, CancellationToken cancellationToken)
+    private static async Task<IResult> ResolveAsync(Guid id, ResolvePatchRequest request, NodeConfig node, IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
-            return NotFound(Texts.Format("Api.NoPatchesToResolve", node.Role));
+            return NotFound(localizer.Format("Api.NoPatchesToResolve", node.Role));
         }
 
         try
@@ -232,15 +237,15 @@ public static class PatchEndpoints
         }
         catch (KeyNotFoundException ex)
         {
-            return NotFound(ex.Message);
+            return NotFound(localizer.Describe(ex));
         }
         catch (InvalidOperationException ex)
         {
-            return Results.Conflict(new ErrorResponse(ex.Message));
+            return Results.Conflict(new ErrorResponse(localizer.Describe(ex)));
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException)
         {
-            return Results.BadRequest(new ErrorResponse(ex.Message));
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }
     }
 
@@ -250,22 +255,23 @@ public static class PatchEndpoints
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
     /// <param name="request">The optional body naming the files to send; without it every changed file is sent.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The send result.</returns>
-    private static async Task<IResult> SendAsync(NodeConfig node, IPatchService patches, SendPatchRequest? request, CancellationToken cancellationToken)
+    private static async Task<IResult> SendAsync(NodeConfig node, IPatchService patches, SendPatchRequest? request, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).SendsPatches)
         {
-            return NotFound(Texts.Format("Api.NoSend", node.Role));
+            return NotFound(localizer.Format("Api.NoSend", node.Role));
         }
 
         try
         {
             return Results.Ok(await patches.SendAsync(request?.Paths, cancellationToken));
         }
-        catch (SyncBridgeException ex)
+        catch (Exception ex) when (IsNodeFailure(ex))
         {
-            return Results.BadRequest(new ErrorResponse(ex.Message));
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }
     }
 
@@ -274,24 +280,53 @@ public static class PatchEndpoints
     /// </summary>
     /// <param name="node">The local node.</param>
     /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The snapshot.</returns>
-    private static async Task<IResult> BaselineAsync(NodeConfig node, IPatchService patches, CancellationToken cancellationToken)
+    private static async Task<IResult> BaselineAsync(NodeConfig node, IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
     {
         if (!node.ParticipatesInPatchChannel)
         {
-            return NotFound(Texts.Format("Api.NoBaseline", node.Role));
+            return NotFound(localizer.Format("Api.NoBaseline", node.Role));
         }
 
         try
         {
             return Results.Ok(await patches.RebuildBaselineAsync(cancellationToken));
         }
-        catch (SyncBridgeException ex)
+        catch (Exception ex) when (IsNodeFailure(ex))
         {
-            return Results.BadRequest(new ErrorResponse(ex.Message));
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }
     }
+
+    /// <summary>
+    /// Handles <c>GET /state</c>.
+    /// </summary>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The state of the node, or 400 with the reason when the working tree or the sync base cannot be read.</returns>
+    private static async Task<IResult> GetStateAsync(IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Ok(await patches.GetStateAsync(cancellationToken));
+        }
+        catch (Exception ex) when (IsNodeFailure(ex))
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Tells whether an exception is a failure of the node the user can act on (a working tree that cannot be read, a sync
+    /// base that cannot be built), which is answered with its message instead of a bare 500.
+    /// </summary>
+    /// <param name="exception">The exception.</param>
+    /// <returns><see langword="true"/> for such a failure.</returns>
+    private static bool IsNodeFailure(Exception exception)
+        => exception is SyncBridgeException or IOException or UnauthorizedAccessException;
 
     /// <summary>
     /// Creates a rejection response.

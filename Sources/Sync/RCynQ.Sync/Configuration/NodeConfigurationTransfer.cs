@@ -51,8 +51,14 @@ public sealed class NodeConfigurationTransfer
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NodeConfigurationTransfer"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The node options.</param>
     /// <param name="signatures">The signature service.</param>
@@ -64,6 +70,7 @@ public sealed class NodeConfigurationTransfer
     /// SSH server; <see langword="null"/> when no certificate is published.
     /// </param>
     public NodeConfigurationTransfer(
+        ILocalizer localizer,
         NodeConfig node,
         SyncBridgeOptions options,
         ISignatureService signatures,
@@ -72,6 +79,7 @@ public sealed class NodeConfigurationTransfer
         TimeProvider timeProvider,
         Func<string?>? tlsFingerprint = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _options = options;
         _signatures = signatures;
@@ -100,16 +108,16 @@ public sealed class NodeConfigurationTransfer
     public async Task<ExportedNodeConfiguration> ExportAsync(string? host, string? sshUser, int sshPort = 22, string? sshPublicKey = null, string? hostKeyFingerprint = null, CancellationToken cancellationToken = default)
     {
         var normalizedFingerprint = NormalizeHostKeyFingerprint(hostKeyFingerprint)
-            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException(Texts.Format("Transfer.HostKeyFingerprintValue", hostKeyFingerprint), nameof(hostKeyFingerprint)));
+            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException(_localizer.Format("Transfer.HostKeyFingerprintValue", hostKeyFingerprint), nameof(hostKeyFingerprint)));
 
         if (host is not null && !SshEndpoint.IsValidHost(host))
         {
-            throw new ArgumentException(Texts.Format("Transfer.HostInvalid", host), nameof(host));
+            throw new ArgumentException(_localizer.Format("Transfer.HostInvalid", host), nameof(host));
         }
 
         if (sshUser is not null && !SshEndpoint.IsValidUser(sshUser))
         {
-            throw new ArgumentException(Texts.Format("Transfer.UserInvalid", sshUser), nameof(sshUser));
+            throw new ArgumentException(_localizer.Format("Transfer.UserInvalid", sshUser), nameof(sshUser));
         }
 
         Guard.Port(sshPort, nameof(sshPort));
@@ -122,7 +130,7 @@ public sealed class NodeConfigurationTransfer
             }
             catch (FormatException ex)
             {
-                throw new ArgumentException(ex.Message, nameof(sshPublicKey), ex);
+                throw new ArgumentException(_localizer.Describe(ex), nameof(sshPublicKey), ex);
             }
         }
 
@@ -157,7 +165,7 @@ public sealed class NodeConfigurationTransfer
     private string EndpointCertificateFingerprint()
         => _tlsFingerprint()
             ?? throw new SyncBridgeException(
-                Texts.Get("Transfer.NoCertificate"));
+                _localizer.Get("Transfer.NoCertificate"));
 
     /// <summary>
     /// Imports the configuration of a peer.
@@ -171,14 +179,14 @@ public sealed class NodeConfigurationTransfer
         Validate(imported);
         if (imported.NodeId == _node.Id)
         {
-            throw new FormatException(Texts.Get("Transfer.ThisNode"));
+            throw new FormatException(_localizer.Get("Transfer.ThisNode"));
         }
 
         var existing = await _peers.GetAsync(imported.NodeId, cancellationToken);
         var host = imported.Host ?? existing?.Host
-            ?? throw new FormatException(Texts.Format("Transfer.NoHost", imported.NodeId));
+            ?? throw new FormatException(_localizer.Format("Transfer.NoHost", imported.NodeId));
         var user = imported.SshUser ?? existing?.SshUser
-            ?? throw new FormatException(Texts.Format("Transfer.NoUser", imported.NodeId));
+            ?? throw new FormatException(_localizer.Format("Transfer.NoUser", imported.NodeId));
         var port = imported.SshPort > 0 ? imported.SshPort : existing?.SshPort ?? 22;
 
         PeerDescriptor peer;
@@ -198,22 +206,7 @@ public sealed class NodeConfigurationTransfer
         }
         catch (ArgumentException ex)
         {
-            throw new FormatException(Texts.Format("Transfer.Invalid", imported.NodeId, ex.Message), ex);
-        }
-
-        await _peers.UpsertAsync(peer, cancellationToken);
-        var links = await _links.GetAllAsync(cancellationToken);
-        var linked = links.Where(link => link.Peer.Id == peer.Id).ToList();
-        foreach (var link in linked)
-        {
-            await _links.UpsertAsync(
-                new ChainLinkConfig(link.Id, link.Name, link.Transport, peer, link.LocalPort, link.RemotePort, link.Priority, link.FallbackTransports, link.TransportSettings),
-                cancellationToken);
-        }
-
-        if (linked.Count > 0)
-        {
-            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, Texts.Format("Transfer.Updated", peer.Id, linked.Count));
+            throw new FormatException(_localizer.Format("Transfer.Invalid", imported.NodeId, _localizer.Describe(ex)), ex);
         }
 
         var counterpart = _node.Role switch
@@ -222,6 +215,27 @@ public sealed class NodeConfigurationTransfer
             NodeRole.Dest => NodeRole.Source,
             _ => (NodeRole?)null
         };
+
+        // The port of the counterpart endpoint a link leads to: its TLS port when it runs no SSH server, otherwise its
+        // loopback endpoint behind the SSH tunnel.
+        var endpointPort = peer.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : imported.ListenPort;
+
+        await _peers.UpsertAsync(peer, cancellationToken);
+        var links = await _links.GetAllAsync(cancellationToken);
+        var linked = links.Where(link => link.Peer.Id == peer.Id).ToList();
+        foreach (var link in linked)
+        {
+            // A new export of the counterpart may name another port (it changed its endpoint mode or its listen port);
+            // a link that kept the old one would lead nowhere. The port of a link to a mediator is not part of an export.
+            await _links.UpsertAsync(
+                link.WithPeer(peer, peer.Role == counterpart ? endpointPort : null),
+                cancellationToken);
+        }
+
+        if (linked.Count > 0)
+        {
+            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, _localizer.Format("Transfer.Updated", peer.Id, linked.Count));
+        }
 
         int priority;
         int remotePort;
@@ -233,19 +247,17 @@ public sealed class NodeConfigurationTransfer
         else if (peer.Role == counterpart)
         {
             priority = links.Select(link => link.Priority + 10).Append(EndpointPriority).Max();
-
-            // A peer without an SSH server is reached on its TLS port instead of its loopback endpoint.
-            remotePort = peer.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : imported.ListenPort;
+            remotePort = endpointPort;
         }
         else
         {
-            return new ImportResult(peer.Id, peer.Role, false, null, Texts.Format("Transfer.StoredOnly", peer.Id, _node.Role, peer.Role));
+            return new ImportResult(peer.Id, peer.Role, false, null, _localizer.Format("Transfer.StoredOnly", peer.Id, _node.Role, peer.Role));
         }
 
         var name = UniqueName(peer.Id.Value, links);
         var created = new ChainLinkConfig(Guid.NewGuid(), name, TransportKind.Direct, peer, 0, remotePort, priority);
         await _links.UpsertAsync(created, cancellationToken);
-        return new ImportResult(peer.Id, peer.Role, true, created.Id, Texts.Format("Transfer.Imported", peer.Role, peer.Id, name));
+        return new ImportResult(peer.Id, peer.Role, true, created.Id, _localizer.Format("Transfer.Imported", peer.Role, peer.Id, name));
     }
 
     /// <summary>
@@ -270,7 +282,7 @@ public sealed class NodeConfigurationTransfer
         }
         catch (JsonException ex)
         {
-            throw new FormatException(Texts.Format("Transfer.FileInvalid", ex.Message), ex);
+            throw LocalizedError.Create(message => new FormatException(message, ex), "Transfer.FileInvalid", ex);
         }
 
         Validate(configuration);
@@ -286,39 +298,39 @@ public sealed class NodeConfigurationTransfer
     {
         if (configuration is null)
         {
-            throw new FormatException(Texts.Get("Transfer.FileEmpty"));
+            throw LocalizedError.Format("Transfer.FileEmpty");
         }
 
         if (configuration.FormatVersion != ExportedNodeConfiguration.CurrentFormatVersion)
         {
-            throw new FormatException(Texts.Format("Transfer.Version", configuration.FormatVersion));
+            throw LocalizedError.Format("Transfer.Version", configuration.FormatVersion);
         }
 
         if (configuration.NodeId.IsEmpty || string.IsNullOrWhiteSpace(configuration.Name) || !Enum.IsDefined(configuration.Role))
         {
-            throw new FormatException(Texts.Get("Transfer.MissingFields"));
+            throw LocalizedError.Format("Transfer.MissingFields");
         }
 
         if (configuration.ListenPort is < 1 or > 65535)
         {
-            throw new FormatException(Texts.Format("Transfer.ListenPort", configuration.ListenPort));
+            throw LocalizedError.Format("Transfer.ListenPort", configuration.ListenPort);
         }
 
         if (!Enum.IsDefined(configuration.EndpointMode))
         {
-            throw new FormatException(Texts.Format("Transfer.EndpointMode", configuration.EndpointMode));
+            throw LocalizedError.Format("Transfer.EndpointMode", configuration.EndpointMode);
         }
 
         if (configuration.EndpointMode == EndpointMode.Direct)
         {
             if (configuration.EndpointPort is < 1 or > 65535)
             {
-                throw new FormatException(Texts.Format("Transfer.EndpointPort", configuration.EndpointPort));
+                throw LocalizedError.Format("Transfer.EndpointPort", configuration.EndpointPort);
             }
 
             if (NodeCertificateStore.NormalizeFingerprint(configuration.TlsFingerprint) is null)
             {
-                throw new FormatException(Texts.Get("Transfer.NeedsFingerprint"));
+                throw LocalizedError.Format("Transfer.NeedsFingerprint");
             }
         }
 
@@ -333,12 +345,12 @@ public sealed class NodeConfigurationTransfer
             }
             catch (Exception ex) when (ex is CryptographicException or FormatException)
             {
-                throw new FormatException(Texts.Get("Transfer.KeyNotValid"), ex);
+                throw LocalizedError.Create(message => new FormatException(message, ex), "Transfer.KeyNotValid");
             }
 
             if (!isP256)
             {
-                throw new FormatException(Texts.Get("Transfer.KeyMustBeP256"));
+                throw LocalizedError.Format("Transfer.KeyMustBeP256");
             }
         }
 
@@ -349,7 +361,7 @@ public sealed class NodeConfigurationTransfer
 
         if (!string.IsNullOrWhiteSpace(configuration.HostKeyFingerprint) && NormalizeHostKeyFingerprint(configuration.HostKeyFingerprint) is null)
         {
-            throw new FormatException(Texts.Get("Transfer.HostKeyFingerprint"));
+            throw LocalizedError.Format("Transfer.HostKeyFingerprint");
         }
     }
 

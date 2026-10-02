@@ -39,10 +39,17 @@ public static class SyncServiceCollectionExtensions
     public static IServiceCollection AddRCynQSync(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IEventPublisher>(NullEventPublisher.Instance);
         services.TryAddSingleton<SyncPaths>();
-        services.TryAddSingleton<WorkingTreeLock>();
+
+        // One lock file per node, in its data directory: the service and the CLI of the same node take turns on the
+        // working tree and the sync base instead of changing them at the same time.
+        services.TryAddSingleton(provider => new WorkingTreeLock(
+            Path.Combine(provider.GetRequiredService<IAppDataFactory>().Create().Root, WorkingTreeLock.LockFileName)));
         services.TryAddSingleton<ISignatureService, EcdsaSignatureService>();
         services.TryAddSingleton(provider => new ReplayGuardOptions
         {
@@ -53,32 +60,52 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<ConflictDetector>();
         services.TryAddSingleton<ContentOverwriteApplier>();
         services.TryAddSingleton<SyncBaseUpdater>();
-        services.TryAddSingleton<GitPatchApplier>();
         services.TryAddSingleton<IPatchApplier>(provider => provider.GetRequiredService<ContentOverwriteApplier>());
         services.TryAddSingleton<BackupService>();
+        services.TryAddSingleton<GitMergeApplier>();
         services.TryAddSingleton<IConflictResolver, DefaultConflictResolver>();
         services.TryAddSingleton<StateTracker>();
         services.TryAddSingleton<SyncBase.SyncBaseMetadataStore>();
         services.TryAddSingleton<SyncBase.IGitSyncBaseLocator, SyncBase.GitSyncBaseLocator>();
         services.TryAddSingleton<SyncBase.SyncBaseManager>();
         services.TryAddSingleton<PatchOutcomeRecorder>();
+        services.TryAddSingleton<PatchDisplayDiffStore>();
         services.TryAddSingleton(new HttpPatchSenderOptions());
         services.TryAddSingleton<IPatchSender>(provider => ActivatorUtilities.CreateInstance<HttpPatchSender>(
             provider,
             new SocketsHttpHandler { UseProxy = false }));
+        services.TryAddSingleton<PatchAdmission>();
+        services.TryAddSingleton<IncomingPatchApplier>();
         services.TryAddSingleton<IPatchReceiver, DefaultPatchReceiver>();
+        services.TryAddSingleton<PatchSendOperation>();
+        services.TryAddSingleton<PatchResolveOperation>();
         services.TryAddSingleton<IPatchService, PatchService>();
         services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<Configuration.NodeConfigurationTransfer>(
             provider,
             NodeCertificateFingerprint(provider)));
+        services.TryAddSingleton<Configuration.ConfiguredLinkStore>();
         services.TryAddSingleton<INetworkInterfaceSource, SystemNetworkInterfaceSource>();
         services.TryAddSingleton<INodeEnvironmentProbe, NodeEnvironmentProbe>();
         services.TryAddSingleton<Configuration.Access.PeerAccessService>();
         services.TryAddSingleton<GitChannel.GitBundleService>();
         services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<GitChannel.GitBundleClient>(
             provider,
-            new PeerLinkFactory(new SocketsHttpHandler { UseProxy = false }, provider.GetRequiredService<ILocalForwardManager>())));
+            new PeerLinkFactory(
+                new SocketsHttpHandler { UseProxy = false },
+                provider.GetRequiredService<ILocalForwardManager>(),
+                hostKeys: provider.GetService<RCynQ.Ssh.Keys.HostKeys.IPinnedHostKeyGuard>())));
         services.TryAddSingleton<GitChannel.GitChannelService>();
+        services.TryAddSingleton(new Reachability.EndpointPingOptions());
+        services.TryAddSingleton<Reachability.PeerContactRegistry>();
+        services.TryAddSingleton<Reachability.PeerPingService>();
+        services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<Reachability.EndpointPinger>(
+            provider,
+            new PeerLinkFactory(
+                new SocketsHttpHandler { UseProxy = false },
+                provider.GetRequiredService<ILocalForwardManager>(),
+                hostKeys: provider.GetService<RCynQ.Ssh.Keys.HostKeys.IPinnedHostKeyGuard>())));
+        services.TryAddSingleton<RCynQ.Core.Abstractions.Transports.IEndpointProbe>(provider => provider.GetRequiredService<Reachability.EndpointPinger>());
+        services.TryAddSingleton<Maintenance.DataRetentionService>();
         return services;
     }
 

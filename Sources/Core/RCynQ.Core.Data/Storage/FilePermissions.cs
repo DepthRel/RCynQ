@@ -58,7 +58,19 @@ public static class FilePermissions
         var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await File.WriteAllBytesAsync(temp, content, cancellationToken);
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
+            if (ownerOnly && !OperatingSystem.IsWindows())
+            {
+                // Created with the final mode: a file that is written first and restricted afterwards is readable by
+                // everybody (through the default mode) for as long as the write takes.
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            await using (var stream = new FileStream(temp, options))
+            {
+                await stream.WriteAsync(content, cancellationToken);
+            }
+
             if (ownerOnly)
             {
                 RestrictFileToOwner(temp);

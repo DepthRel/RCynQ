@@ -3,6 +3,7 @@ using CliFx.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration.Access;
 
 namespace RCynQ.Cli.Commands.Config;
@@ -49,7 +50,7 @@ public sealed class ImportCommand : NodeCommandBase
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or FormatException)
         {
-            await console.Error.WriteLineAsync($"Neighbour SSH access was not updated: {ex.Message}");
+            await console.Error.WriteLineAsync($"Neighbour SSH access was not updated: {context.Get<ILocalizer>().Describe(ex)}");
         }
     }
 }

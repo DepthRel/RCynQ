@@ -26,7 +26,7 @@ public class PathAndHashTests
     /// <summary>
     /// The utility under test.
     /// </summary>
-    private readonly PathUtility _paths = new();
+    private readonly PathUtility _paths = new(TestTexts.English);
 
     /// <summary>
     /// Verifies normalization of acceptable relative paths.

@@ -26,9 +26,11 @@ public sealed partial class LogsViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="LogsViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
-    public LogsViewModel(IServiceApiClient api, IDialogService dialogs)
+    public LogsViewModel(ILocalizer localizer, IServiceApiClient api, IDialogService dialogs)
+        : base(localizer)
     {
         _api = api;
         _dialogs = dialogs;
@@ -75,7 +77,7 @@ public sealed partial class LogsViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ExportAsync()
     {
-        var file = await _dialogs.PickSaveFileAsync(Texts.Get("Logs.ExportTitle"), $"rcynq-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        var file = await _dialogs.PickSaveFileAsync(Localizer.Get("Logs.ExportTitle"), $"rcynq-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         if (file is null)
         {
             return;
@@ -84,7 +86,7 @@ public sealed partial class LogsViewModel : PageViewModelBase
         await RunSafeAsync(async () =>
         {
             await File.WriteAllLinesAsync(file, Entries.Reverse().Select(entry => entry.ToExportLine()));
-            InfoMessage = Texts.Format("Logs.Saved", file);
+            InfoMessage = Localizer.Format("Logs.Saved", file);
         });
     }
 }

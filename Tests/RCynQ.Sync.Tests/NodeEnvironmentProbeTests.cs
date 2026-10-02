@@ -182,12 +182,13 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     /// <returns>The probe.</returns>
     private NodeEnvironmentProbe Create()
         => new(
+            TestTexts.English,
             new NodeConfig(new NodeId("node-1"), "Node", NodeRole.Mediator, null, null),
             _options,
             _interfaces,
             _tcp,
             new HostKeyVerifier(_processes, _options.Ssh),
-            new SshKeyGenerator(_processes, _options.Ssh),
+            new SshKeyGenerator(TestTexts.English, _processes, _options.Ssh),
             new AppDataFactory(AppDataPaths.FromRoot(_dataRoot)),
             TimeProvider.System);
 }

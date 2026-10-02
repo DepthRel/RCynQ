@@ -255,19 +255,20 @@ public sealed class MainViewModelTests : IDisposable
     {
         var dialogs = Substitute.For<IDialogService>();
         return new MainViewModel(
+            TestTexts.Russian,
             _api,
             _events,
             new ImmediateUiDispatcher(),
             new RoleAdapter(),
             _controller,
-            new SetupViewModel(_configPath, dialogs),
-            new OverviewViewModel(_api),
-            new RoleAndNodesViewModel(_api, dialogs),
-            new SyncViewModel(_api, dialogs),
-            new TunnelViewModel(_api),
-            new DiagnosticsViewModel(_api, dialogs),
-            new BranchViewModel(_api),
-            new LogsViewModel(_api, dialogs),
-            new SettingsViewModel(new LanguageViewModel(new FakeLanguageService())));
+            new SetupViewModel(TestTexts.Russian, _configPath, dialogs),
+            new OverviewViewModel(TestTexts.Russian, _api),
+            new RoleAndNodesViewModel(TestTexts.Russian, _api, dialogs),
+            new SyncViewModel(TestTexts.Russian, _api, dialogs),
+            new TunnelViewModel(TestTexts.Russian, _api),
+            new DiagnosticsViewModel(TestTexts.Russian, _api, dialogs),
+            new BranchViewModel(TestTexts.Russian, _api),
+            new LogsViewModel(TestTexts.Russian, _api, dialogs),
+            new SettingsViewModel(TestTexts.Russian, new LanguageViewModel(TestTexts.Russian, new FakeLanguageService()), _api, dialogs));
     }
 }

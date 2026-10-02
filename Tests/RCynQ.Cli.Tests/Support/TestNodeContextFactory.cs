@@ -31,6 +31,7 @@ public sealed class TestNodeContextFactory : INodeContextFactory
     {
         var services = new ServiceCollection();
         _configure(services);
+        services.AddSingleton(TestTexts.English);
         services.AddCliCommandServices();
         Created++;
         return Task.FromResult(new NodeContext(services.BuildServiceProvider(), new SyncBridgeOptions(), configPath ?? "test.json"));

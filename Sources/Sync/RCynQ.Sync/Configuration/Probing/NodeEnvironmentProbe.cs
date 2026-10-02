@@ -47,9 +47,13 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
     /// <summary>The time provider.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NodeEnvironmentProbe"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The node options.</param>
     /// <param name="interfaces">The interface source.</param>
@@ -59,6 +63,7 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
     /// <param name="appData">The node data directories; the SSH key is kept in <c>keys/ssh</c>.</param>
     /// <param name="timeProvider">The time provider.</param>
     public NodeEnvironmentProbe(
+        ILocalizer localizer,
         NodeConfig node,
         SyncBridgeOptions options,
         INetworkInterfaceSource interfaces,
@@ -68,6 +73,7 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
         IAppDataFactory appData,
         TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _interfaces = interfaces ?? throw new ArgumentNullException(nameof(interfaces));
@@ -195,7 +201,7 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
         }
         else if (!File.Exists(privateKey + ".pub"))
         {
-            throw new SyncBridgeException(Texts.Format("Probe.PublicKeyMissing", privateKey));
+            throw new SyncBridgeException(_localizer.Format("Probe.PublicKeyMissing", privateKey));
         }
 
         if (!configured)

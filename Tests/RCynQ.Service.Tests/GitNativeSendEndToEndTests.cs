@@ -44,7 +44,7 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
 
     /// <summary>The Git command runner used to prepare Dest's repository.</summary>
-    private readonly GitCommandRunner _git = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _git = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>
     /// Starts Dest with a repository and Source pointed at it through a direct TLS connection.
@@ -250,7 +250,7 @@ public sealed class GitNativeSendEndToEndTests : IAsyncLifetime
     {
         try
         {
-            return (await new SystemProcessRunner().RunAsync(new RCynQ.Core.Abstractions.Processes.ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
+            return (await new SystemProcessRunner(TestTexts.English).RunAsync(new RCynQ.Core.Abstractions.Processes.ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
         }
         catch (RCynQ.Core.Exceptions.SyncBridgeException)
         {

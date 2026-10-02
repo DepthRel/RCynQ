@@ -20,6 +20,18 @@ namespace RCynQ.Git.Paths;
 /// </remarks>
 public sealed partial class PathUtility : IPathUtility
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathUtility"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public PathUtility(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <summary>
     /// The comparison used for file system paths on the current platform.
     /// </summary>
@@ -32,18 +44,18 @@ public sealed partial class PathUtility : IPathUtility
         ArgumentNullException.ThrowIfNull(relativePath);
         if (string.IsNullOrWhiteSpace(relativePath))
         {
-            throw new ArgumentException(Texts.Get("Path.Blank"), nameof(relativePath));
+            throw new ArgumentException(_localizer.Get("Path.Blank"), nameof(relativePath));
         }
 
         if (relativePath.Any(char.IsControl))
         {
-            throw new ArgumentException(Texts.Format("Path.Control", Printable(relativePath)), nameof(relativePath));
+            throw new ArgumentException(_localizer.Format("Path.Control", Printable(relativePath)), nameof(relativePath));
         }
 
         var unified = relativePath.Replace('\\', '/');
         if (unified.StartsWith('/') || unified.Contains(':') || Path.IsPathRooted(relativePath))
         {
-            throw new ArgumentException(Texts.Format("Path.MustBeRelative", relativePath), nameof(relativePath));
+            throw new ArgumentException(_localizer.Format("Path.MustBeRelative", relativePath), nameof(relativePath));
         }
 
         var segments = new List<string>();
@@ -56,17 +68,17 @@ public sealed partial class PathUtility : IPathUtility
 
             if (segment == "..")
             {
-                throw new ArgumentException(Texts.Format("Path.EscapesTree", relativePath), nameof(relativePath));
+                throw new ArgumentException(_localizer.Format("Path.EscapesTree", relativePath), nameof(relativePath));
             }
 
             if (segment.EndsWith('.') || segment.EndsWith(' '))
             {
-                throw new ArgumentException(Texts.Format("Path.SegmentEnd", relativePath), nameof(relativePath));
+                throw new ArgumentException(_localizer.Format("Path.SegmentEnd", relativePath), nameof(relativePath));
             }
 
             if (IsGitMetadataName(segment))
             {
-                throw new ArgumentException(Texts.Format("Path.GitMetadata", relativePath), nameof(relativePath));
+                throw new ArgumentException(_localizer.Format("Path.GitMetadata", relativePath), nameof(relativePath));
             }
 
             segments.Add(segment);
@@ -74,7 +86,7 @@ public sealed partial class PathUtility : IPathUtility
 
         if (segments.Count == 0)
         {
-            throw new ArgumentException(Texts.Format("Path.NotFile", relativePath), nameof(relativePath));
+            throw new ArgumentException(_localizer.Format("Path.NotFile", relativePath), nameof(relativePath));
         }
 
         return string.Join('/', segments);
@@ -107,7 +119,7 @@ public sealed partial class PathUtility : IPathUtility
         var full = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsWithinRoot(root, full) || Path.TrimEndingDirectorySeparator(full).Equals(Path.TrimEndingDirectorySeparator(root), PlatformComparison))
         {
-            throw new ArgumentException(Texts.Format("Path.EscapesRoot", relativePath, rootPath), nameof(relativePath));
+            throw new ArgumentException(_localizer.Format("Path.EscapesRoot", relativePath, rootPath), nameof(relativePath));
         }
 
         return full;
@@ -144,6 +156,20 @@ public sealed partial class PathUtility : IPathUtility
     /// <returns><see langword="true"/> for Git metadata names.</returns>
     public static bool IsGitMetadataName(string segment)
         => segment.Equals(".git", StringComparison.OrdinalIgnoreCase) || ShortGitName().IsMatch(segment);
+
+    /// <summary>
+    /// The prefix of the directory in which a patch is prepared inside the tree it is applied to.
+    /// </summary>
+    public const string ApplyStagingPrefix = ".rcynq-apply-";
+
+    /// <summary>
+    /// Checks whether a path segment names a directory in which RCynQ prepares a patch. Such a directory exists only
+    /// while a patch is applied (or was left behind by a process that died meanwhile) and is never part of a snapshot.
+    /// </summary>
+    /// <param name="segment">The path segment.</param>
+    /// <returns><see langword="true"/> for a staging directory of RCynQ.</returns>
+    public static bool IsApplyStagingName(string segment)
+        => segment.StartsWith(ApplyStagingPrefix, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Replaces control characters for error messages.

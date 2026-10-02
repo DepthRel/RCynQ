@@ -13,7 +13,7 @@ public sealed record ConflictFile
     /// <param name="path">The relative path of the file inside the working tree, using <c>/</c> separators.</param>
     /// <param name="localStateHash">The SHA-256 of the local content, or <see langword="null"/> when the file does not exist locally.</param>
     /// <param name="incomingStateHash">The SHA-256 of the incoming content, or <see langword="null"/> when the patch deletes the file.</param>
-    /// <param name="detail">An optional explanation, for example the path of a <c>.rej</c> file.</param>
+    /// <param name="detail">An optional explanation, as plain text or as an encoded message that is worded for the reader.</param>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is blank.</exception>
     public ConflictFile(string path, string? localStateHash, string? incomingStateHash, string? detail = null)

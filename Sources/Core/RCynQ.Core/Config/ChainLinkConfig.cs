@@ -123,4 +123,15 @@ public sealed record ChainLinkConfig
     /// <returns>A new link configuration with the same identity and settings.</returns>
     public ChainLinkConfig WithTransport(TransportKind transport)
         => new(Id, Name, transport, Peer, LocalPort, RemotePort, Priority, FallbackTransports, TransportSettings);
+
+    /// <summary>
+    /// Creates a copy of this link that leads to another description of the peer.
+    /// </summary>
+    /// <param name="peer">The peer description to use.</param>
+    /// <param name="remotePort">The remote port to use, or <see langword="null"/> to keep the current one.</param>
+    /// <returns>A new link configuration with the same identity and settings.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="peer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="remotePort"/> is outside 1..65535.</exception>
+    public ChainLinkConfig WithPeer(PeerDescriptor peer, int? remotePort = null)
+        => new(Id, Name, Transport, peer, LocalPort, remotePort ?? RemotePort, Priority, FallbackTransports, TransportSettings);
 }

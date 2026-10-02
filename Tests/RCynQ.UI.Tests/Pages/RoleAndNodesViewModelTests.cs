@@ -36,7 +36,7 @@ public sealed class RoleAndNodesViewModelTests
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { source, mediator });
         _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(new[] { TestData.State(source, LinkStatus.Ready) });
-        var page = new RoleAndNodesViewModel(_api, _dialogs);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs);
 
         await page.RefreshAsync();
 
@@ -59,7 +59,7 @@ public sealed class RoleAndNodesViewModelTests
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Mediator));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
         _api.SetRoleAsync(Arg.Any<SetRoleRequest>(), Arg.Any<CancellationToken>()).Returns(new RoleChangeResult(true, true, "restart"));
-        var page = new RoleAndNodesViewModel(_api, _dialogs);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs);
         await page.RefreshAsync();
 
         var restartRequested = false;
@@ -85,7 +85,7 @@ public sealed class RoleAndNodesViewModelTests
         var link = TestData.Link("relay", "mediator-1", NodeRole.Mediator, "203.0.113.4");
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Source));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { link });
-        var page = new RoleAndNodesViewModel(_api, _dialogs);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs);
         await page.RefreshAsync();
 
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
@@ -110,7 +110,7 @@ public sealed class RoleAndNodesViewModelTests
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
         _dialogs.CopyToClipboardAsync(Arg.Any<string>()).Returns(true);
-        var page = new RoleAndNodesViewModel(_api, _dialogs, null, settings);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs, null, settings);
 
         await page.RefreshAsync();
 
@@ -147,7 +147,7 @@ public sealed class RoleAndNodesViewModelTests
         settings.SaveAsync(Arg.Any<NodeSetupValues>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
-        var page = new RoleAndNodesViewModel(_api, _dialogs, null, settings);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs, null, settings);
         await page.RefreshAsync();
         var restarts = 0;
         page.RestartRequested += (_, _) => restarts++;
@@ -161,7 +161,7 @@ public sealed class RoleAndNodesViewModelTests
         page.LinkToken.Should().NotBe("old-token").And.NotBeEmpty();
         page.AreSettingsDirty.Should().BeTrue();
 
-        page.SelectedEndpointMode = EndpointModeOption.For(EndpointMode.Direct);
+        page.SelectedEndpointMode = page.EndpointModes.Single(option => option.Value == EndpointMode.Direct);
         page.EndpointPort = 18444;
         await page.SaveSettingsCommand.ExecuteAsync(null);
 
@@ -186,7 +186,7 @@ public sealed class RoleAndNodesViewModelTests
     /// </summary>
     [Fact]
     public void Settings_Card_Needs_The_Config_File()
-        => new RoleAndNodesViewModel(_api, _dialogs).AreSettingsVisible.Should().BeFalse();
+        => new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs).AreSettingsVisible.Should().BeFalse();
 
     /// <summary>
     /// Verifies that neighbour access asks for administrator rights only after confirmation.
@@ -201,7 +201,7 @@ public sealed class RoleAndNodesViewModelTests
         var elevation = Substitute.For<IPeerAccessElevation>();
         elevation.IsAvailable.Returns(true);
         elevation.AllowPeerAccessAsync(Arg.Any<CancellationToken>()).Returns(new ElevatedRunResult(ElevatedRunOutcome.Completed, "Подключения соседних узлов разрешены."));
-        var page = new RoleAndNodesViewModel(_api, _dialogs, elevation);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs, elevation);
 
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
         await page.AllowAccessCommand.ExecuteAsync(null);
@@ -227,7 +227,7 @@ public sealed class RoleAndNodesViewModelTests
     {
         _api.AllowPeerAccessAsync(Arg.Any<CancellationToken>()).Returns(
             new PeerAccessResult(true, false, "/home/dev/.ssh/authorized_keys", 1, new[] { "dest-1" }, Array.Empty<string>(), "ok"));
-        var page = new RoleAndNodesViewModel(_api, _dialogs);
+        var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs);
 
         await page.AllowAccessCommand.ExecuteAsync(null);
 

@@ -83,9 +83,7 @@ public sealed partial record SshEndpoint
         var trimmed = Guard.NotBlank(user, nameof(user));
         if (!IsValidUser(trimmed))
         {
-            throw new ArgumentException(
-                Texts.Format("Ssh.UserForbidden", trimmed),
-                nameof(user));
+            throw LocalizedError.Argument(nameof(user), "Ssh.UserForbidden", trimmed);
         }
 
         return trimmed;
@@ -106,9 +104,7 @@ public sealed partial record SshEndpoint
 
         if (!IsValidHost(trimmed))
         {
-            throw new ArgumentException(
-                Texts.Format("Ssh.HostForbidden", trimmed),
-                nameof(host));
+            throw LocalizedError.Argument(nameof(host), "Ssh.HostForbidden", trimmed);
         }
 
         return trimmed;

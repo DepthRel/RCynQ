@@ -209,7 +209,7 @@ public sealed class CliCommandTests : IDisposable
         });
         var dest = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, "/srv/repo", null);
         void Register(IServiceCollection services) => services
-            .AddSingleton(new PeerAccessService(dest, new SyncBridgeOptions { ListenPort = 18443 }, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = keysFile })));
+            .AddSingleton(new PeerAccessService(TestTexts.English, dest, new SyncBridgeOptions { ListenPort = 18443 }, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = keysFile })));
 
         var (code, output, _) = await RunAsync(Register, "ssh", "allow");
 
@@ -218,7 +218,7 @@ public sealed class CliCommandTests : IDisposable
         File.ReadAllText(keysFile).Should().Contain("permitopen=\"127.0.0.1:18443\"").And.Contain("rcynq:source-1");
 
         void RegisterAdmin(IServiceCollection services) => services
-            .AddSingleton(new PeerAccessService(dest, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(Path.Combine(_temp, "admin_keys"), true), () => false)));
+            .AddSingleton(new PeerAccessService(TestTexts.English, dest, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(Path.Combine(_temp, "admin_keys"), true), () => false)));
         var (adminCode, _, adminError) = await RunAsync(RegisterAdmin, "ssh", "allow");
         adminCode.Should().Be(1);
         adminError.Should().Contain("Administrator rights");
@@ -276,7 +276,7 @@ public sealed class CliCommandTests : IDisposable
     {
         using var console = new FakeInMemoryConsole();
         var factory = new TestNodeContextFactory(register ?? (_ => { }));
-        var code = await CliHost.CreateApplication(factory, console).RunAsync(args, new Dictionary<string, string>());
+        var code = await CliHost.CreateApplication(factory, TestTexts.English, console).RunAsync(args, new Dictionary<string, string>());
         return (code, console.ReadOutputString(), console.ReadErrorString());
     }
 

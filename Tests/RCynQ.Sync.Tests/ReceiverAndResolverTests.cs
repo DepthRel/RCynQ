@@ -77,7 +77,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), envelope, Context());
 
         result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && LocalizedText.Render(conflict.Detail)!.Contains("Modified locally"));
+        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && LocalizedText.Render(conflict.Detail, TestTexts.English)!.Contains("Modified locally"));
         SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("local edit\n");
         SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().BeNull();
         SyncFixture.Read(_fixture.DestWork, "b.txt").Should().Be("keep\n");
@@ -254,6 +254,42 @@ public sealed class ReceiverAndResolverTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a commit that has started runs to its end although the sender gives up meanwhile (its request times
+    /// out and is aborted): the patch is applied completely and recorded, not left half-written and "pending".
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Commit_Runs_To_Its_End_When_The_Sender_Gives_Up()
+    {
+        await _fixture.RegisterSourcePeerAsync();
+        var receiver = _fixture.CreateReceiver();
+        var envelope = await _fixture.BuildSignedEnvelopeAsync();
+        await receiver.OpenSessionAsync(envelope, Context());
+        await Upload(receiver, envelope, "a.txt");
+        await Upload(receiver, envelope, "new/n.txt");
+        using var sender = new CancellationTokenSource();
+
+        // The display diff is built right before the files are written: the request is aborted at that moment.
+        _fixture.DiffBuilder.BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            sender.Cancel();
+            return "diff --git a/a.txt b/a.txt\n"u8.ToArray();
+        });
+
+        var result = await receiver.CommitAsync(envelope.Id, Context(), sender.Token);
+
+        result.Status.Should().Be(PatchStatus.Applied);
+        foreach (var root in new[] { _fixture.DestWork, _fixture.DestPaths.SyncBase })
+        {
+            SyncFixture.Read(root, "a.txt").Should().Be("v2\n");
+            SyncFixture.Read(root, "new/n.txt").Should().Be("new\n");
+            SyncFixture.Read(root, "b.txt").Should().BeNull();
+        }
+
+        _fixture.Patches.Items[envelope.Id].Status.Should().Be(PatchStatus.Applied);
+    }
+
+    /// <summary>
     /// Verifies that a manifest that a peer signed with paths into Git metadata or outside the working tree never writes anything.
     /// </summary>
     /// <param name="hostilePath">The hostile path.</param>
@@ -357,6 +393,31 @@ public sealed class ReceiverAndResolverTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that the line endings of a checkout are no conflict between nodes: the sender reports its base by content
+    /// (CRLF counted as LF), and the receiver compares its own file the same way. A Windows checkout with CRLF and a
+    /// Linux checkout with LF of the same text therefore agree, in both directions, while a real edit is still found.
+    /// </summary>
+    /// <param name="local">The file of the receiver.</param>
+    /// <param name="conflicts">Whether a conflict is expected.</param>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData("v1\r\n", false)]
+    [InlineData("v1\n", false)]
+    [InlineData("edited here\r\n", true)]
+    public async Task Line_Endings_Of_A_Checkout_Are_Not_A_Conflict(string local, bool conflicts)
+    {
+        var detector = new ConflictDetector(_fixture.Paths);
+        SyncFixture.Write(_fixture.DestWork, "a.txt", local);
+
+        // What a sender puts into the manifest for a base file "v1" whatever its line endings: the hash of the LF form.
+        var change = new FileChange(ChangeKind.Modified, "a.txt", HashOf("v2\r\n"), 4, false, HashOf("v1\n"));
+
+        var found = await detector.DetectAsync(new[] { change }, _fixture.DestWork, _fixture.DestPaths.SyncBase);
+
+        found.Should().HaveCount(conflicts ? 1 : 0);
+    }
+
+    /// <summary>
     /// Verifies the ApplyIncomingOverLocal policy including the backup.
     /// </summary>
     /// <returns>A task representing the test.</returns>
@@ -374,57 +435,6 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var backup = Directory.GetFiles(Path.Combine(_fixture.DestPaths.Backups, envelope.Id.ToString("N")), "a.txt", SearchOption.AllDirectories);
         backup.Should().ContainSingle();
         File.ReadAllText(backup[0]).Should().Be("local edit\n");
-    }
-
-    /// <summary>
-    /// Verifies that UseGit outside a repository falls back to <c>--reject</c> and reports the <c>.rej</c> file.
-    /// </summary>
-    /// <returns>A task representing the test.</returns>
-    [Fact]
-    public async Task UseGit_Reports_Rejected_Hunks()
-    {
-        var (envelope, conflicts) = await ReceiveConflictAsync();
-        var git = Substitute.For<IGitCommandRunner>();
-        git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var args = call.Arg<IReadOnlyList<string>>();
-                if (args.Contains("--reject"))
-                {
-                    File.WriteAllText(Path.Combine(_fixture.DestWork, "a.txt.rej"), "@@ rejected hunk @@");
-                }
-
-                return args.Contains("--is-inside-work-tree") ? new Core.Abstractions.Processes.ProcessResult(128, "", "not a git repository") : new Core.Abstractions.Processes.ProcessResult(1, "", "patch does not apply");
-            });
-
-        var result = await _fixture.CreateResolver(git).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.UseGit);
-
-        result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Detail.Should().Match(detail => LocalizedText.Render(detail)!.Contains("a.txt.rej"));
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v1\n", "the sync base changes only after a clean apply");
-        await git.DidNotReceive().RunAsync(Arg.Is<IReadOnlyList<string>>(args => args.Contains("--3way")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// Verifies that a clean git apply resolves the patch and updates the sync base, and that the diff comes from the receiver's own sync base.
-    /// </summary>
-    /// <returns>A task representing the test.</returns>
-    [Fact]
-    public async Task UseGit_Clean_Apply_Resolves()
-    {
-        var (envelope, conflicts) = await ReceiveConflictAsync();
-        var git = Substitute.For<IGitCommandRunner>();
-        git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<IReadOnlyList<string>>().Contains("--is-inside-work-tree")
-                ? new Core.Abstractions.Processes.ProcessResult(128, "", "")
-                : new Core.Abstractions.Processes.ProcessResult(0, "", ""));
-
-        var result = await _fixture.CreateResolver(git).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.UseGit);
-
-        result.Status.Should().Be(PatchStatus.ConflictResolved);
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n");
-        await git.Received(1).RunAsync(Arg.Is<IReadOnlyList<string>>(args => args.Contains("--check")), _fixture.DestWork, Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>());
-        await _fixture.DiffBuilder.Received().BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>

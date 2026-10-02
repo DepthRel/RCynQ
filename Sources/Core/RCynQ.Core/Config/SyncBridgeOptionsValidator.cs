@@ -20,51 +20,64 @@ public static class SyncBridgeOptionsValidator
     /// Validates the options.
     /// </summary>
     /// <param name="options">The options to validate.</param>
+    /// <param name="localizer">The localizer that words the problems for the reader.</param>
     /// <returns>The list of human-readable problems; empty when the options are valid.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<string> Validate(SyncBridgeOptions options)
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> Validate(SyncBridgeOptions options, ILocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(localizer);
         var errors = new List<string>();
 
-        TryAdd(errors, () => ToNodeConfig(options), "Node");
+        TryAdd(errors, localizer, () => ToNodeConfig(options), "Node");
 
         if (options.ListenPort is < 1 or > 65535)
         {
-            errors.Add(Texts.Format("Config.ListenPortRange", options.ListenPort));
+            errors.Add(localizer.Format("Config.ListenPortRange", options.ListenPort));
         }
 
         if (options.Endpoint.Port is < 1 or > 65535)
         {
-            errors.Add(Texts.Format("Config.EndpointPortRange", options.Endpoint.Port));
+            errors.Add(localizer.Format("Config.EndpointPortRange", options.Endpoint.Port));
         }
 
         if (options.Endpoint.Mode == EndpointMode.Direct)
         {
             if (options.Role == NodeRole.Mediator)
             {
-                errors.Add(Texts.Get("Config.MediatorNeedsSsh"));
+                errors.Add(localizer.Get("Config.MediatorNeedsSsh"));
             }
 
             if (options.Endpoint.Port == options.ListenPort)
             {
-                errors.Add(Texts.Get("Config.PortsMustDiffer"));
+                errors.Add(localizer.Get("Config.PortsMustDiffer"));
             }
 
             if (!IPAddress.TryParse(options.Endpoint.BindAddress, out _))
             {
-                errors.Add(Texts.Format("Config.BindAddressInvalid", options.Endpoint.BindAddress));
+                errors.Add(localizer.Format("Config.BindAddressInvalid", options.Endpoint.BindAddress));
             }
         }
 
         if (options.PatchMaxAgeMinutes < 1)
         {
-            errors.Add(Texts.Get("Config.PatchMaxAge"));
+            errors.Add(localizer.Get("Config.PatchMaxAge"));
+        }
+
+        if (options.RetentionDays < 0)
+        {
+            errors.Add(localizer.Get("Config.RetentionDays"));
         }
 
         if (options.Ssh.ConnectTimeoutSeconds < 1)
         {
-            errors.Add(Texts.Get("Config.SshTimeout"));
+            errors.Add(localizer.Get("Config.SshTimeout"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Ssh.ConfigFile)
+            && (options.Ssh.ConfigFile.Any(char.IsControl) || !SshClientOptions.IsValidConfigFileName(Path.GetFileName(options.Ssh.ConfigFile))))
+        {
+            errors.Add(localizer.Format("Config.SshConfigFileName", options.Ssh.ConfigFile));
         }
 
         var ids = new HashSet<Guid>();
@@ -72,10 +85,10 @@ public static class SyncBridgeOptionsValidator
         {
             var index = i;
             ChainLinkConfig? link = null;
-            TryAdd(errors, () => link = ToChainLink(options.Chain[index]), $"Chain[{index}]");
+            TryAdd(errors, localizer, () => link = ToChainLink(options.Chain[index]), $"Chain[{index}]");
             if (link is not null && !ids.Add(link.Id))
             {
-                errors.Add(Texts.Format("Config.DuplicateLinkId", index, link.Id));
+                errors.Add(localizer.Format("Config.DuplicateLinkId", index, link.Id));
             }
         }
 
@@ -86,14 +99,14 @@ public static class SyncBridgeOptionsValidator
             var expected = options.Role == NodeRole.Source ? NodeRole.Dest : NodeRole.Source;
             if (endpoint.Peer.Role != expected)
             {
-                errors.Add(Texts.Format("Config.LastLinkRole", expected, endpoint.Name, endpoint.Peer.Role));
+                errors.Add(localizer.Format("Config.LastLinkRole", expected, endpoint.Name, endpoint.Peer.Role));
             }
 
             foreach (var hop in chain.Take(chain.Count - 1))
             {
                 if (hop.Peer.Role != NodeRole.Mediator)
                 {
-                    errors.Add(Texts.Format("Config.IntermediateLinkRole", hop.Name, hop.Peer.Role));
+                    errors.Add(localizer.Format("Config.IntermediateLinkRole", hop.Name, hop.Peer.Role));
                 }
             }
         }
@@ -182,9 +195,10 @@ public static class SyncBridgeOptionsValidator
     /// Runs a mapping action and records its argument errors.
     /// </summary>
     /// <param name="errors">The error collection.</param>
+    /// <param name="localizer">The localizer that words the problems.</param>
     /// <param name="action">The action to run.</param>
     /// <param name="scope">The scope prefix for messages.</param>
-    private static void TryAdd(List<string> errors, Action action, string scope)
+    private static void TryAdd(List<string> errors, ILocalizer localizer, Action action, string scope)
     {
         try
         {
@@ -192,7 +206,7 @@ public static class SyncBridgeOptionsValidator
         }
         catch (ArgumentException ex)
         {
-            errors.Add($"{scope}: {ex.Message}");
+            errors.Add($"{scope}: {localizer.Describe(ex)}");
         }
     }
 

@@ -11,6 +11,7 @@ using NSubstitute.ExceptionExtensions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
@@ -21,6 +22,7 @@ using RCynQ.Git.Patches.Serialization;
 using RCynQ.Sync.Transfer;
 using RCynQ.Service.Tests.Support;
 using RCynQ.Sync.Configuration;
+using RCynQ.Sync.Diagnostics.AutoFix;
 using Microsoft.Extensions.Hosting;
 using RCynQ.Sync.Configuration.Probing;
 using RCynQ.Sync.Services;
@@ -304,6 +306,87 @@ public sealed class ServiceApiTests
         (await ConfigurationFileEditor.LoadAsync(host.ConfigPath)).Role.Should().Be(NodeRole.Dest);
 
         (await client.PutAsJsonAsync(ApiRoutes.ConfigRole, new SetRoleRequest(NodeRole.Source, null, null), Json)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// Verifies that saving a link by hand does not erase what an import stored about its peer (the link form knows neither
+    /// the signing key nor the repository path), and that a link can be removed and is gone afterwards.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Saving_A_Link_Keeps_The_Imported_Peer_And_A_Link_Can_Be_Removed()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Source);
+        var client = host.CreateClient();
+        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.ConfigExport}?host=10.8.0.1&user=rcynq", Json);
+        var destExport = exported! with { NodeId = new NodeId("dest-1"), Name = "Dest", Role = NodeRole.Dest, Host = "10.8.0.2", GitRepoPath = "/srv/repo" };
+        (await client.PostAsJsonAsync(ApiRoutes.ConfigImport, destExport, Json)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var imported = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.Links, Json))!.Should().ContainSingle().Which;
+
+        // The link is saved again by hand, with another address.
+        var edited = new ChainLinkOptions { Id = imported.Id, Name = imported.Name, PeerNodeId = "dest-1", PeerRole = NodeRole.Dest, Host = "10.8.0.9", SshUser = "rcynq", RemotePort = 18443, Priority = 1000 };
+        (await client.PostAsJsonAsync(ApiRoutes.Links, edited, Json)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var link = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.Links, Json))!.Should().ContainSingle().Which;
+        link.Host.Should().Be("10.8.0.9");
+        link.HasSigningKey.Should().BeTrue("without the key every patch of the peer would be refused");
+        link.GitRepoPath.Should().Be("/srv/repo");
+
+        (await client.DeleteAsync(ApiRoutes.LinkPath(link.Id))).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.Links, Json))!.Should().BeEmpty();
+        (await client.DeleteAsync(ApiRoutes.LinkPath(link.Id))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// Verifies that the node applies only a fix it proposed itself: a fix made up by the client is answered as not
+    /// applied, and the same fix is applied once the node has proposed it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Fix_Endpoint_Applies_Only_Fixes_The_Node_Proposed()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Source);
+        var client = host.CreateClient();
+        var directory = Path.Combine(host.Root, "data", "created-by-fix");
+        var fix = new DiagnosticFix(DiagnosticFixKind.CreateDirectory, "Create the directory.", new Dictionary<string, string> { ["path"] = directory });
+
+        var refused = await client.PostAsJsonAsync(ApiRoutes.DiagnosticsFix, new ApplyFixRequest(fix, true), Json);
+
+        refused.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await refused.Content.ReadFromJsonAsync<AutoFixResult>(Json))!.Applied.Should().BeFalse();
+        Directory.Exists(directory).Should().BeFalse("the node did not propose this fix");
+
+        host.Services.GetRequiredService<IssuedFixRegistry>().Remember(new[] { DiagnosticResult.Fail("Workdir", "missing", null, fix) });
+        var applied = await client.PostAsJsonAsync(ApiRoutes.DiagnosticsFix, new ApplyFixRequest(fix, true), Json);
+
+        (await applied.Content.ReadFromJsonAsync<AutoFixResult>(Json))!.Applied.Should().BeTrue();
+        Directory.Exists(directory).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies that the data cleanup needs the local API token and removes the finished patches of the node.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Data_Cleanup_Requires_Token_And_Removes_Finished_Patches()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Source);
+        var patches = host.Services.GetRequiredService<RCynQ.Core.Abstractions.Repositories.IPatchRepository>();
+        var hash = new string('a', 64);
+        var finished = new PatchMetadata(
+            Guid.NewGuid(), PatchDirection.Outgoing, new NodeId("source-1"), new NodeId("dest-1"), DateTimeOffset.UtcNow.AddDays(-2), hash, hash,
+            PatchStatus.Failed, null, new[] { new FileChange(ChangeKind.Deleted, "old.txt", null, null, false, hash) });
+        await patches.UpsertAsync(finished);
+
+        (await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.DataCleanup, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await patches.ExistsAsync(finished.Id)).Should().BeTrue();
+
+        var response = await host.CreateClient().PostAsync(ApiRoutes.DataCleanup, null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<DataCleanupReport>(Json))!.Patches.Should().Be(1);
+        (await patches.ExistsAsync(finished.Id)).Should().BeFalse();
     }
 
     /// <summary>

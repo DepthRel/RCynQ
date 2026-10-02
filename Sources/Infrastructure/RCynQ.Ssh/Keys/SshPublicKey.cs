@@ -35,7 +35,7 @@ public sealed record SshPublicKey
     {
         if (!AllowedTypes.Contains(type))
         {
-            throw new FormatException(Texts.Format("Keys.TypeUnsupported", type));
+            throw LocalizedError.Format("Keys.TypeUnsupported", type);
         }
 
         byte[] bytes;
@@ -45,18 +45,18 @@ public sealed record SshPublicKey
         }
         catch (FormatException ex)
         {
-            throw new FormatException(Texts.Get("Keys.BlobBase64"), ex);
+            throw LocalizedError.Create(message => new FormatException(message, ex), "Keys.BlobBase64");
         }
 
         if (bytes.Length < 4)
         {
-            throw new FormatException(Texts.Get("Keys.BlobShort"));
+            throw LocalizedError.Format("Keys.BlobShort");
         }
 
         var typeLength = BinaryPrimitives.ReadUInt32BigEndian(bytes);
         if (typeLength > bytes.Length - 4 || Encoding.ASCII.GetString(bytes, 4, (int)typeLength) != type)
         {
-            throw new FormatException(Texts.Get("Keys.BlobType"));
+            throw LocalizedError.Format("Keys.BlobType");
         }
 
         Type = type;
@@ -100,7 +100,7 @@ public sealed record SshPublicKey
         var parts = line.Trim().Split((char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2)
         {
-            throw new FormatException(Texts.Get("Keys.Form"));
+            throw LocalizedError.Format("Keys.Form");
         }
 
         return new SshPublicKey(parts[0], parts[1], parts.Length == 3 ? parts[2] : null);

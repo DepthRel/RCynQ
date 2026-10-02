@@ -55,16 +55,18 @@ public static class LocalizedText
     /// Words a message in the language in use.
     /// </summary>
     /// <param name="text">An encoded message, a plain text or <see langword="null"/>.</param>
-    /// <param name="localizer">The localizer to use; the one of the application by default.</param>
+    /// <param name="localizer">The localizer of the reader.</param>
     /// <returns>The text in the language of the localizer; a plain text is returned as it is.</returns>
-    public static string? Render(string? text, ILocalizer? localizer = null)
+    /// <exception cref="ArgumentNullException"><paramref name="localizer"/> is <see langword="null"/>.</exception>
+    public static string? Render(string? text, ILocalizer localizer)
     {
+        ArgumentNullException.ThrowIfNull(localizer);
         if (!IsEncoded(text))
         {
             return text;
         }
 
         var parts = text![Marker.Length..].Split(Separator);
-        return (localizer ?? Texts.Localizer).Format(parts[0], [.. parts.Skip(1)]);
+        return localizer.Format(parts[0], [.. parts.Skip(1)]);
     }
 }

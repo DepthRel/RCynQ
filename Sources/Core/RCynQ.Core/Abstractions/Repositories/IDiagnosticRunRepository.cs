@@ -22,4 +22,12 @@ public interface IDiagnosticRunRepository
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The runs.</returns>
     Task<IReadOnlyList<DiagnosticsEvent>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the runs made before a moment.
+    /// </summary>
+    /// <param name="madeBeforeUtc">Runs made before this moment are deleted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of deleted runs.</returns>
+    Task<int> DeleteOlderThanAsync(DateTimeOffset madeBeforeUtc, CancellationToken cancellationToken = default);
 }

@@ -76,6 +76,12 @@ public static class ApiRoutes
     /// <summary>Fetch and fast-forward the current branch.</summary>
     public const string GitPull = "/git/pull";
 
+    /// <summary>
+    /// Answers the counterpart endpoint that asks whether this node is ready to exchange patches with it. Like the patch
+    /// session routes it needs no local API token: the link token and the identifier of the asking node protect it.
+    /// </summary>
+    public const string PeerPing = "/peer/ping";
+
     /// <summary>Run diagnostics.</summary>
     public const string DiagnosticsRun = "/diagnostics/run";
 
@@ -108,6 +114,9 @@ public static class ApiRoutes
 
     /// <summary>Gracefully stop the service (used by the UI that started it).</summary>
     public const string ServiceShutdown = "/service/shutdown";
+
+    /// <summary>Removes the finished data of the node: old patches, history, diagnostics runs and backups (POST).</summary>
+    public const string DataCleanup = "/data/cleanup";
 
     /// <summary>Recent log entries.</summary>
     public const string Logs = "/logs";

@@ -52,10 +52,11 @@ public sealed class ForwardAndKeyTests : IDisposable
         var processes = Substitute.For<IProcessRunner>();
         processes.Start(Arg.Any<ProcessSpec>()).Returns(process);
         var probe = Substitute.For<ITcpProbe>();
-        probe.CanConnectAsync("127.0.0.1", 45000, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false, true);
+        // Free before ssh starts, not yet forwarded on the first look, then ready.
+        probe.CanConnectAsync("127.0.0.1", 45000, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false, false, true);
         var ports = Substitute.For<IPortAllocator>();
         ports.AllocateLoopbackPort().Returns(45000);
-        var manager = new ProcessLocalForwardManager(processes, probe, ports, new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
+        var manager = new ProcessLocalForwardManager(TestTexts.English, processes, probe, ports, new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
 
         var port = await manager.StartAsync(_dest, Array.Empty<SshEndpoint>(), 0, "127.0.0.1", 18443);
 
@@ -81,7 +82,7 @@ public sealed class ForwardAndKeyTests : IDisposable
         process.StandardError.Returns("Permission denied (publickey).");
         var processes = Substitute.For<IProcessRunner>();
         processes.Start(Arg.Any<ProcessSpec>()).Returns(process);
-        var manager = new ProcessLocalForwardManager(processes, Substitute.For<ITcpProbe>(), Substitute.For<IPortAllocator>(), new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
+        var manager = new ProcessLocalForwardManager(TestTexts.English, processes, Substitute.For<ITcpProbe>(), Substitute.For<IPortAllocator>(), new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
 
         var start = () => manager.StartAsync(_dest, Array.Empty<SshEndpoint>(), 40000, "127.0.0.1", 18443);
 
@@ -89,6 +90,51 @@ public sealed class ForwardAndKeyTests : IDisposable
         error.Which.Message.Should().Contain("Permission denied");
         error.Which.ExitCode.Should().Be(255);
         process.Received().Dispose();
+    }
+
+    /// <summary>
+    /// Verifies that no forward is started on a port another program already listens on: that program would answer the
+    /// readiness check, and the requests meant for the peer would reach it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task LocalForward_Refuses_A_Port_That_Is_Already_In_Use()
+    {
+        var processes = Substitute.For<IProcessRunner>();
+        var probe = Substitute.For<ITcpProbe>();
+        probe.CanConnectAsync("127.0.0.1", 40001, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+        var manager = new ProcessLocalForwardManager(TestTexts.English, processes, probe, Substitute.For<IPortAllocator>(), new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
+
+        var start = () => manager.StartAsync(_dest, Array.Empty<SshEndpoint>(), 40001, "127.0.0.1", 18443);
+
+        await start.Should().ThrowAsync<SshExecutionException>();
+        processes.DidNotReceiveWithAnyArgs().Start(default!);
+        manager.IsRunning(40001).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a forward that ended by itself is released when its port is used again.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task LocalForward_Releases_An_Ended_Forward_Before_Reusing_Its_Port()
+    {
+        var first = Substitute.For<IRunningProcess>();
+        var second = Substitute.For<IRunningProcess>();
+        var processes = Substitute.For<IProcessRunner>();
+        processes.Start(Arg.Any<ProcessSpec>()).Returns(first, second);
+        var probe = Substitute.For<ITcpProbe>();
+        probe.CanConnectAsync("127.0.0.1", 40002, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false, true, false, true);
+        var manager = new ProcessLocalForwardManager(TestTexts.English, processes, probe, Substitute.For<IPortAllocator>(), new SshCommandBuilder(new SshClientOptions()), new SshClientOptions());
+        await manager.StartAsync(_dest, Array.Empty<SshEndpoint>(), 40002, "127.0.0.1", 18443);
+        first.HasExited.Returns(true);
+
+        await manager.StartAsync(_dest, Array.Empty<SshEndpoint>(), 40002, "127.0.0.1", 18443);
+
+        first.Received(1).Dispose();
+        manager.IsRunning(40002).Should().BeTrue();
+        await manager.StopAsync(40002);
+        second.Received(1).Kill();
     }
 
     /// <summary>
@@ -196,7 +242,7 @@ public sealed class ForwardAndKeyTests : IDisposable
         });
         processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.Arguments.Contains("-l")), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, $"256 {Fingerprint} rcynq test (ED25519)\n", ""));
-        var generator = new SshKeyGenerator(processes, new SshClientOptions());
+        var generator = new SshKeyGenerator(TestTexts.English, processes, new SshClientOptions());
 
         var pair = await generator.GenerateAsync(keyPath, "rcynq test");
 

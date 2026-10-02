@@ -119,7 +119,7 @@ public sealed class LanguageServiceTests
     public void Selector_Shows_Current_Language_And_Applies_A_Pick()
     {
         var service = new FakeLanguageService();
-        var selector = new LanguageViewModel(service);
+        var selector = new LanguageViewModel(TestTexts.Russian, service);
 
         selector.Selected.Code.Should().Be("en");
         selector.Options.Select(option => option.Name).Should().Equal("English", "Русский");
@@ -137,7 +137,7 @@ public sealed class LanguageServiceTests
     public void Selector_Reports_A_Failure_To_Store()
     {
         var service = new FakeLanguageService { SelectFailure = new IOException("disk full") };
-        var selector = new LanguageViewModel(service);
+        var selector = new LanguageViewModel(TestTexts.Russian, service);
 
         selector.Selected = selector.Options[1];
 

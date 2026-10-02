@@ -23,7 +23,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task SecretStore_Encrypts_And_Decrypts()
     {
-        var store = new AesGcmSecretStore(_database.ContextFactory, _database.AppData, TimeProvider.System);
+        var store = new AesGcmSecretStore(TestTexts.English, _database.ContextFactory, _database.AppData, TimeProvider.System);
 
         await store.SetAsync("link-token", "super-secret-value");
 
@@ -36,7 +36,7 @@ public sealed class StorageTests : IDisposable
         }
 
         (await store.GetAsync("link-token")).Should().Be("super-secret-value");
-        (await new AesGcmSecretStore(_database.ContextFactory, _database.AppData, TimeProvider.System).GetAsync("link-token"))
+        (await new AesGcmSecretStore(TestTexts.English, _database.ContextFactory, _database.AppData, TimeProvider.System).GetAsync("link-token"))
             .Should().Be("super-secret-value", "a new instance reads the same key file");
         (await store.ListAsync()).Should().Equal("link-token");
         (await store.GetAsync("missing")).Should().BeNull();
@@ -51,7 +51,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task SecretStore_Detects_Tampering()
     {
-        var store = new AesGcmSecretStore(_database.ContextFactory, _database.AppData, TimeProvider.System);
+        var store = new AesGcmSecretStore(TestTexts.English, _database.ContextFactory, _database.AppData, TimeProvider.System);
         await store.SetAsync("a", "value");
 
         await using (var db = await _database.ContextFactory.CreateDbContextAsync())
@@ -74,7 +74,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task PatchFileStorage_Saves_And_Reads_The_Diff()
     {
-        var storage = new PatchFileStorage(_database.AppData);
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
         var id = Guid.NewGuid();
 
         (await storage.ExistsAsync(id)).Should().BeFalse();
@@ -95,7 +95,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task PatchFileStorage_Uploads_Are_Staged_Read_And_Deleted()
     {
-        var storage = new PatchFileStorage(_database.AppData);
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
         var id = Guid.NewGuid();
         var content = "hello\n"u8.ToArray();
         var hash = Hash(content);
@@ -128,7 +128,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task PatchFileStorage_Refuses_Wrong_Or_Oversized_Uploads()
     {
-        var storage = new PatchFileStorage(_database.AppData);
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
         var content = "hello\n"u8.ToArray();
         var hash = Hash(content);
 
@@ -152,7 +152,7 @@ public sealed class StorageTests : IDisposable
     [InlineData("")]
     public async Task PatchFileStorage_Refuses_Malformed_Hashes(string hash)
     {
-        var storage = new PatchFileStorage(_database.AppData);
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
 
         var save = () => storage.SaveUploadAsync(hash, new MemoryStream(new byte[1]), 1);
         var open = () => storage.OpenContentAsync(Guid.NewGuid(), hash);
@@ -168,7 +168,7 @@ public sealed class StorageTests : IDisposable
     [Fact]
     public async Task PatchFileStorage_Stage_Fails_For_Missing_Content_And_Prunes_Old_Uploads()
     {
-        var storage = new PatchFileStorage(_database.AppData);
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
         var content = "old\n"u8.ToArray();
         var hash = Hash(content);
         var missing = () => storage.StageContentAsync(Guid.NewGuid(), new[] { hash });

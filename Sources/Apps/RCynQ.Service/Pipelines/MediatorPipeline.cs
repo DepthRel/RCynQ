@@ -101,26 +101,46 @@ public sealed class MediatorPipeline : IRolePipeline, IAsyncDisposable
         await Task.Yield();
         try
         {
-            await _links.StartAllAsync(cancellationToken);
+            await SuperviseAsync(() => _links.StartAllAsync(cancellationToken), "start");
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(RefreshInterval, cancellationToken);
-                foreach (var state in await _links.GetStatusAsync(cancellationToken))
-                {
-                    if (!state.IsUsable && state.Status != LinkStatus.Stopped)
+                await SuperviseAsync(
+                    async () =>
                     {
-                        await _links.TryFailoverAsync(state.LinkId, cancellationToken);
-                    }
-                }
+                        foreach (var state in await _links.GetStatusAsync(cancellationToken))
+                        {
+                            if (!state.IsUsable && state.Status != LinkStatus.Stopped)
+                            {
+                                await _links.TryFailoverAsync(state.LinkId, cancellationToken);
+                            }
+                        }
+                    },
+                    "refresh");
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Shutdown.
         }
-        catch (Exception ex)
+    }
+
+    /// <summary>
+    /// Runs one round of the loop. A failing round is logged and the loop goes on: a link removed between the status and
+    /// the failover, or a database that is busy for a moment, must not end the supervision of every link for good.
+    /// </summary>
+    /// <param name="round">The work of the round.</param>
+    /// <param name="name">The name of the round, for the log.</param>
+    /// <returns>A task representing the round.</returns>
+    private async Task SuperviseAsync(Func<Task> round, string name)
+    {
+        try
         {
-            _logger.LogError(ex, "Mediator link loop failed.");
+            await round();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Mediator link {Round} failed; the next round tries again.", name);
         }
     }
 }

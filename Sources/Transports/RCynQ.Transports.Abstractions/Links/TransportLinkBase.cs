@@ -29,13 +29,20 @@ public abstract class TransportLinkBase : ITransportLink
     private LinkState _state;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransportLinkBase"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="config">The link configuration.</param>
     /// <param name="kind">The transport kind.</param>
     /// <param name="timeProvider">The clock.</param>
-    protected TransportLinkBase(ChainLinkConfig config, TransportKind kind, TimeProvider timeProvider)
+    protected TransportLinkBase(ILocalizer localizer, ChainLinkConfig config, TransportKind kind, TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         Config = config ?? throw new ArgumentNullException(nameof(config));
         Kind = kind;
         TimeProvider = timeProvider;
@@ -86,19 +93,19 @@ public abstract class TransportLinkBase : ITransportLink
         }
         catch (OperationCanceledException)
         {
-            SetState(CreateState(LinkStatus.Failed, Texts.Get("Transport.StartCancelled")));
+            SetState(CreateState(LinkStatus.Failed, _localizer.Get("Transport.StartCancelled")));
             throw;
         }
         catch (Exception ex)
         {
-            SetState(CreateState(LinkStatus.Failed, ex.Message));
-            throw ex as SyncBridgeException ?? new SyncBridgeException(Texts.Format("Transport.StartFailed", Config.Name, Kind, ex.Message), ex);
+            SetState(CreateState(LinkStatus.Failed, _localizer.Describe(ex)));
+            throw ex as SyncBridgeException ?? new SyncBridgeException(_localizer.Format("Transport.StartFailed", Config.Name, Kind, _localizer.Describe(ex)), ex);
         }
 
         SetState(probed);
         if (!probed.IsUsable)
         {
-            throw new SyncBridgeException(Texts.Format("Transport.NotUsable", Config.Name, Kind, probed.Message));
+            throw new SyncBridgeException(_localizer.Format("Transport.NotUsable", Config.Name, Kind, probed.Message));
         }
     }
 
@@ -125,7 +132,7 @@ public abstract class TransportLinkBase : ITransportLink
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            state = CreateState(LinkStatus.Failed, ex.Message);
+            state = CreateState(LinkStatus.Failed, _localizer.Describe(ex));
         }
 
         SetState(state);
@@ -141,7 +148,7 @@ public abstract class TransportLinkBase : ITransportLink
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DiagnosticResult.Fail(CheckName, ex.Message);
+            return DiagnosticResult.Fail(CheckName, _localizer.Describe(ex));
         }
     }
 

@@ -19,13 +19,18 @@ public sealed class ApiTokenMiddleware
     /// <summary>The token store.</summary>
     private readonly ApiTokenStore _tokens;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ApiTokenMiddleware"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="next">The next middleware.</param>
     /// <param name="tokens">The token store.</param>
-    public ApiTokenMiddleware(RequestDelegate next, ApiTokenStore tokens)
+    public ApiTokenMiddleware(ILocalizer localizer, RequestDelegate next, ApiTokenStore tokens)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _next = next;
         _tokens = tokens;
     }
@@ -39,6 +44,7 @@ public sealed class ApiTokenMiddleware
     {
         var path = context.Request.Path;
         var isPublic = path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase)
+            || (path.Equals(ApiRoutes.PeerPing, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(context.Request.Method))
             || (path.Equals(ApiRoutes.GitBundle, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method))
             || (path.StartsWithSegments(ApiRoutes.PatchSessionPrefix, StringComparison.OrdinalIgnoreCase)
                 && (HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method)));
@@ -57,7 +63,7 @@ public sealed class ApiTokenMiddleware
         if (!_tokens.IsValid(token))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new ErrorResponse(Texts.Get("Api.TokenInvalid")));
+            await context.Response.WriteAsJsonAsync(new ErrorResponse(_localizer.Get("Api.TokenInvalid")));
             return;
         }
 

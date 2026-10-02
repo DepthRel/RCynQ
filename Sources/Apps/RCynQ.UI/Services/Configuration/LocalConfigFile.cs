@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using RCynQ.Localization;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 
@@ -24,6 +25,11 @@ public static class LocalConfigFile
 
     /// <summary>JSON document options of the configuration file.</summary>
     private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+
+    /// <summary>
+    /// The suffix of the copy that is kept of a configuration file that could not be read, before the setup replaces it.
+    /// </summary>
+    public const string UnreadableBackupSuffix = ".unreadable";
 
     /// <summary>
     /// Loads the node options, ignoring a missing or malformed file.
@@ -53,15 +59,18 @@ public static class LocalConfigFile
     /// </summary>
     /// <param name="path">The file path; the file and its directory are created when missing.</param>
     /// <param name="values">The values.</param>
+    /// <param name="localizer">The localizer that words the validation problems.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The validation problems; empty when the file was written.</returns>
     /// <exception cref="IOException">The file could not be written.</exception>
-    public static async Task<IReadOnlyList<string>> SaveAsync(string path, NodeSetupValues values, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<string>> SaveAsync(string path, NodeSetupValues values, ILocalizer localizer, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(localizer);
 
         JsonObject root;
+        var unreadable = false;
         try
         {
             root = File.Exists(path)
@@ -70,7 +79,9 @@ public static class LocalConfigFile
         }
         catch (JsonException)
         {
+            // The setup starts the file anew, which is how a broken file gets repaired from the application.
             root = new JsonObject();
+            unreadable = true;
         }
 
         var section = FindSection(root);
@@ -94,7 +105,7 @@ public static class LocalConfigFile
         Set(endpoint, nameof(EndpointOptions.Port), values.EndpointPort);
 
         var options = section.Deserialize<SyncBridgeOptions>(Json) ?? new SyncBridgeOptions();
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, localizer);
         if (errors.Count > 0)
         {
             return errors;
@@ -106,6 +117,14 @@ public static class LocalConfigFile
         try
         {
             await File.WriteAllTextAsync(temp, root.ToJsonString(Json), cancellationToken);
+            if (unreadable)
+            {
+                // The new file carries only what the setup asks for. Everything else the user had written (the links, the
+                // SSH settings) is in the file that could not be read, often behind a single typing error: it is kept next
+                // to the new one instead of being overwritten for good.
+                File.Copy(path, path + UnreadableBackupSuffix, overwrite: true);
+            }
+
             File.Move(temp, path, overwrite: true);
         }
         finally

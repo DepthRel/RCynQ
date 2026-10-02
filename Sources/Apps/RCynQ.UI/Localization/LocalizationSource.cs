@@ -56,9 +56,9 @@ public sealed class LocalizationSource : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets the source of the application, over the <see cref="Texts.Localizer"/> in use when it is first asked for.
+    /// Gets the culture that formats the values put into a text.
     /// </summary>
-    public static LocalizationSource Instance { get; } = new(Texts.Localizer);
+    public System.Globalization.CultureInfo Culture => _localizer.Culture;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;

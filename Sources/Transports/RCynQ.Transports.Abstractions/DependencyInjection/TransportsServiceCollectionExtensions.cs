@@ -20,6 +20,9 @@ public static class TransportsServiceCollectionExtensions
     public static IServiceCollection AddRCynQTransports(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IEventPublisher>(NullEventPublisher.Instance);
         services.TryAddSingleton<TransportLinkFactory>();

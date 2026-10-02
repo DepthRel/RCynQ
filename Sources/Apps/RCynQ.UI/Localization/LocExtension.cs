@@ -9,6 +9,11 @@ namespace RCynQ.UI.Localization;
 /// <see cref="Arg"/> the text is a format string: <c>{loc:Loc Key=Main.Device, Arg={Binding Fingerprint}}</c>. The
 /// text follows the language the user chose without reopening the window.
 /// </summary>
+/// <remarks>
+/// XAML creates the extension itself, so nothing can be handed to its constructor. It asks the running application for
+/// the texts: <see cref="App"/> creates the localizer of the user interface and exposes it to bindings as
+/// <see cref="App.Localization"/>.
+/// </remarks>
 public sealed class LocExtension : MarkupExtension
 {
     /// <summary>
@@ -37,7 +42,13 @@ public sealed class LocExtension : MarkupExtension
     /// <inheritdoc />
     public override object ProvideValue(IServiceProvider serviceProvider)
     {
-        var text = new Binding($"[{Key}]") { Mode = BindingMode.OneWay, Source = LocalizationSource.Instance };
+        // Without the application (a designer that shows a view on its own) the key stands in for the text.
+        if ((Avalonia.Application.Current as App)?.Localization is not { } source)
+        {
+            return Key;
+        }
+
+        var text = new Binding($"[{Key}]") { Mode = BindingMode.OneWay, Source = source };
         if (Arg is null)
         {
             return text;
@@ -49,7 +60,7 @@ public sealed class LocExtension : MarkupExtension
             Converter = new FuncMultiValueConverter<object?, string>(values =>
             {
                 var parts = values.ToArray();
-                return parts is [string format, var value] ? string.Format(RCynQ.Localization.Texts.Localizer.Culture, format, value) : string.Empty;
+                return parts is [string format, var value] ? string.Format(source.Culture, format, value) : string.Empty;
             }),
         };
     }

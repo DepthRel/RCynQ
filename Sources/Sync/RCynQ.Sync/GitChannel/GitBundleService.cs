@@ -44,16 +44,21 @@ public sealed class GitBundleService
     /// <summary>Serializes the creation of bundles.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitBundleService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="peers">The peer repository.</param>
     /// <param name="tokens">The link token provider.</param>
     /// <param name="git">The repository service.</param>
     /// <param name="appData">The node data directories.</param>
-    public GitBundleService(NodeConfig node, IPeerRepository peers, LinkTokenProvider tokens, IGitRepositoryService git, IAppDataFactory appData)
+    public GitBundleService(ILocalizer localizer, NodeConfig node, IPeerRepository peers, LinkTokenProvider tokens, IGitRepositoryService git, IAppDataFactory appData)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _peers = peers;
         _tokens = tokens;
@@ -80,7 +85,7 @@ public sealed class GitBundleService
         var repository = _node.RepoPath;
         if (repository is null || !await _git.IsWorkTreeAsync(repository, cancellationToken))
         {
-            throw new SyncBridgeException(Texts.Format("Git.BundleNoRepo", repository ?? string.Empty));
+            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", repository ?? string.Empty));
         }
 
         await _gate.WaitAsync(cancellationToken);
@@ -122,18 +127,18 @@ public sealed class GitBundleService
     {
         if (_node.Role != NodeRole.Dest)
         {
-            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, Texts.Format("Git.BundleOnlyDest", _node.Role));
+            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, _localizer.Format("Git.BundleOnlyDest", _node.Role));
         }
 
         if (!LinkTokenProvider.Matches(await _tokens.GetTokenAsync(cancellationToken), context.LinkToken))
         {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, Texts.Get("Receive.InvalidToken"));
+            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, _localizer.Get("Receive.InvalidToken"));
         }
 
         if (!NodeId.TryParse(context.SenderNodeId, out var sender)
             || await _peers.GetAsync(sender, cancellationToken) is not { Role: NodeRole.Source })
         {
-            throw new PatchRejectedException(PatchRejectionReason.UnknownSender, Texts.Format("Git.BundleUnknownPeer", context.SenderNodeId ?? string.Empty));
+            throw new PatchRejectedException(PatchRejectionReason.UnknownSender, _localizer.Format("Git.BundleUnknownPeer", context.SenderNodeId ?? string.Empty));
         }
     }
 
@@ -151,47 +156,5 @@ public sealed class GitBundleService
         {
             // Temporary data of the node; the next cleanup removes it.
         }
-    }
-}
-
-/// <summary>
-/// A bundle file that is deleted when it is no longer needed.
-/// </summary>
-public sealed class GitBundleFile : IAsyncDisposable
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GitBundleFile"/> class.
-    /// </summary>
-    /// <param name="path">The bundle file.</param>
-    /// <param name="head">The branch the served repository has checked out, or <see langword="null"/> for a detached HEAD.</param>
-    public GitBundleFile(string path, string? head)
-    {
-        Path = path;
-        Head = head;
-    }
-
-    /// <summary>
-    /// Gets the bundle file.
-    /// </summary>
-    public string Path { get; }
-
-    /// <summary>
-    /// Gets the branch the served repository has checked out, or <see langword="null"/> for a detached HEAD.
-    /// </summary>
-    public string? Head { get; }
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync()
-    {
-        try
-        {
-            File.Delete(Path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Temporary data of the node; the next cleanup removes it.
-        }
-
-        return ValueTask.CompletedTask;
     }
 }

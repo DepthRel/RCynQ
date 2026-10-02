@@ -31,16 +31,21 @@ public sealed class AmneziaWgLink : TransportLinkBase
     /// <summary>The TCP probe.</summary>
     private readonly ITcpProbe _probe;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AmneziaWgLink"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="config">The link configuration.</param>
     /// <param name="cli">The CLI adapter.</param>
     /// <param name="probe">The TCP probe.</param>
     /// <param name="timeProvider">The clock.</param>
-    public AmneziaWgLink(ChainLinkConfig config, IAmneziaWgCli cli, ITcpProbe probe, TimeProvider timeProvider)
-        : base(config, TransportKind.AmneziaWG, timeProvider)
+    public AmneziaWgLink(ILocalizer localizer, ChainLinkConfig config, IAmneziaWgCli cli, ITcpProbe probe, TimeProvider timeProvider)
+        : base(localizer, config, TransportKind.AmneziaWG, timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _cli = cli;
         _probe = probe;
     }
@@ -51,7 +56,7 @@ public sealed class AmneziaWgLink : TransportLinkBase
     /// <exception cref="SyncBridgeException">The setting is missing.</exception>
     private string ConfigPath => Config.TransportSettings.TryGetValue(ConfigPathSetting, out var path) && !string.IsNullOrWhiteSpace(path)
         ? path
-        : throw new SyncBridgeException(Texts.Format("Awg.NeedsConfig", Config.Name, ConfigPathSetting));
+        : throw new SyncBridgeException(_localizer.Format("Awg.NeedsConfig", Config.Name, ConfigPathSetting));
 
     /// <inheritdoc />
     protected override async Task StartCoreAsync(CancellationToken cancellationToken)
@@ -62,7 +67,7 @@ public sealed class AmneziaWgLink : TransportLinkBase
         }
         catch (ArgumentException ex)
         {
-            throw new SyncBridgeException(ex.Message, ex);
+            throw new SyncBridgeException(_localizer.Describe(ex), ex);
         }
     }
 
@@ -75,7 +80,7 @@ public sealed class AmneziaWgLink : TransportLinkBase
         }
         catch (ArgumentException ex)
         {
-            throw new SyncBridgeException(ex.Message, ex);
+            throw new SyncBridgeException(_localizer.Describe(ex), ex);
         }
     }
 
@@ -89,18 +94,20 @@ public sealed class AmneziaWgLink : TransportLinkBase
         }
         catch (ArgumentException ex)
         {
-            return CreateState(LinkStatus.Failed, ex.Message);
+            return CreateState(LinkStatus.Failed, _localizer.Describe(ex));
         }
 
         if (!status.Running)
         {
-            return CreateState(LinkStatus.Failed, Texts.Format("Awg.Down", status.InterfaceName, status.Message));
+            return CreateState(LinkStatus.Failed, _localizer.Format("Awg.Down", status.InterfaceName, status.Message));
         }
 
+        // Like the direct link: a peer without an SSH server is checked on its own TLS port, where it does listen.
         var peer = Config.Peer;
-        return await _probe.CanConnectAsync(peer.Host, peer.SshPort, ProbeTimeout, cancellationToken)
-            ? CreateState(LinkStatus.Ready, Texts.Format("Awg.Up", status.InterfaceName, status.LocalIp ?? Texts.Get("Awg.NoAddress"), peer.Host, peer.SshPort))
-            : CreateState(LinkStatus.Failed, Texts.Format("Awg.UpUnreachable", status.InterfaceName, peer.Host, peer.SshPort));
+        var port = peer.ReachablePort;
+        return await _probe.CanConnectAsync(peer.Host, port, ProbeTimeout, cancellationToken)
+            ? CreateState(LinkStatus.Ready, _localizer.Format("Awg.Up", status.InterfaceName, status.LocalIp ?? _localizer.Get("Awg.NoAddress"), peer.Host, port))
+            : CreateState(LinkStatus.Failed, _localizer.Format("Awg.UpUnreachable", status.InterfaceName, peer.Host, port));
     }
 
     /// <inheritdoc />
@@ -108,8 +115,8 @@ public sealed class AmneziaWgLink : TransportLinkBase
     {
         if (!Config.TransportSettings.TryGetValue(ConfigPathSetting, out var path) || !File.Exists(path))
         {
-            return DiagnosticResult.Fail(CheckName, Texts.Format("Awg.ConfigMissing", path),
-                Texts.Format("Awg.ConfigMissingFix", ConfigPathSetting, Config.Name));
+            return DiagnosticResult.Fail(CheckName, _localizer.Format("Awg.ConfigMissing", path),
+                _localizer.Format("Awg.ConfigMissingFix", ConfigPathSetting, Config.Name));
         }
 
         var state = await ProbeCoreAsync(cancellationToken);
@@ -117,8 +124,8 @@ public sealed class AmneziaWgLink : TransportLinkBase
             ? DiagnosticResult.Pass(CheckName, state.Message)
             : DiagnosticResult.Fail(
                 CheckName,
-                state.Message ?? Texts.Get("Awg.TunnelNotUsable"),
-                Texts.Get("Awg.InstallFix"),
-                new DiagnosticFix(DiagnosticFixKind.StartTransport, Texts.Format("Awg.StartFix", Config.Name), new Dictionary<string, string> { ["linkId"] = Config.Id.ToString() }));
+                state.Message ?? _localizer.Get("Awg.TunnelNotUsable"),
+                _localizer.Get("Awg.InstallFix"),
+                new DiagnosticFix(DiagnosticFixKind.StartTransport, _localizer.Format("Awg.StartFix", Config.Name), new Dictionary<string, string> { ["linkId"] = Config.Id.ToString() }));
     }
 }

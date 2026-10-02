@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using RCynQ.Core.Api;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Formatting;
 
 namespace RCynQ.UI.ViewModels.Items;
@@ -15,12 +16,17 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusText), nameof(IsOnline), nameof(IsDegraded), nameof(IsOffline))]
     private LinkStatusKind _status = LinkStatusKind.Waiting;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ChainNodeItemViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="link">The link.</param>
-    public ChainNodeItemViewModel(LinkDto link)
+    public ChainNodeItemViewModel(ILocalizer localizer, LinkDto link)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentNullException.ThrowIfNull(link);
         LinkId = link.Id;
         Name = link.PeerNodeId.Value.ToUpperInvariant();
@@ -41,7 +47,7 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
     public string Address { get; }
 
     /// <summary>Gets the status label.</summary>
-    public string StatusText => DisplayText.Link(Status);
+    public string StatusText => DisplayText.Link(_localizer, Status);
 
     /// <summary>Gets a value indicating whether the node is online.</summary>
     public bool IsOnline => Status == LinkStatusKind.Online;

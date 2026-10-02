@@ -30,17 +30,22 @@ public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SnapshotIntegrityCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="manifest">The manifest builder.</param>
     /// <param name="hasher">The state hasher.</param>
     /// <param name="state">The state store.</param>
     /// <param name="syncBase">The sync base manager.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
-    public SnapshotIntegrityCheck(IFileManifestBuilder manifest, IStateHasher hasher, INodeStateStore state, SyncBaseManager syncBase, WorkingTreeLock workingTreeLock)
+    public SnapshotIntegrityCheck(ILocalizer localizer, IFileManifestBuilder manifest, IStateHasher hasher, INodeStateStore state, SyncBaseManager syncBase, WorkingTreeLock workingTreeLock)
         : base("SnapshotIntegrity", PatchRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _manifest = manifest;
         _hasher = hasher;
         _state = state;
@@ -61,16 +66,16 @@ public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
         }
         catch (SyncBridgeException ex)
         {
-            return Fail(ex.Message, Texts.Get("Diag.Snapshot.MissingFix"));
+            return Fail(_localizer.Describe(ex), _localizer.Get("Diag.Snapshot.MissingFix"));
         }
 
         switch (status.Mode)
         {
             case SyncBaseMode.Git:
-                return Pass(Texts.Format("Diag.Snapshot.Git", status.Commit?[..Math.Min(12, status.Commit.Length)] ?? string.Empty, status.Branch ?? "HEAD"));
+                return Pass(_localizer.Format("Diag.Snapshot.Git", status.Commit?[..Math.Min(12, status.Commit.Length)] ?? string.Empty, status.Branch ?? "HEAD"));
 
             case SyncBaseMode.None:
-                return Fail(status.Problem ?? Texts.Get("Diag.Snapshot.Missing"), Texts.Get("Diag.Snapshot.MissingFix"));
+                return Fail(status.Problem ?? _localizer.Get("Diag.Snapshot.Missing"), _localizer.Get("Diag.Snapshot.MissingFix"));
         }
 
         var syncBase = context.Paths.SyncBaseDirectory;
@@ -82,12 +87,12 @@ public sealed class SnapshotIntegrityCheck : DiagnosticCheckBase
         var actual = _hasher.ComputeHash(entries);
         if (recorded is null)
         {
-            return Fail(Texts.Get("Diag.Snapshot.NoHash"), Texts.Get("Diag.Snapshot.NoHashFix"));
+            return Fail(_localizer.Get("Diag.Snapshot.NoHash"), _localizer.Get("Diag.Snapshot.NoHashFix"));
         }
 
         return recorded == actual
-            ? Pass(Texts.Format("Diag.Snapshot.Ok", actual[..12]))
-            : Fail(Texts.Format("Diag.Snapshot.Mismatch", actual[..12], recorded[..Math.Min(12, recorded.Length)]),
-                Texts.Get("Diag.Snapshot.MismatchFix"));
+            ? Pass(_localizer.Format("Diag.Snapshot.Ok", actual[..12]))
+            : Fail(_localizer.Format("Diag.Snapshot.Mismatch", actual[..12], recorded[..Math.Min(12, recorded.Length)]),
+                _localizer.Get("Diag.Snapshot.MismatchFix"));
     }
 }

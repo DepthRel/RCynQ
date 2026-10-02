@@ -11,25 +11,25 @@ namespace RCynQ.UI.ViewModels.Items;
 public sealed class EndpointModeOption : ObservableObject
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="EndpointModeOption"/> class.
+    /// The localizer of the texts.
     /// </summary>
-    /// <param name="value">The mode.</param>
-    private EndpointModeOption(EndpointMode value)
-    {
-        Value = value;
-
-        // The choices are shared by the whole application and live as long as it does.
-        Texts.Localizer.LanguageChanged += (_, _) => OnPropertyChanged(string.Empty);
-    }
+    private readonly ILocalizer _localizer;
 
     /// <summary>
-    /// Gets the choices in the order they are offered.
+    /// Initializes a new instance of the <see cref="EndpointModeOption"/> class.
     /// </summary>
-    public static IReadOnlyList<EndpointModeOption> All { get; } =
-    [
-        new EndpointModeOption(EndpointMode.SshTunnel),
-        new EndpointModeOption(EndpointMode.Direct)
-    ];
+    /// <param name="localizer">The localizer of the texts.</param>
+    /// <param name="value">The mode.</param>
+    /// <remarks>
+    /// The choice listens to the localizer for as long as the localizer lives, so it belongs to a view model that lives
+    /// as long as the application: the settings page and the first-start page.
+    /// </remarks>
+    public EndpointModeOption(ILocalizer localizer, EndpointMode value)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        Value = value;
+        _localizer.LanguageChanged += (_, _) => OnPropertyChanged(string.Empty);
+    }
 
     /// <summary>
     /// Gets the mode.
@@ -39,19 +39,20 @@ public sealed class EndpointModeOption : ObservableObject
     /// <summary>
     /// Gets the title shown in the list.
     /// </summary>
-    public string Title => Texts.Get($"Endpoint.{Value}.Title");
+    public string Title => _localizer.Get($"Endpoint.{Value}.Title");
 
     /// <summary>
     /// Gets the explanation shown under the list.
     /// </summary>
-    public string Hint => Texts.Get($"Endpoint.{Value}.Hint");
+    public string Hint => _localizer.Get($"Endpoint.{Value}.Hint");
 
     /// <summary>
-    /// Gets the choice of a mode.
+    /// Creates the choices in the order they are offered.
     /// </summary>
-    /// <param name="mode">The mode.</param>
-    /// <returns>The choice.</returns>
-    public static EndpointModeOption For(EndpointMode mode) => All.First(option => option.Value == mode);
+    /// <param name="localizer">The localizer of the texts.</param>
+    /// <returns>The choices.</returns>
+    public static IReadOnlyList<EndpointModeOption> CreateAll(ILocalizer localizer)
+        => [new EndpointModeOption(localizer, EndpointMode.SshTunnel), new EndpointModeOption(localizer, EndpointMode.Direct)];
 
     /// <inheritdoc />
     public override string ToString() => Title;

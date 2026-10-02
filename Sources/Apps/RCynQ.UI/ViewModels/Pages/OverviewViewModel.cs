@@ -44,15 +44,17 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="OverviewViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public OverviewViewModel(IServiceApiClient api)
+    public OverviewViewModel(ILocalizer localizer, IServiceApiClient api)
+        : base(localizer)
     {
         _api = api;
         Links.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoLinks));
     }
 
     /// <summary>Gets the last synchronization time in the language of the user.</summary>
-    public string LastSyncText => DisplayText.Time(_lastSync);
+    public string LastSyncText => DisplayText.Time(Localizer, _lastSync);
 
     /// <summary>Gets a value indicating whether no links are configured.</summary>
     public bool HasNoLinks => Links.Count == 0;
@@ -84,7 +86,7 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         Links.Clear();
         foreach (var link in links)
         {
-            Links.Add(new TunnelLinkItemViewModel(link));
+            Links.Add(new TunnelLinkItemViewModel(Localizer, link));
         }
 
         foreach (var state in await _api.GetLinkStatusAsync())
@@ -141,25 +143,30 @@ public sealed partial class OverviewViewModel : PageViewModelBase
             if (!_status.SyncBase.IsReady)
             {
                 var problem = _status.SyncBase.Problem is { Length: > 0 } reason
-                    ? Texts.Format("Overview.Problem.NoSyncBase", reason)
-                    : Texts.Get("Overview.Problem.NoBaseline");
+                    ? Localizer.Format("Overview.Problem.NoSyncBase", reason)
+                    : Localizer.Get("Overview.Problem.NoBaseline");
                 Problems.Add(new ProblemItemViewModel(problem, _status.Role == NodeRole.Source && !_status.SyncBase.CanCreateManual ? TabKey.Branches : TabKey.Sync));
             }
 
             if (_status.ConflictPendingCount > 0)
             {
-                Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Conflicts", _status.ConflictPendingCount), TabKey.Sync));
+                Problems.Add(new ProblemItemViewModel(Localizer.Format("Overview.Problem.Conflicts", _status.ConflictPendingCount), TabKey.Sync));
             }
         }
 
         foreach (var link in Links.Where(link => link.IsOffline))
         {
-            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.LinkOffline", link.Name), TabKey.Tunnel));
+            // The reason is what the user needs: "unavailable" alone does not say whether the path, the service of the
+            // other node or its answer is the trouble.
+            var text = string.IsNullOrWhiteSpace(link.Message)
+                ? Localizer.Format("Overview.Problem.LinkOffline", link.Name)
+                : Localizer.Format("Overview.Problem.LinkOfflineReason", link.Name, link.Message);
+            Problems.Add(new ProblemItemViewModel(text, TabKey.Tunnel));
         }
 
         if (_diagnosticFailures.Count > 0)
         {
-            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Diagnostics", string.Join(", ", _diagnosticFailures)), TabKey.Diagnostics));
+            Problems.Add(new ProblemItemViewModel(Localizer.Format("Overview.Problem.Diagnostics", string.Join(", ", _diagnosticFailures)), TabKey.Diagnostics));
         }
 
         HasProblems = Problems.Count > 0;

@@ -176,6 +176,63 @@ public sealed class RepositoryTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that patches are counted by direction and state in the database, and that old patches are deleted except
+    /// those in a state that is kept.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchRepository_Counts_And_Deletes_Old_Patches()
+    {
+        var repository = new PatchRepository(_database.ContextFactory);
+        var conflict = PatchApplyResult.Conflict(Guid.Empty, new[] { new ConflictFile("src/a.cs", Hash, null, "local edit") });
+        var oldPending = CreatePatch(DateTimeOffset.UtcNow.AddDays(-20));
+        var oldConflict = CreatePatch(DateTimeOffset.UtcNow.AddDays(-20)).WithResult(conflict, DateTimeOffset.UtcNow);
+        var recentConflict = CreatePatch(DateTimeOffset.UtcNow).WithResult(conflict, DateTimeOffset.UtcNow);
+        foreach (var patch in new[] { oldPending, oldConflict, recentConflict })
+        {
+            await repository.UpsertAsync(patch);
+        }
+
+        (await repository.CountAsync(PatchDirection.Outgoing, PatchStatus.ConflictPending)).Should().Be(2);
+        (await repository.CountAsync(PatchDirection.Incoming, PatchStatus.ConflictPending)).Should().Be(0);
+
+        var deleted = await repository.DeleteOlderThanAsync(DateTimeOffset.UtcNow.AddDays(-10), new[] { PatchStatus.ConflictPending });
+
+        deleted.Should().Equal(oldPending.Id);
+        (await repository.GetAllAsync()).Select(patch => patch.Id).Should().BeEquivalentTo(new[] { oldConflict.Id, recentConflict.Id });
+    }
+
+    /// <summary>
+    /// Verifies that old history entries, diagnostic runs and snapshot records are deleted, and that the newest snapshot
+    /// record of a node is kept whatever its age.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Old_History_Runs_And_Snapshots_Are_Deleted()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-10);
+        var history = new SyncHistoryRepository(_database.ContextFactory);
+        var recentEntry = new SyncHistoryEntry(Guid.NewGuid(), DateTimeOffset.UtcNow, PatchDirection.Incoming, new NodeId("s"), new NodeId("d"), Guid.NewGuid(), PatchStatus.Applied, 3, 0, "ok");
+        await history.AddAsync(recentEntry);
+        await history.AddAsync(new SyncHistoryEntry(Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-30), PatchDirection.Incoming, new NodeId("s"), new NodeId("d"), Guid.NewGuid(), PatchStatus.Applied, 1, 0, "old"));
+        var runs = new DiagnosticRunRepository(_database.ContextFactory);
+        await runs.AddAsync(new Core.Events.DiagnosticsEvent(NodeRole.Source, new[] { DiagnosticResult.Pass("A") }, DateTimeOffset.UtcNow.AddDays(-30)));
+        await runs.AddAsync(new Core.Events.DiagnosticsEvent(NodeRole.Source, new[] { DiagnosticResult.Pass("B") }, DateTimeOffset.UtcNow));
+        var snapshots = new SnapshotRepository(_database.ContextFactory);
+        var node = new NodeId("source-1");
+        await snapshots.CreateAsync(new SnapshotInfo(Guid.NewGuid(), node, DateTimeOffset.UtcNow.AddDays(-40), "oldest", null));
+        await snapshots.CreateAsync(new SnapshotInfo(Guid.NewGuid(), node, DateTimeOffset.UtcNow.AddDays(-30), "newest of the node", null));
+
+        (await history.DeleteOlderThanAsync(cutoff)).Should().Be(1);
+        (await runs.DeleteOlderThanAsync(cutoff)).Should().Be(1);
+        (await snapshots.DeleteOlderThanAsync(cutoff)).Should().Be(1);
+
+        (await history.GetAllAsync()).Should().ContainSingle().Which.Id.Should().Be(recentEntry.Id);
+        (await runs.GetRecentAsync(10)).Should().ContainSingle().Which.Results.Single().CheckName.Should().Be("B");
+        (await snapshots.GetAllAsync()).Should().ContainSingle().Which.StateHash.Should().Be("newest of the node");
+    }
+
+    /// <summary>
     /// Deletes the test database.
     /// </summary>
     public void Dispose() => _database.Dispose();

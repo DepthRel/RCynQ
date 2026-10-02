@@ -47,7 +47,7 @@ public sealed class SyncFixture : IDisposable
     public const string Token = "0123456789abcdef-link-token";
 
     /// <summary>The real Git repository service, shared by both nodes (stateless).</summary>
-    public static readonly IGitRepositoryService GitRepository = new GitRepositoryService(new GitCommandRunner(new SystemProcessRunner(), new GitOptions()));
+    public static readonly IGitRepositoryService GitRepository = new GitRepositoryService(TestTexts.English, new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions()));
 
     /// <summary>The Source node data directories.</summary>
     private readonly AppDataFactory _sourceAppData;
@@ -75,8 +75,8 @@ public sealed class SyncFixture : IDisposable
         DestOptions = new SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = DestWork, LinkToken = Token };
         _sourceAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "source-data")));
         _destAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "dest-data")));
-        SourcePaths = new SyncPaths(_sourceAppData, SourceNode);
-        DestPaths = new SyncPaths(_destAppData, DestNode);
+        SourcePaths = new SyncPaths(TestTexts.English, _sourceAppData, SourceNode);
+        DestPaths = new SyncPaths(TestTexts.English, _destAppData, DestNode);
         Directory.CreateDirectory(DestPaths.SyncBase);
 
         foreach (var dir in new[] { SourceWork, SourceBaseForBuild, DestWork, DestPaths.SyncBase })
@@ -117,19 +117,19 @@ public sealed class SyncFixture : IDisposable
     public SyncPaths DestPaths { get; }
 
     /// <summary>Gets the path utility.</summary>
-    public PathUtility Paths { get; } = new();
+    public PathUtility Paths { get; } = new(TestTexts.English);
 
     /// <summary>Gets the diff builder that works on the mocked git diff.</summary>
     public PatchDiffBuilder Diffs => new(DiffBuilder, Paths);
 
     /// <summary>Gets the applier that writes incoming content.</summary>
-    public ContentOverwriteApplier Applier => new(Paths);
+    public ContentOverwriteApplier Applier => new(TestTexts.English, Paths);
 
     /// <summary>Gets the Source signer.</summary>
-    public EcdsaSignatureService SourceSigner { get; } = new(new InMemorySecretStore());
+    public EcdsaSignatureService SourceSigner { get; } = new(TestTexts.English, new InMemorySecretStore());
 
     /// <summary>Gets the Dest signer.</summary>
-    public EcdsaSignatureService DestSigner { get; } = new(new InMemorySecretStore());
+    public EcdsaSignatureService DestSigner { get; } = new(TestTexts.English, new InMemorySecretStore());
 
     /// <summary>Gets the patch repository.</summary>
     public InMemoryPatchRepository Patches { get; } = new();
@@ -213,37 +213,27 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The receiver.</returns>
     public DefaultPatchReceiver CreateReceiver()
         => new(
-            DestNode,
-            Peers,
-            DestSigner,
-            new ReplayGuard(Patches, TimeProvider.System, new ReplayGuardOptions()),
-            new LinkTokenProvider(DestOptions, new InMemorySecretStore()),
+            TestTexts.English,
+            new PatchAdmission(TestTexts.English, DestNode, Peers, DestSigner, new LinkTokenProvider(DestOptions, new InMemorySecretStore()), Patches),
+            new IncomingPatchApplier(Storage, new PatchDisplayDiffStore(Diffs, Storage), new ConflictDetector(Paths), Applier, DestPaths, DestSyncBase),
+            new ReplayGuard(TestTexts.English, Patches, TimeProvider.System, new ReplayGuardOptions()),
             Patches,
             Storage,
-            Diffs,
-            new ConflictDetector(Paths),
-            Applier,
             CreateOutcomes(),
             CreateTracker(DestNode),
-            DestPaths,
-            DestSyncBase,
             DestLock,
             TimeProvider.System);
 
     /// <summary>
     /// Creates the Dest conflict resolver.
     /// </summary>
-    /// <param name="git">The git runner mock.</param>
+    /// <param name="git">The Git command runner.</param>
     /// <returns>The resolver.</returns>
     public DefaultConflictResolver CreateResolver(Git.Commands.IGitCommandRunner git)
     {
         var applier = Applier;
-        return new DefaultConflictResolver(
-            applier,
-            new GitPatchApplier(git, new Git.Repository.GitRepositoryService(git), Paths),
-            Diffs,
-            new BackupService(DestPaths, Paths, TimeProvider.System),
-            DestPaths);
+        var backups = new BackupService(DestPaths, Paths, TimeProvider.System);
+        return new DefaultConflictResolver(applier, new GitMergeApplier(git, Paths, applier, backups), backups, DestPaths);
     }
 
     /// <summary>
@@ -254,31 +244,43 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The service.</returns>
     public PatchService CreateSourceService(IPatchSender sender, IChainLinkRepository chain)
     {
-        return new PatchService(
+        var outcomes = CreateOutcomes();
+        var tracker = CreateTracker(SourceNode);
+        var send = new PatchSendOperation(
+            TestTexts.English,
             SourceNode,
             SourcePaths,
             chain,
             CreateBuilder(),
             SourceSigner,
             sender,
-            Substitute.For<IPatchReceiver>(),
-            Substitute.For<IConflictResolver>(),
-            new ConflictDetector(Paths),
-            new SyncBaseUpdater(Applier, Paths),
-            Diffs,
+            new SyncBaseUpdater(TestTexts.English, Applier, Paths),
+            new PatchDisplayDiffStore(Diffs, Storage),
             Paths,
             Patches,
-            Storage,
-            CreateOutcomes(),
-            CreateTracker(SourceNode),
+            outcomes,
+            tracker,
             SourceLock,
             SourceSyncBase);
+        var resolve = new PatchResolveOperation(
+            TestTexts.English,
+            SourceNode,
+            SourcePaths,
+            Substitute.For<IConflictResolver>(),
+            new ConflictDetector(Paths),
+            Patches,
+            Storage,
+            outcomes,
+            tracker,
+            SourceLock,
+            SourceSyncBase);
+        return new PatchService(SourceNode, send, resolve, Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, SourceSyncBase);
     }
 
     /// <summary>
     /// Gets the reader of the Source working tree, the content a sender streams.
     /// </summary>
-    public WorkdirPatchContent SourceContent => new(SourceWork, Paths);
+    public WorkdirPatchContent SourceContent => new(TestTexts.English, SourceWork, Paths);
 
     /// <summary>
     /// Delivers an envelope to a receiver the way the sender does: opens the session, uploads the missing content from the
@@ -398,9 +400,10 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The manager.</returns>
     private SyncBaseManager CreateSyncBase(NodeConfig node, SyncPaths paths, AppDataFactory appData, WorkingTreeLock workingTreeLock)
         => new(
+            TestTexts.English,
             node,
             paths,
-            new GitSyncBaseLocator(node, GitRepository),
+            new GitSyncBaseLocator(TestTexts.English, node, GitRepository),
             GitRepository,
             new SyncBaseMetadataStore(appData),
             new DefaultFileManifestBuilder(new SnapshotFilter()),

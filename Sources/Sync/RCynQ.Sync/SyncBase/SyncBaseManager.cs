@@ -91,9 +91,13 @@ public sealed class SyncBaseManager
     /// <summary>The time provider.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncBaseManager"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="paths">The sync paths.</param>
     /// <param name="locator">The locator of the Git commit.</param>
@@ -106,6 +110,7 @@ public sealed class SyncBaseManager
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The time provider.</param>
     public SyncBaseManager(
+        ILocalizer localizer,
         NodeConfig node,
         SyncPaths paths,
         IGitSyncBaseLocator locator,
@@ -118,6 +123,7 @@ public sealed class SyncBaseManager
         WorkingTreeLock workingTreeLock,
         TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _paths = paths;
         _locator = locator;
@@ -173,7 +179,7 @@ public sealed class SyncBaseManager
             return new SyncBaseStatus(SyncBaseMode.Manual, null, null, null, canCreateManual);
         }
 
-        return SyncBaseStatus.NotReady(target.Problem ?? Texts.Get("Patch.NoBaseline"), canCreateManual);
+        return SyncBaseStatus.NotReady(target.Problem ?? _localizer.Get("Patch.NoBaseline"), canCreateManual);
     }
 
     /// <summary>
@@ -299,6 +305,12 @@ public sealed class SyncBaseManager
         {
             foreach (var (path, kind) in await _git.GetChangedFilesSinceAsync(_paths.Workdir, commit, cancellationToken))
             {
+                // What a dead process left of a half-prepared patch is untracked for Git, but it is not a file of the user.
+                if (path.Split('/').Any(Git.Paths.PathUtility.IsApplyStagingName))
+                {
+                    continue;
+                }
+
                 listed.TryAdd(path, new ChangedFile(kind, path, true));
             }
         }
@@ -390,13 +402,13 @@ public sealed class SyncBaseManager
     {
         if (!_node.ParticipatesInPatchChannel)
         {
-            throw new SyncBridgeException(Texts.Get("Baseline.MediatorHasNone"));
+            throw new SyncBridgeException(_localizer.Get("Baseline.MediatorHasNone"));
         }
 
         var workdir = _paths.Workdir;
         if (!Directory.Exists(workdir))
         {
-            throw new SyncBridgeException(Texts.Format("Baseline.WorkdirMissing", workdir));
+            throw new SyncBridgeException(_localizer.Format("Baseline.WorkdirMissing", workdir));
         }
 
         using (await _lock.AcquireAsync(cancellationToken))
@@ -411,7 +423,7 @@ public sealed class SyncBaseManager
             }
             else if (target.IsRepository)
             {
-                throw new SyncBridgeException(target.Problem ?? Texts.Get("Patch.NoBaseline"));
+                throw new SyncBridgeException(target.Problem ?? _localizer.Get("Patch.NoBaseline"));
             }
             else
             {
@@ -605,23 +617,49 @@ public sealed class SyncBaseManager
             if (Directory.Exists(target))
             {
                 Directory.Move(target, retired);
+
+                // A rename keeps the stamps of the old base, which may be days old: without a fresh one the cleanup of
+                // another process would take the parked base for a leftover while it may still have to be moved back.
+                TouchQuietly(retired);
             }
 
             Directory.Move(staging, target);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or GitExecutionException)
         {
-            if (!Directory.Exists(target) && Directory.Exists(retired))
-            {
-                Directory.Move(retired, target);
-            }
-
-            throw new SyncBridgeException(Texts.Format("SyncBase.Failed", ex.Message), ex);
+            RestoreQuietly(retired, target);
+            throw new SyncBridgeException(_localizer.Format("SyncBase.Failed", _localizer.Describe(ex)), ex);
         }
         finally
         {
             DeleteQuietly(staging);
-            DeleteQuietly(retired);
+
+            // Until a base is in place the parked one is the only copy of what the peer has: it is removed only then.
+            // (When it could not be moved back it stays where it is, instead of being deleted on the way out.)
+            if (Directory.Exists(target))
+            {
+                DeleteQuietly(retired);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Moves the parked base back after a failed swap, ignoring failures: the failure of the swap is what gets reported.
+    /// </summary>
+    /// <param name="retired">The parked base.</param>
+    /// <param name="target">The place of the base.</param>
+    private static void RestoreQuietly(string retired, string target)
+    {
+        try
+        {
+            if (!Directory.Exists(target) && Directory.Exists(retired))
+            {
+                Directory.Move(retired, target);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Nothing more can be done here; the parked base is kept, see ReplaceAsync.
         }
     }
 
@@ -673,14 +711,40 @@ public sealed class SyncBaseManager
                 continue;
             }
 
-            // The newer of the two stamps, because a file system may not keep a creation time.
-            var touched = Directory.GetCreationTimeUtc(candidate) > Directory.GetLastWriteTimeUtc(candidate)
-                ? Directory.GetCreationTimeUtc(candidate)
-                : Directory.GetLastWriteTimeUtc(candidate);
+            DateTime touched;
+            try
+            {
+                // The newer of the two stamps, because a file system may not keep a creation time.
+                var created = Directory.GetCreationTimeUtc(candidate);
+                var written = Directory.GetLastWriteTimeUtc(candidate);
+                touched = created > written ? created : written;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best effort: a leftover that cannot be examined must not fail the export or the check it runs before.
+                continue;
+            }
+
             if (touched < abandonedBefore.UtcDateTime)
             {
                 DeleteQuietly(candidate);
             }
+        }
+    }
+
+    /// <summary>
+    /// Stamps a directory as written now, ignoring failures, so <see cref="DeleteAbandonedStaging"/> leaves it alone.
+    /// </summary>
+    /// <param name="directory">The directory path.</param>
+    private void TouchQuietly(string directory)
+    {
+        try
+        {
+            Directory.SetLastWriteTimeUtc(directory, _timeProvider.GetUtcNow().UtcDateTime);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Only the age guard of the cleanup depends on the stamp; the swap itself does not.
         }
     }
 

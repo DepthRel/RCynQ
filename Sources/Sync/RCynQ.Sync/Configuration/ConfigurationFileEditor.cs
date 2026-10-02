@@ -12,7 +12,8 @@ namespace RCynQ.Sync.Configuration;
 /// </summary>
 /// <remarks>
 /// The file holds a <c>SyncBridge</c> section bound to <see cref="SyncBridgeOptions"/>. Edits preserve unknown
-/// properties and are written atomically through a temporary file.
+/// properties and are written atomically through a temporary file. The section and its properties are found whatever
+/// the case of their names, as the service binds them.
 /// </remarks>
 public static class ConfigurationFileEditor
 {
@@ -50,19 +51,19 @@ public static class ConfigurationFileEditor
     {
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.Missing", path));
+            throw LocalizedError.Create(message => new SyncBridgeException(message), "ConfigFile.Missing", path);
         }
 
         try
         {
             var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            var section = root?[SyncBridgeOptions.SectionName]
-                ?? throw new SyncBridgeException(Texts.Format("ConfigFile.NoSection", path, SyncBridgeOptions.SectionName));
+            var section = FindSection(root as JsonObject)?.Section
+                ?? throw LocalizedError.Create(message => new SyncBridgeException(message), "ConfigFile.NoSection", path, SyncBridgeOptions.SectionName);
             return section.Deserialize<SyncBridgeOptions>(JsonOptions) ?? new SyncBridgeOptions();
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
+            throw LocalizedError.Create(message => new SyncBridgeException(message, ex), "ConfigFile.BadJson", path, ex);
         }
     }
 
@@ -86,13 +87,14 @@ public static class ConfigurationFileEditor
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
+            throw LocalizedError.Create(message => new SyncBridgeException(message, ex), "ConfigFile.BadJson", path, ex);
         }
 
-        if (root[SyncBridgeOptions.SectionName] is not JsonObject section)
+        var found = FindSection(root);
+        if (found?.Section is not JsonObject section)
         {
             section = new JsonObject();
-            root[SyncBridgeOptions.SectionName] = section;
+            root[found?.Key ?? SyncBridgeOptions.SectionName] = section;
         }
 
         update(section);
@@ -132,23 +134,66 @@ public static class ConfigurationFileEditor
 
         return UpdateAsync(path, section =>
         {
-            section[nameof(SyncBridgeOptions.Role)] = role.ToString();
+            SetProperty(section, nameof(SyncBridgeOptions.Role), role.ToString());
             if (role == NodeRole.Mediator)
             {
-                section.Remove(nameof(SyncBridgeOptions.RepoPath));
-                section.Remove(nameof(SyncBridgeOptions.WorkdirPath));
+                SetProperty(section, nameof(SyncBridgeOptions.RepoPath), null);
+                SetProperty(section, nameof(SyncBridgeOptions.WorkdirPath), null);
                 return;
             }
 
             if (!string.IsNullOrWhiteSpace(repoPath))
             {
-                section[nameof(SyncBridgeOptions.RepoPath)] = repoPath;
+                SetProperty(section, nameof(SyncBridgeOptions.RepoPath), repoPath);
             }
 
             if (!string.IsNullOrWhiteSpace(workdirPath))
             {
-                section[nameof(SyncBridgeOptions.WorkdirPath)] = workdirPath;
+                SetProperty(section, nameof(SyncBridgeOptions.WorkdirPath), workdirPath);
             }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sets or removes a property of a configuration object, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="node">The configuration object.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The new value, or <see langword="null"/> to remove the property.</param>
+    /// <remarks>
+    /// The service binds the file without regard to the case of the names, so <c>"role"</c> and <c>"Role"</c> are the same
+    /// setting for it. An edit that only knew the usual spelling would add a second property next to the one the user
+    /// wrote, and the service refuses a file with the same setting twice. The spelling found in the file is kept.
+    /// </remarks>
+    public static void SetProperty(JsonObject node, string name, string? value)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var existing = node.Select(pair => pair.Key).Where(key => key.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach (var key in existing.Skip(1))
+        {
+            node.Remove(key);
+        }
+
+        var target = existing.Length > 0 ? existing[0] : name;
+        if (value is null)
+        {
+            node.Remove(target);
+        }
+        else
+        {
+            node[target] = value;
+        }
+    }
+
+    /// <summary>
+    /// Finds the <c>SyncBridge</c> section of a configuration document, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="root">The root object of the document, or <see langword="null"/>.</param>
+    /// <returns>The name the section is written with and the section, or <see langword="null"/> when there is none.</returns>
+    private static (string Key, JsonNode? Section)? FindSection(JsonObject? root)
+    {
+        var key = root?.Select(pair => pair.Key).FirstOrDefault(name => name.Equals(SyncBridgeOptions.SectionName, StringComparison.OrdinalIgnoreCase));
+        return key is null ? null : (key, root![key]);
     }
 }

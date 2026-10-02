@@ -31,7 +31,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     public string CurrentBranch => _branch switch
     {
         null => "—",
-        { IsRepository: false } => Texts.Get("Branch.NotRepository"),
+        { IsRepository: false } => Localizer.Get("Branch.NotRepository"),
         var info => info.Branch ?? "(detached HEAD)"
     };
 
@@ -39,8 +39,8 @@ public sealed partial class BranchViewModel : PageViewModelBase
     public string DivergenceText => _branch switch
     {
         null or { IsRepository: false } => string.Empty,
-        { TrackingRef: null } => CanPull ? Texts.Get("Branch.NotFetched") : string.Empty,
-        var info => Texts.Format("Branch.Divergence", info.Behind, info.Ahead)
+        { TrackingRef: null } => CanPull ? Localizer.Get("Branch.NotFetched") : string.Empty,
+        var info => Localizer.Format("Branch.Divergence", info.Behind, info.Ahead)
     };
 
     /// <summary>Gets a value indicating whether Git output is shown.</summary>
@@ -49,8 +49,10 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="BranchViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public BranchViewModel(IServiceApiClient api)
+    public BranchViewModel(ILocalizer localizer, IServiceApiClient api)
+        : base(localizer)
     {
         _api = api;
     }
@@ -97,7 +99,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
 
         if (!result.Succeeded)
         {
-            ErrorMessage = Texts.Get("Branch.PullFailed");
+            ErrorMessage = Localizer.Get("Branch.PullFailed");
         }
     });
 

@@ -42,7 +42,7 @@ public sealed class LocalizedTextTests
     {
         Assert.False(LocalizedText.IsEncoded("Already a sentence."));
         Assert.Equal("Already a sentence.", LocalizedText.Render("Already a sentence.", In("ru")));
-        Assert.Null(LocalizedText.Render(null));
+        Assert.Null(LocalizedText.Render(null, TestTexts.English));
     }
 
     /// <summary>

@@ -10,6 +10,20 @@ namespace RCynQ.UI.ViewModels;
 /// </summary>
 public abstract partial class PageViewModelBase : ObservableObject
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PageViewModelBase"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
+    protected PageViewModelBase(ILocalizer localizer)
+    {
+        Localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
+    /// <summary>
+    /// Gets the localizer of the texts the page words itself.
+    /// </summary>
+    protected ILocalizer Localizer { get; }
+
     /// <summary>Whether an operation is running.</summary>
     [ObservableProperty]
     private bool _isBusy;
@@ -72,15 +86,21 @@ public abstract partial class PageViewModelBase : ObservableObject
         }
         catch (ServiceApiException ex)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = Localizer.Describe(ex);
         }
         catch (HttpRequestException ex)
         {
-            ErrorMessage = Texts.Format("Common.ServiceUnavailable", ex.Message);
+            ErrorMessage = Localizer.Format("Common.ServiceUnavailable", Localizer.Describe(ex));
+        }
+        catch (OperationCanceledException ex)
+        {
+            // A request that ran into the time limit of the HTTP client ends as a cancellation. Left alone it would leave
+            // the command as an unhandled exception and close the application.
+            ErrorMessage = Localizer.Format("Common.ServiceUnavailable", Localizer.Describe(ex));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or FormatException)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = Localizer.Describe(ex);
         }
         finally
         {

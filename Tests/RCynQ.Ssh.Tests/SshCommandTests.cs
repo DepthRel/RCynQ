@@ -125,7 +125,7 @@ public class SshCommandTests
         processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(
             new ProcessResult(3, "out", "remote failure"),
             new ProcessResult(255, "", "Host key verification failed."));
-        var runner = new SystemSshRunner(processes, new SshCommandBuilder(new SshClientOptions { SshExecutable = "/usr/bin/ssh" }));
+        var runner = new SystemSshRunner(TestTexts.English, processes, new SshCommandBuilder(new SshClientOptions { SshExecutable = "/usr/bin/ssh" }));
 
         var result = await runner.ExecuteAsync(Dest, Array.Empty<SshEndpoint>(), "false");
         result.ExitCode.Should().Be(3);

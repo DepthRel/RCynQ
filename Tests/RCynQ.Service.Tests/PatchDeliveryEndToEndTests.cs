@@ -45,7 +45,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
     private string _sourceWork = null!;
 
     /// <summary>The signer of Source.</summary>
-    private readonly EcdsaSignatureService _signer = new(new InMemorySecretStore());
+    private readonly EcdsaSignatureService _signer = new(TestTexts.English, new InMemorySecretStore());
 
     /// <summary>The forward manager, replaced by a direct connection.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
@@ -115,7 +115,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
         Write(_sourceWork, "build/out.dll", "ignored directory");
 
         var envelope = await BuildAsync();
-        var result = await CreateSender().SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var result = await CreateSender().SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _sourceWork, new PathUtility(TestTexts.English)), Chain());
 
         result.Status.Should().Be(PatchStatus.Applied, result.Error);
         result.AppliedFileCount.Should().Be(5);
@@ -145,7 +145,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
         var envelope = await BuildAsync();
         Write(_sourceWork, "new/n.txt", "edited while the patch was on its way\n");
 
-        var send = () => CreateSender().SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var send = () => CreateSender().SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _sourceWork, new PathUtility(TestTexts.English)), Chain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("Malformed");
         Read(_destWork, "a.txt").Should().Be("v1\n", "the patch is applied all or nothing");
@@ -163,7 +163,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
         var envelope = await BuildAsync();
         var sender = CreateSender("not-the-token-of-dest");
 
-        var send = () => sender.SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var send = () => sender.SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _sourceWork, new PathUtility(TestTexts.English)), Chain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("InvalidToken").And.Contain("401");
         Read(_destWork, "a.txt").Should().Be("v1\n");
@@ -187,10 +187,11 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
     /// <returns>The sender.</returns>
     private HttpPatchSender CreateSender(string token = ServiceTestHost.LinkToken)
         => new(
+            TestTexts.English,
             new SocketsHttpHandler { UseProxy = false },
             _forwards,
             _signer,
-            new PatchEnvelopeSerializer(new PathUtility()),
+            new PatchEnvelopeSerializer(TestTexts.English, new PathUtility(TestTexts.English)),
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = token }, new InMemorySecretStore()),
             new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork),
             new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero });

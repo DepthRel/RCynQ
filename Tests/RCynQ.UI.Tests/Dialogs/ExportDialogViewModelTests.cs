@@ -26,7 +26,7 @@ public sealed class ExportDialogViewModelTests
     public async Task Probe_Prefills_Form()
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         await dialog.ProbeCommand.ExecuteAsync(null);
 
@@ -57,7 +57,7 @@ public sealed class ExportDialogViewModelTests
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: null));
         _api.GenerateSshKeyAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
-        var dialog = new ExportDialogViewModel(_api) { User = "rcynq" };
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api) { User = "rcynq" };
 
         await dialog.ProbeCommand.ExecuteAsync(null);
         dialog.CanGenerateKey.Should().BeTrue();
@@ -78,7 +78,7 @@ public sealed class ExportDialogViewModelTests
     public async Task Probe_Failure_Is_Shown()
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns<NodeEnvironmentReport>(_ => throw new HttpRequestException("refused"));
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         await dialog.ProbeCommand.ExecuteAsync(null);
         dialog.ConfirmCommand.Execute(null);
@@ -96,7 +96,7 @@ public sealed class ExportDialogViewModelTests
     public void Node_Without_Ssh_Server_Shows_Tls_Details()
     {
         const string Tls = "SHA256:59CE0A214994CBC386DF73DA0F07AF6B19138641408A65ED2330C7FEA1BBFDF4";
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         dialog.Apply(Report(sshKey: null) with
         {

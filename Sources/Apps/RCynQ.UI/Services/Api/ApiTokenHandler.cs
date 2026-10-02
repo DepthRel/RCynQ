@@ -13,14 +13,19 @@ public sealed class ApiTokenHandler : DelegatingHandler
     /// <summary>The token provider.</summary>
     private readonly ApiTokenProvider _tokens;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ApiTokenHandler"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="tokens">The token provider.</param>
     /// <param name="innerHandler">The inner handler.</param>
-    public ApiTokenHandler(ApiTokenProvider tokens, HttpMessageHandler innerHandler)
+    public ApiTokenHandler(ILocalizer localizer, ApiTokenProvider tokens, HttpMessageHandler innerHandler)
         : base(innerHandler)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
     }
 
@@ -37,7 +42,7 @@ public sealed class ApiTokenHandler : DelegatingHandler
 
         // The service words its answers (errors, diagnostics) in the language the user chose.
         request.Headers.AcceptLanguage.Clear();
-        request.Headers.AcceptLanguage.ParseAdd(Texts.Localizer.Current.Code);
+        request.Headers.AcceptLanguage.ParseAdd(_localizer.Current.Code);
 
         var response = await base.SendAsync(request, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Unauthorized)

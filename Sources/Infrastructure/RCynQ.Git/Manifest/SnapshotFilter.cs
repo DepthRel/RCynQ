@@ -49,7 +49,8 @@ public sealed class SnapshotFilter
     /// </summary>
     /// <param name="name">The directory name.</param>
     /// <returns><see langword="true"/> when excluded.</returns>
-    public bool IsDirectoryExcluded(string name) => PathUtility.IsGitMetadataName(name) || ExcludedDirectoryNames.Contains(name);
+    public bool IsDirectoryExcluded(string name)
+        => PathUtility.IsGitMetadataName(name) || PathUtility.IsApplyStagingName(name) || ExcludedDirectoryNames.Contains(name);
 
     /// <summary>
     /// Checks whether a file with the given name is excluded (a <c>.git</c> file of a submodule or worktree).

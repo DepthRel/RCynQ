@@ -21,13 +21,18 @@ public sealed class PublicEndpointMiddleware
     /// <summary>The port of the direct endpoint.</summary>
     private readonly int _port;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PublicEndpointMiddleware"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="next">The next middleware.</param>
     /// <param name="options">The direct endpoint settings.</param>
-    public PublicEndpointMiddleware(RequestDelegate next, PublicEndpointOptions options)
+    public PublicEndpointMiddleware(ILocalizer localizer, RequestDelegate next, PublicEndpointOptions options)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentNullException.ThrowIfNull(options);
         _next = next;
         _port = options.Port;
@@ -51,11 +56,12 @@ public sealed class PublicEndpointMiddleware
         var allowed = ((HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method))
                 && path.StartsWithSegments(ApiRoutes.PatchSessionPrefix, StringComparison.OrdinalIgnoreCase))
             || (HttpMethods.IsPost(context.Request.Method) && path.Equals(ApiRoutes.GitBundle, StringComparison.OrdinalIgnoreCase))
-            || (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase));
+            || (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase))
+            || (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.PeerPing, StringComparison.OrdinalIgnoreCase));
         if (!allowed)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
-            await context.Response.WriteAsJsonAsync(new ErrorResponse(Texts.Get("Api.RouteNotPublic")));
+            await context.Response.WriteAsJsonAsync(new ErrorResponse(_localizer.Get("Api.RouteNotPublic")));
             return;
         }
 

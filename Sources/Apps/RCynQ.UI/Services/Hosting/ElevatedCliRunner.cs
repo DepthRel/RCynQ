@@ -22,13 +22,18 @@ public sealed class ElevatedCliRunner : IPeerAccessElevation
     /// <summary>The CLI launch command, or <see langword="null"/> when the CLI was not found.</summary>
     private readonly ServiceLaunchCommand? _cli;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ElevatedCliRunner"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="configPath">The configuration file of the node.</param>
     /// <param name="cli">The CLI launch command, or <see langword="null"/> when the CLI was not found.</param>
-    public ElevatedCliRunner(string configPath, ServiceLaunchCommand? cli)
+    public ElevatedCliRunner(ILocalizer localizer, string configPath, ServiceLaunchCommand? cli)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _configPath = configPath ?? throw new ArgumentNullException(nameof(configPath));
         _cli = cli;
     }
@@ -58,7 +63,7 @@ public sealed class ElevatedCliRunner : IPeerAccessElevation
     {
         if (!IsAvailable)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.NotAvailable, Texts.Get("Elevation.Terminal"));
+            return new ElevatedRunResult(ElevatedRunOutcome.NotAvailable, _localizer.Get("Elevation.Terminal"));
         }
 
         var info = new ProcessStartInfo(_cli!.FileName, JoinArguments(_cli.PrefixArguments.Concat(new[] { "ssh", "allow", "--config", _configPath })))
@@ -70,19 +75,19 @@ public sealed class ElevatedCliRunner : IPeerAccessElevation
 
         try
         {
-            using var process = Process.Start(info) ?? throw new InvalidOperationException(Texts.Get("Elevation.CliDidNotStart"));
+            using var process = Process.Start(info) ?? throw new InvalidOperationException(_localizer.Get("Elevation.CliDidNotStart"));
             await process.WaitForExitAsync(cancellationToken);
             return process.ExitCode == 0
-                ? new ElevatedRunResult(ElevatedRunOutcome.Completed, Texts.Get("Elevation.Done"))
-                : new ElevatedRunResult(ElevatedRunOutcome.Failed, Texts.Format("Elevation.Failed", process.ExitCode));
+                ? new ElevatedRunResult(ElevatedRunOutcome.Completed, _localizer.Get("Elevation.Done"))
+                : new ElevatedRunResult(ElevatedRunOutcome.Failed, _localizer.Format("Elevation.Failed", process.ExitCode));
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == CancelledByUser)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.Cancelled, Texts.Get("Elevation.Cancelled"));
+            return new ElevatedRunResult(ElevatedRunOutcome.Cancelled, _localizer.Get("Elevation.Cancelled"));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
-            return new ElevatedRunResult(ElevatedRunOutcome.Failed, Texts.Format("Elevation.StartFailed", ex.Message));
+            return new ElevatedRunResult(ElevatedRunOutcome.Failed, _localizer.Format("Elevation.StartFailed", _localizer.Describe(ex)));
         }
     }
 }

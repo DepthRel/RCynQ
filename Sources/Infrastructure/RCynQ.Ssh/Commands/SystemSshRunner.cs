@@ -31,12 +31,19 @@ public sealed class SystemSshRunner : ISshExecutor
     private readonly SshCommandBuilder _commands;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SystemSshRunner"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processRunner">The process runner.</param>
     /// <param name="commands">The command builder.</param>
-    public SystemSshRunner(IProcessRunner processRunner, SshCommandBuilder commands)
+    public SystemSshRunner(ILocalizer localizer, IProcessRunner processRunner, SshCommandBuilder commands)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processRunner = processRunner;
         _commands = commands;
     }
@@ -48,16 +55,16 @@ public sealed class SystemSshRunner : ISshExecutor
         ProcessResult result;
         try
         {
-            result = await _processRunner.RunAsync(new ProcessSpec(_commands.Executable, args, null, null, TimeSpan.FromMinutes(5)), cancellationToken);
+            result = await _processRunner.RunAsync(new ProcessSpec(_commands.Executable, args, _commands.WorkingDirectory, null, TimeSpan.FromMinutes(5)), cancellationToken);
         }
         catch (SyncBridgeException ex) when (ex is not SshExecutionException)
         {
-            throw new SshExecutionException(Texts.Format("Ssh.NotExecuted", target, ex.Message), ex);
+            throw new SshExecutionException(_localizer.Format("Ssh.NotExecuted", target, _localizer.Describe(ex)), ex);
         }
 
         if (result.ExitCode == SshFailureExitCode)
         {
-            throw new SshExecutionException(Texts.Format("Ssh.Failed", target, result.StandardError.Trim()), result.ExitCode);
+            throw new SshExecutionException(_localizer.Format("Ssh.Failed", target, result.StandardError.Trim()), result.ExitCode);
         }
 
         return new SshResult(result.ExitCode, result.StandardOutput, result.StandardError);

@@ -44,7 +44,7 @@ public sealed class SyncViewModelTests
             .Returns(new PatchApplyResult(patch.Id, PatchStatus.ConflictResolved, 1, Array.Empty<ConflictFile>(), null));
         ConflictDialogViewModel? shown = null;
         _dialogs.ShowConflictDialogAsync(Arg.Do<ConflictDialogViewModel>(dialog => shown = dialog)).Returns(ConflictPolicy.ApplyIncomingOverLocal);
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         var item = sync.History.Single();
@@ -58,6 +58,28 @@ public sealed class SyncViewModelTests
     }
 
     /// <summary>
+    /// Verifies that a merge that left conflict markers is reported as done with the files that need an edit named,
+    /// instead of a bare "resolved".
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Merge_With_Conflict_Markers_Names_The_Files_To_Edit()
+    {
+        var patch = TestData.ConflictPatch();
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
+        _api.ResolvePatchAsync(patch.Id, ConflictPolicy.UseGit, Arg.Any<CancellationToken>())
+            .Returns(new PatchApplyResult(patch.Id, PatchStatus.ConflictResolved, 3, new[] { new ConflictFile("src/app.cs", null, null), new ConflictFile("src/b.cs", null, null) }, null));
+        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns(ConflictPolicy.UseGit);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+        await sync.RefreshAsync();
+
+        await sync.ResolveCommand.ExecuteAsync(sync.History.Single());
+
+        sync.InfoMessage.Should().Contain("маркеры конфликта").And.Contain("src/app.cs, src/b.cs");
+        sync.HasError.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that cancelling the dialog changes nothing.
     /// </summary>
     /// <returns>A task representing the test.</returns>
@@ -67,7 +89,7 @@ public sealed class SyncViewModelTests
         var patch = TestData.ConflictPatch();
         _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
         _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns((ConflictPolicy?)null);
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         await sync.ResolveCommand.ExecuteAsync(sync.History.Single());
@@ -83,12 +105,62 @@ public sealed class SyncViewModelTests
     public async Task Service_Error_Is_Shown()
     {
         _api.SendPatchAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>()).Returns<SendPatchResult>(_ => throw new ServiceApiException(System.Net.HttpStatusCode.Conflict, "baseline missing"));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
 
         await sync.SendCommand.ExecuteAsync(null);
 
         sync.ErrorMessage.Should().Be("baseline missing");
         sync.IsBusy.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a request that runs into the time limit of the HTTP client is shown as an error: it ends as a
+    /// cancellation, which must not leave the command as an unhandled exception.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Timed_Out_Request_Is_Shown_As_An_Error()
+    {
+        _api.SendPatchAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>())
+            .Returns<SendPatchResult>(_ => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout."));
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+
+        var send = () => sync.SendCommand.ExecuteAsync(null);
+
+        await send.Should().NotThrowAsync();
+        sync.ErrorMessage.Should().Contain("HttpClient.Timeout");
+        sync.IsBusy.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that two refreshes that overlap (a patch event arrives while the page refreshes after a send) do not double
+    /// the history: each of them replaces the list, neither adds to what the other one has just filled.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Overlapping_Refreshes_Do_Not_Double_The_History()
+    {
+        var patch = TestData.ConflictPatch();
+        var answers = new Queue<TaskCompletionSource<IReadOnlyList<PatchMetadata>>>();
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var answer = new TaskCompletionSource<IReadOnlyList<PatchMetadata>>();
+            answers.Enqueue(answer);
+            return answer.Task;
+        });
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+
+        var first = sync.RefreshAsync();
+        var second = sync.RefreshAsync();
+        answers.Should().HaveCount(2, "both refreshes wait for the history");
+        foreach (var answer in answers)
+        {
+            answer.SetResult(new[] { patch });
+        }
+
+        await Task.WhenAll(first, second);
+
+        sync.History.Should().ContainSingle();
     }
 
     /// <summary>
@@ -108,7 +180,7 @@ public sealed class SyncViewModelTests
     public async Task Changed_Files_Are_Counted_Next_To_The_Title(int count, string expected)
     {
         ReturnChangedFiles(Enumerable.Range(1, count).Select(index => new ChangedFile(ChangeKind.Modified, $"f{index}.txt", index % 2 == 0)).ToArray());
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
 
         await sync.RefreshAsync();
 
@@ -124,7 +196,7 @@ public sealed class SyncViewModelTests
     [Fact]
     public async Task Empty_List_Has_No_Count()
     {
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
 
         await sync.RefreshAsync();
 
@@ -141,7 +213,7 @@ public sealed class SyncViewModelTests
     {
         var pending = new FileChange(ChangeKind.Added, "a.txt", new string('a', 64), 1, false);
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status() with { PendingChanges = new[] { pending }, ChangedFiles = null });
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
 
         await sync.RefreshAsync();
 
@@ -157,7 +229,7 @@ public sealed class SyncViewModelTests
     {
         ReturnChangedFiles(new ChangedFile(ChangeKind.Modified, "a.txt", false), new ChangedFile(ChangeKind.Modified, "b.txt", true));
         _api.SendPatchAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>()).Returns(new SendPatchResult(false, null, null, "Нечего отправлять."));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         await sync.SendCommand.ExecuteAsync(null);
@@ -175,7 +247,7 @@ public sealed class SyncViewModelTests
     {
         ReturnChangedFiles(new ChangedFile(ChangeKind.Modified, "a.txt", false), new ChangedFile(ChangeKind.Added, "b.txt", false), new ChangedFile(ChangeKind.Deleted, "c.txt", true));
         _api.SendPatchAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>()).Returns(new SendPatchResult(false, null, null, "Нечего отправлять."));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         sync.ToggleSelectionModeCommand.Execute(null);
@@ -204,7 +276,7 @@ public sealed class SyncViewModelTests
     {
         ReturnChangedFiles(new ChangedFile(ChangeKind.Modified, "a.txt", false), new ChangedFile(ChangeKind.Modified, "b.txt", false));
         _api.SendPatchAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>()).Returns(new SendPatchResult(false, null, null, "Нечего отправлять."));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
         sync.ToggleSelectionModeCommand.Execute(null);
         sync.SelectAllCommand.Execute(null);
@@ -225,7 +297,7 @@ public sealed class SyncViewModelTests
     public async Task Scan_Keeps_The_Checked_Files()
     {
         ReturnChangedFiles(new ChangedFile(ChangeKind.Modified, "a.txt", false), new ChangedFile(ChangeKind.Modified, "b.txt", false));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
         sync.ToggleSelectionModeCommand.Execute(null);
         sync.ChangedFiles[1].IsSelected = true;
@@ -252,7 +324,7 @@ public sealed class SyncViewModelTests
     [Fact]
     public async Task Git_Sync_Base_Offers_Only_A_Rebuild()
     {
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         sync.NeedsSyncBase.Should().BeFalse();
@@ -271,7 +343,7 @@ public sealed class SyncViewModelTests
     {
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         _api.CreateBaselineAsync(Arg.Any<CancellationToken>()).Returns(new SnapshotInfo(Guid.NewGuid(), new NodeId("node-1"), DateTimeOffset.UtcNow, "hash", null));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         await sync.CreateBaselineCommand.ExecuteAsync(null);
@@ -291,7 +363,7 @@ public sealed class SyncViewModelTests
     public async Task Missing_Sync_Base_Shows_The_Reason(bool canCreateManual)
     {
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status() with { SyncBase = SyncBaseStatus.NotReady("Выполните Pull.", canCreateManual) });
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         sync.NeedsSyncBase.Should().BeTrue();
@@ -310,7 +382,7 @@ public sealed class SyncViewModelTests
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status() with { SyncBase = SyncBaseStatus.NotReady("no git", true) });
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         _api.CreateBaselineAsync(Arg.Any<CancellationToken>()).Returns(new SnapshotInfo(Guid.NewGuid(), new NodeId("node-1"), DateTimeOffset.UtcNow, "hash", null));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
         sync.NeedsSyncBase.Should().BeTrue();
 
@@ -330,7 +402,7 @@ public sealed class SyncViewModelTests
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status() with { SyncBase = new SyncBaseStatus(SyncBaseMode.Manual, null, null, null, true) });
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         _api.CreateBaselineAsync(Arg.Any<CancellationToken>()).Returns(new SnapshotInfo(Guid.NewGuid(), new NodeId("node-1"), DateTimeOffset.UtcNow, "hash", null));
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
         sync.NeedsSyncBase.Should().BeFalse();
         sync.CanRebuildBaseline.Should().BeTrue();
@@ -349,7 +421,7 @@ public sealed class SyncViewModelTests
     public async Task Cancelled_Baseline_Confirmation_Does_Not_Create()
     {
         _dialogs.ConfirmAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
-        var sync = new SyncViewModel(_api, _dialogs);
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         await sync.CreateBaselineCommand.ExecuteAsync(null);

@@ -23,9 +23,9 @@ public enum ConflictPolicy
     ApplyIncomingOverLocal = 2,
 
     /// <summary>
-    /// Git tooling is used: <c>git apply --check</c>, then <c>git apply --3way</c> when possible,
-    /// falling back to <c>git apply --reject</c>; remaining conflicts are left for manual resolution.
+    /// The incoming files are merged into the local ones with Git, file by file (<c>git merge-file</c>), with the sync
+    /// base as the common ancestor. Lines both sides changed are left between conflict markers for the user to edit.
     /// </summary>
-    [Description("Use git apply (--3way, then --reject) and leave remaining conflicts to the user.")]
+    [Description("Merge the incoming files into the local ones with Git; colliding lines are left between conflict markers.")]
     UseGit = 3
 }

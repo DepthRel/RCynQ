@@ -5,6 +5,7 @@ using CliFx.Infrastructure;
 using RCynQ.Cli.Services;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration;
 
 namespace RCynQ.Cli.Commands.Config;
@@ -15,6 +16,18 @@ namespace RCynQ.Cli.Commands.Config;
 [Command("role set", Description = "Sets the node role (source, mediator or dest) in syncbridge.json.")]
 public sealed class RoleSetCommand : ICommand
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoleSetCommand"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public RoleSetCommand(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <summary>
     /// Gets or sets the role.
     /// </summary>
@@ -51,15 +64,15 @@ public sealed class RoleSetCommand : ICommand
         try
         {
             var path = ConfigurationFileEditor.ResolvePath(ConfigPath);
-            await console.Output.WriteAsync(await new ConfigCommandService().SetRoleAsync(path, Role, RepoPath, WorkdirPath, NodeId, console.RegisterCancellationHandler()));
+            await console.Output.WriteAsync(await new ConfigCommandService(_localizer).SetRoleAsync(path, Role, RepoPath, WorkdirPath, NodeId, console.RegisterCancellationHandler()));
         }
         catch (ArgumentException ex)
         {
-            throw new CommandException(ex.Message, 2);
+            throw new CommandException(_localizer.Describe(ex), 2);
         }
         catch (SyncBridgeException ex)
         {
-            throw new CommandException(ex.Message, 1);
+            throw new CommandException(_localizer.Describe(ex), 1);
         }
     }
 }

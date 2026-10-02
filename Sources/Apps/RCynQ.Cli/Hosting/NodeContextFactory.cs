@@ -7,6 +7,7 @@ using RCynQ.Core.Data.DependencyInjection;
 using RCynQ.Core.Data.Migrations.SQLite.Runner;
 using RCynQ.Core.Exceptions;
 using RCynQ.Git.DependencyInjection;
+using RCynQ.Localization;
 using RCynQ.Ssh.DependencyInjection;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.DependencyInjection;
@@ -25,6 +26,18 @@ namespace RCynQ.Cli.Hosting;
 /// </remarks>
 public sealed class NodeContextFactory : INodeContextFactory
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NodeContextFactory"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public NodeContextFactory(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <inheritdoc />
     public async Task<NodeContext> CreateAsync(string? configPath, CancellationToken cancellationToken)
     {
@@ -36,10 +49,10 @@ public sealed class NodeContextFactory : INodeContextFactory
         }
         catch (SyncBridgeException ex)
         {
-            throw new CommandException(ex.Message, 2);
+            throw new CommandException(_localizer.Describe(ex), 2);
         }
 
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, _localizer);
         if (errors.Count > 0)
         {
             throw new CommandException($"Invalid configuration in '{path}':{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}", 2);
@@ -50,6 +63,11 @@ public sealed class NodeContextFactory : INodeContextFactory
         var services = new ServiceCollection();
         services.AddSingleton(options);
         services.AddSingleton(node);
+        services.AddSingleton(_localizer);
+
+        // A command ends with its answer and has nobody to tell an outcome later, so it waits for the ping of the
+        // counterpart endpoint instead of reporting "being checked".
+        services.AddSingleton(new RCynQ.Sync.Reachability.EndpointPingOptions { WaitForResult = true });
         services.AddRCynQData()
             .AddRCynQGit()
             .AddRCynQSsh()
@@ -68,11 +86,7 @@ public sealed class NodeContextFactory : INodeContextFactory
         }
 
         await provider.GetRequiredService<INodeRepository>().UpsertAsync(node, cancellationToken);
-        var links = provider.GetRequiredService<IChainLinkRepository>();
-        foreach (var link in SyncBridgeOptionsValidator.ToChainLinks(options))
-        {
-            await links.UpsertAsync(link, cancellationToken);
-        }
+        await provider.GetRequiredService<ConfiguredLinkStore>().SeedAsync(options, cancellationToken);
 
         return new NodeContext(provider, options, path);
     }

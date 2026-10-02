@@ -114,7 +114,7 @@ public sealed class PeerAccessTests : IDisposable
         peers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { Peer("source-1", NodeRole.Source, "10.8.1.3", SourceKey) });
         var options = new SyncBridgeOptions { Endpoint = new EndpointOptions { Mode = EndpointMode.Direct } };
         var adminPath = Path.Combine(_root, "admin", AuthorizedKeysLocation.AdministratorsFileName);
-        var service = new PeerAccessService(dest, options, peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
+        var service = new PeerAccessService(TestTexts.English, dest, options, peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
 
         var result = await service.ApplyAsync();
 
@@ -137,7 +137,7 @@ public sealed class PeerAccessTests : IDisposable
         var options = new SyncBridgeOptions { ListenPort = 18443 };
         var path = Path.Combine(_root, "authorized_keys");
 
-        var service = new PeerAccessService(dest, options, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = path }));
+        var service = new PeerAccessService(TestTexts.English, dest, options, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = path }));
         var result = await service.ApplyAsync();
         result.Applied.Should().BeTrue();
         result.EntryCount.Should().Be(1);
@@ -145,7 +145,7 @@ public sealed class PeerAccessTests : IDisposable
         (await service.ApplyAsync()).Message.Should().Contain("0 line(s) changed");
 
         var adminPath = Path.Combine(_root, "admin", AuthorizedKeysLocation.AdministratorsFileName);
-        var elevated = new PeerAccessService(dest, options, peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
+        var elevated = new PeerAccessService(TestTexts.English, dest, options, peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
         var denied = await elevated.ApplyAsync();
         denied.RequiresElevation.Should().BeTrue();
         denied.Applied.Should().BeFalse();

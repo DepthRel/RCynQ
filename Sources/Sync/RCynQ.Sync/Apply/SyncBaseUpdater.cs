@@ -3,6 +3,7 @@ using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Hashing;
+using RCynQ.Localization;
 using RCynQ.Sync.Content;
 
 namespace RCynQ.Sync.Apply;
@@ -36,12 +37,19 @@ public sealed class SyncBaseUpdater
     private readonly IPathUtility _paths;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SyncBaseUpdater"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="applier">The applier that writes the files.</param>
     /// <param name="paths">The path utility.</param>
-    public SyncBaseUpdater(ContentOverwriteApplier applier, IPathUtility paths)
+    public SyncBaseUpdater(ILocalizer localizer, ContentOverwriteApplier applier, IPathUtility paths)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _applier = applier;
         _paths = paths;
     }
@@ -69,7 +77,7 @@ public sealed class SyncBaseUpdater
 
         var accepted = new PatchEnvelope(
             envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, envelope.BaseStateHash, envelope.IncomingStateHash, stable, envelope.Signature);
-        await _applier.ApplyAsync(accepted, new WorkdirPatchContent(workdir, _paths), syncBase, cancellationToken);
+        await _applier.ApplyAsync(accepted, new WorkdirPatchContent(_localizer, workdir, _paths), syncBase, cancellationToken);
         return stable;
     }
 

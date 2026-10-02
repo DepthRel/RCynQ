@@ -13,7 +13,9 @@ using RCynQ.Git.DependencyInjection;
 using RCynQ.Service.Endpoints;
 using RCynQ.Service.Events;
 using RCynQ.Service.Hubs;
+using RCynQ.Service.Localization;
 using RCynQ.Service.Logging;
+using RCynQ.Service.Maintenance;
 using RCynQ.Service.Pipelines;
 using RCynQ.Service.Security;
 using RCynQ.Service.Startup;
@@ -92,7 +94,7 @@ public static class ServiceHostBuilder
         hostOptions ??= new ServiceHostOptions();
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory });
-        UseRequestedLanguage(GetArgument(args, LanguageArgument));
+        var localizer = CreateLocalizer(args);
         var configPath = ConfigurationFileEditor.ResolvePath(GetArgument(args, "--config"));
         builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
         builder.Configuration.AddEnvironmentVariables(EnvironmentPrefix);
@@ -100,10 +102,10 @@ public static class ServiceHostBuilder
         hostOptions.ConfigureConfiguration?.Invoke(builder.Configuration);
 
         var options = BindOptions(builder.Configuration);
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, localizer);
         if (errors.Count > 0)
         {
-            throw new SyncBridgeException(Texts.Format("Service.InvalidConfig", configPath, Environment.NewLine, string.Join(Environment.NewLine + " - ", errors)));
+            throw new SyncBridgeException(localizer.Format("Service.InvalidConfig", configPath, Environment.NewLine, string.Join(Environment.NewLine + " - ", errors)));
         }
 
         ConfigLocations.ApplyStorageDefaults(options, configPath, ConfigLocations.FindPortableRoot());
@@ -113,6 +115,8 @@ public static class ServiceHostBuilder
         var services = builder.Services;
         services.AddSingleton(options);
         services.AddSingleton(node);
+        services.AddSingleton(localizer);
+        services.AddSingleton<ILocalizer>(localizer);
         services.AddSingleton(new ServiceRuntimeInfo(configPath));
         services.AddSingleton<InMemoryLogSink>();
         services.AddSingleton<ApiTokenStore>();
@@ -137,6 +141,7 @@ public static class ServiceHostBuilder
             services.AddHostedService<DatabaseInitializer>();
             services.AddHostedService<ChainConfigurationSeeder>();
             services.AddHostedService<RolePipelineHostedService>();
+            services.AddHostedService<DataRetentionBackgroundService>();
         }
 
         if (TryGetParentProcessId(args, out var parentProcessId))
@@ -195,15 +200,16 @@ public static class ServiceHostBuilder
     }
 
     /// <summary>
-    /// Puts the messages of this process into a language, when the application has texts for it.
+    /// Creates the localizer of the service: its messages come in the language named by <see cref="LanguageArgument"/>,
+    /// when the application has texts for it, and in the default language otherwise.
     /// </summary>
-    /// <param name="code">The language code, or <see langword="null"/> to keep the default language.</param>
-    private static void UseRequestedLanguage(string? code)
+    /// <param name="args">The command-line arguments.</param>
+    /// <returns>The localizer.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="args"/> is <see langword="null"/>.</exception>
+    public static RequestLocalizer CreateLocalizer(string[] args)
     {
-        if (code is not null && Texts.Localizer.Languages.Any(language => string.Equals(language.Code, code.Trim(), StringComparison.OrdinalIgnoreCase)))
-        {
-            Texts.Localizer.SetLanguage(code.Trim().ToLowerInvariant());
-        }
+        ArgumentNullException.ThrowIfNull(args);
+        return new RequestLocalizer(LanguageCatalog.LoadEmbedded(), GetArgument(args, LanguageArgument));
     }
 
     /// <summary>

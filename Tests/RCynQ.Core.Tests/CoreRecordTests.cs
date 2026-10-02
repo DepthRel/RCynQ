@@ -41,6 +41,8 @@ public class CoreRecordTests
     [InlineData("has space")]
     [InlineData("semi;colon")]
     [InlineData("new\nline")]
+    [InlineData(".")]
+    [InlineData("..")]
     public void NodeId_Rejects_Invalid_Values(string value)
     {
         var create = () => new NodeId(value);

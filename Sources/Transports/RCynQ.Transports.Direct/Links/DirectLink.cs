@@ -24,14 +24,21 @@ public sealed class DirectLink : TransportLinkBase
     private readonly ITcpProbe _probe;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DirectLink"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="config">The link configuration.</param>
     /// <param name="probe">The TCP probe.</param>
     /// <param name="timeProvider">The clock.</param>
-    public DirectLink(ChainLinkConfig config, ITcpProbe probe, TimeProvider timeProvider)
-        : base(config, TransportKind.Direct, timeProvider)
+    public DirectLink(ILocalizer localizer, ChainLinkConfig config, ITcpProbe probe, TimeProvider timeProvider)
+        : base(localizer, config, TransportKind.Direct, timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _probe = probe;
     }
 
@@ -47,8 +54,8 @@ public sealed class DirectLink : TransportLinkBase
         // A peer without an SSH server is checked on its own TLS port.
         var peer = Config.Peer;
         return await _probe.CanConnectAsync(peer.Host, peer.ReachablePort, ProbeTimeout, cancellationToken)
-            ? CreateState(LinkStatus.Ready, Texts.Format("Direct.Reachable", peer.Host, peer.ReachablePort))
-            : CreateState(LinkStatus.Failed, Texts.Format("Direct.NotReachable", peer.Host, peer.ReachablePort));
+            ? CreateState(LinkStatus.Ready, _localizer.Format("Direct.Reachable", peer.Host, peer.ReachablePort))
+            : CreateState(LinkStatus.Failed, _localizer.Format("Direct.NotReachable", peer.Host, peer.ReachablePort));
     }
 
     /// <inheritdoc />
@@ -57,9 +64,9 @@ public sealed class DirectLink : TransportLinkBase
         var state = await ProbeCoreAsync(cancellationToken);
         return state.IsUsable
             ? DiagnosticResult.Pass(CheckName, state.Message)
-            : DiagnosticResult.Fail(CheckName, state.Message ?? Texts.Get("Direct.PeerNotReachable"),
+            : DiagnosticResult.Fail(CheckName, state.Message ?? _localizer.Get("Direct.PeerNotReachable"),
                 Config.Peer.EndpointMode == EndpointMode.Direct
-                    ? Texts.Format("Direct.CheckOwnPort", Config.Peer.Host, Config.Peer.EndpointPort)
-                    : Texts.Format("Direct.CheckSsh", Config.Peer.Host, Config.Peer.SshPort));
+                    ? _localizer.Format("Direct.CheckOwnPort", Config.Peer.Host, Config.Peer.EndpointPort)
+                    : _localizer.Format("Direct.CheckSsh", Config.Peer.Host, Config.Peer.SshPort));
     }
 }

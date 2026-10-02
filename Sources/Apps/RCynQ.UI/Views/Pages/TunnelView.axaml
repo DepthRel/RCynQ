@@ -28,7 +28,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:TunnelLinkItemViewModel">
                   <Border Classes="row">
-                    <Grid ColumnDefinitions="1.3*,1.4*,1.1*,110,Auto">
+                    <Grid ColumnDefinitions="1.3*,1.4*,1.1*,110,Auto" RowDefinitions="Auto,Auto">
                       <StackPanel VerticalAlignment="Center" Spacing="2">
                         <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
                         <TextBlock Classes="muted" FontSize="12" Text="{Binding PeerText}" TextTrimming="CharacterEllipsis" />
@@ -56,6 +56,9 @@
                           <controls:IconView Classes="small" IconKey="Icon.Stop" />
                         </Button>
                       </StackPanel>
+                      <!-- What the check found: where the path stops, or how the node answered. -->
+                      <TextBlock Grid.Row="1" Grid.ColumnSpan="5" Classes="muted" FontSize="12" Margin="0,6,0,0"
+                                 TextWrapping="Wrap" IsVisible="{Binding HasMessage}" Text="{Binding Message}" />
                     </Grid>
                   </Border>
                 </DataTemplate>

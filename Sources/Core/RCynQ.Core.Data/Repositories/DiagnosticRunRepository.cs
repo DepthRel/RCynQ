@@ -58,4 +58,11 @@ public sealed class DiagnosticRunRepository : IDiagnosticRunRepository
                 entity.TimestampUtc))
             .ToArray();
     }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset madeBeforeUtc, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.DiagnosticRuns.Where(run => run.TimestampUtc < madeBeforeUtc).ExecuteDeleteAsync(cancellationToken);
+    }
 }

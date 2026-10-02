@@ -20,11 +20,18 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     private readonly IGitCommandRunner _git;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GitRepositoryService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="git">The git command runner.</param>
-    public GitRepositoryService(IGitCommandRunner git)
+    public GitRepositoryService(ILocalizer localizer, IGitCommandRunner git)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _git = git;
     }
 
@@ -46,7 +53,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         Guard.NotBlank(directory, nameof(directory));
         ValidateRemoteUrl(remoteUrl);
         ValidateRemoteName(remoteName);
-        var environment = sshCommand is null ? null : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand };
+        var environment = SshEnvironment(sshCommand);
         var result = await _git.RunAsync(
             new[] { "fetch", "--prune", "--no-tags", "--no-write-fetch-head", remoteUrl, $"+refs/heads/*:refs/remotes/{remoteName}/*" },
             directory,
@@ -63,7 +70,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var info = await GetBranchInfoAsync(directory, remoteName, cancellationToken);
         if (info.Branch is null || info.TrackingRef is null)
         {
-            throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
+            throw new GitExecutionException(_localizer.Format("Git.NotFetched", remoteName));
         }
 
         var result = await _git.RunInWorkingTreeAsync(new[] { "merge", "--ff-only", info.TrackingRef }, directory, cancellationToken: cancellationToken);
@@ -99,7 +106,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var parts = counts.StandardOutput.Split(new[] { '\t', ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 2 || !int.TryParse(parts[0], out var ahead) || !int.TryParse(parts[1], out var behind))
         {
-            throw new GitExecutionException(Texts.Format("Git.RevListOutput", counts.StandardOutput.Trim()));
+            throw new GitExecutionException(_localizer.Format("Git.RevListOutput", counts.StandardOutput.Trim()));
         }
 
         return new GitBranchInfo(true, branch, tracking, ahead, behind);
@@ -168,6 +175,20 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
             throw new ArgumentException($"Remote name '{remoteName}' may contain only letters, digits, '.', '_' and '-'.", nameof(remoteName));
         }
     }
+
+    /// <summary>
+    /// Builds the environment that makes Git reach a remote with the given SSH command.
+    /// </summary>
+    /// <param name="sshCommand">The SSH command, or <see langword="null"/> to leave the choice to Git.</param>
+    /// <returns>The environment variables, or <see langword="null"/> when there is no command.</returns>
+    /// <remarks>
+    /// Git guesses from the first word of the command which options the client takes. The command may start with a change
+    /// of directory, so the guess is replaced by the answer: it is OpenSSH.
+    /// </remarks>
+    private static Dictionary<string, string>? SshEnvironment(string? sshCommand)
+        => sshCommand is null
+            ? null
+            : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand, ["GIT_SSH_VARIANT"] = "ssh" };
 
     /// <summary>
     /// Throws when a git command failed.
@@ -325,7 +346,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var exists = await _git.RunAsync(new[] { "rev-parse", "--verify", "--quiet", tracking }, directory, cancellationToken: cancellationToken);
         if (exists.ExitCode != 0)
         {
-            throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
+            throw new GitExecutionException(_localizer.Format("Git.NotFetched", remoteName));
         }
 
         var head = await _git.RunAsync(new[] { "symbolic-ref", "HEAD", "refs/heads/" + branch }, directory, cancellationToken: cancellationToken);
@@ -570,7 +591,12 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
 
             var unstage = await _git.RunAsync(new[] { "rm", "--cached", "--quiet", "--ignore-unmatch", "--", ":(literal)" + path }, directory, cancellationToken: cancellationToken);
             EnsureSuccess(unstage, "git rm --cached");
-            if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
+            if (new DirectoryInfo(full) is { Exists: true, LinkTarget: not null })
+            {
+                // A link to a directory is removed as a directory: File.Delete refuses it on Windows.
+                Directory.Delete(full);
+            }
+            else if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
             {
                 File.Delete(full);
             }
@@ -582,7 +608,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         Guard.NotBlank(directory, nameof(directory));
         ValidateRemoteUrl(remoteUrl);
-        var environment = sshCommand is null ? null : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand };
+        var environment = SshEnvironment(sshCommand);
         var result = await _git.RunAsync(new[] { "ls-remote", "--symref", remoteUrl, "HEAD" }, directory, environment, cancellationToken);
         EnsureSuccess(result, "git ls-remote");
 
@@ -615,9 +641,10 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
 
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        // The same notion of "Git metadata" and of path comparison as everywhere else: also the 8.3 short name of .git
+        // on NTFS, and a case-insensitive file system on macOS.
         var segments = relative.Split('/', '\\');
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, comparison) || segments.Any(segment => segment.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, Paths.PathUtility.PlatformComparison) || segments.Any(Paths.PathUtility.IsGitMetadataName))
         {
             throw new ArgumentException($"'{path}' leaves the working tree or points into Git metadata.", nameof(path));
         }

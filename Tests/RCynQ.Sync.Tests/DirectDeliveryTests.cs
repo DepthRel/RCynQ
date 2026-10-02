@@ -167,10 +167,10 @@ public sealed class DirectDeliveryTests : IDisposable
     /// <returns>The sender.</returns>
     private HttpPatchSender Create(RequestRecorder recorder)
         => new(
-            recorder,
+            TestTexts.English, recorder,
             _forwards,
             _fixture.SourceSigner,
-            new PatchEnvelopeSerializer(_fixture.Paths),
+            new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths),
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.Token }, new InMemorySecretStore()),
             _fixture.SourceNode,
             new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero },

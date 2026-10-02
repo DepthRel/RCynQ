@@ -71,12 +71,12 @@ public sealed record PeerDescriptor
         {
             if (TlsFingerprint is null)
             {
-                throw new ArgumentException(Texts.Get("Peer.NeedsFingerprint"), nameof(tlsFingerprint));
+                throw LocalizedError.Argument(nameof(tlsFingerprint), "Peer.NeedsFingerprint");
             }
 
             if (EndpointPort == 0)
             {
-                throw new ArgumentException(Texts.Get("Peer.NeedsPort"), nameof(endpointPort));
+                throw LocalizedError.Argument(nameof(endpointPort), "Peer.NeedsPort");
             }
         }
         if (id.IsEmpty)
@@ -169,6 +169,49 @@ public sealed record PeerDescriptor
     public string? GitRepoPath { get; }
 
     /// <summary>
+    /// Returns this description completed with what a stored description of the same peer already knows.
+    /// </summary>
+    /// <param name="stored">The description stored for the peer, or <see langword="null"/> when the peer is new.</param>
+    /// <returns>The completed description; this instance when there is nothing to take over.</returns>
+    /// <remarks>
+    /// A link written in the configuration file, typed into the application or passed to the CLI names the address of the
+    /// peer and, at most, its host key fingerprint, signing key and repository path. The SSH public key and the endpoint
+    /// mode with its TLS fingerprint and port come only with an import. Saving such a link must not erase what an import
+    /// stored, so those values are taken from <paramref name="stored"/>, and the optional ones are taken from it when this
+    /// description has none.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="stored"/> describes another peer.</exception>
+    public PeerDescriptor WithDetailsFrom(PeerDescriptor? stored)
+    {
+        if (stored is null)
+        {
+            return this;
+        }
+
+        if (stored.Id != Id)
+        {
+            throw new ArgumentException($"Peer '{stored.Id}' is not peer '{Id}'.", nameof(stored));
+        }
+
+        // A description that names a direct endpoint itself is complete; the default mode means "not stated".
+        var statesEndpoint = EndpointMode == EndpointMode.Direct;
+        return new PeerDescriptor(
+            Id,
+            Name,
+            Role,
+            Host,
+            SshPort,
+            SshUser,
+            HostKeyFingerprint ?? stored.HostKeyFingerprint,
+            SigningPublicKey ?? stored.SigningPublicKey,
+            GitRepoPath ?? stored.GitRepoPath,
+            SshPublicKey ?? stored.SshPublicKey,
+            statesEndpoint ? EndpointMode : stored.EndpointMode,
+            statesEndpoint ? TlsFingerprint : stored.TlsFingerprint,
+            statesEndpoint ? EndpointPort : stored.EndpointPort);
+    }
+
+    /// <summary>
     /// Validates that an optional value is well-formed Base64.
     /// </summary>
     /// <param name="value">The candidate value.</param>
@@ -186,7 +229,7 @@ public sealed record PeerDescriptor
         var buffer = new byte[trimmed.Length];
         if (!Convert.TryFromBase64String(trimmed, buffer, out _))
         {
-            throw new ArgumentException(Texts.Get("Peer.KeyBase64"), parameterName);
+            throw LocalizedError.Argument(parameterName, "Peer.KeyBase64");
         }
 
         return trimmed;

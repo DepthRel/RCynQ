@@ -17,14 +17,19 @@ public sealed class SshClientCheck : DiagnosticCheckBase
     /// <summary>The SSH options.</summary>
     private readonly SshClientOptions _ssh;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SshClientCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processes">The process runner.</param>
     /// <param name="ssh">The SSH options.</param>
-    public SshClientCheck(IProcessRunner processes, SshClientOptions ssh)
+    public SshClientCheck(ILocalizer localizer, IProcessRunner processes, SshClientOptions ssh)
         : base("SshClient", AllRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processes = processes;
         _ssh = ssh;
     }
@@ -38,11 +43,11 @@ public sealed class SshClientCheck : DiagnosticCheckBase
             var version = (result.StandardError + result.StandardOutput).Trim();
             return result.ExitCode == 0
                 ? Pass(version)
-                : Fail(Texts.Format("Diag.SshClient.Failed", _ssh.SshExecutable, version), Texts.Get("Diag.SshClient.Install"));
+                : Fail(_localizer.Format("Diag.SshClient.Failed", _ssh.SshExecutable, version), _localizer.Get("Diag.SshClient.Install"));
         }
         catch (SyncBridgeException ex)
         {
-            return Fail(ex.Message, Texts.Get("Diag.SshClient.InstallFix"));
+            return Fail(_localizer.Describe(ex), _localizer.Get("Diag.SshClient.InstallFix"));
         }
     }
 }

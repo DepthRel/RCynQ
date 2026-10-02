@@ -66,13 +66,20 @@ public sealed class AesGcmSecretStore : ISecretStore
     private byte[]? _key;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AesGcmSecretStore"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="contextFactory">The context factory.</param>
     /// <param name="appDataFactory">The application data factory.</param>
     /// <param name="timeProvider">The clock.</param>
-    public AesGcmSecretStore(IDbContextFactory<RCynQDbContext> contextFactory, IAppDataFactory appDataFactory, TimeProvider timeProvider)
+    public AesGcmSecretStore(ILocalizer localizer, IDbContextFactory<RCynQDbContext> contextFactory, IAppDataFactory appDataFactory, TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _contextFactory = contextFactory;
         _appDataFactory = appDataFactory;
         _timeProvider = timeProvider;
@@ -132,7 +139,7 @@ public sealed class AesGcmSecretStore : ISecretStore
         }
         catch (CryptographicException ex)
         {
-            throw new SyncBridgeException(Texts.Format("Secret.Undecryptable", secretName), ex);
+            throw new SyncBridgeException(_localizer.Format("Secret.Undecryptable", secretName), ex);
         }
         finally
         {
@@ -185,7 +192,7 @@ public sealed class AesGcmSecretStore : ISecretStore
             var key = await File.ReadAllBytesAsync(path, cancellationToken);
             if (key.Length != KeySize)
             {
-                throw new SyncBridgeException(Texts.Format("Secret.KeyMalformed", path, KeySize, key.Length));
+                throw new SyncBridgeException(_localizer.Format("Secret.KeyMalformed", path, KeySize, key.Length));
             }
 
             _key = key;

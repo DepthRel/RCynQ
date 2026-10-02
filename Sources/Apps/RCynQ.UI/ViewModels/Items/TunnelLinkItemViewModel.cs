@@ -24,17 +24,23 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>The last status message.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMessage))]
     private string? _message;
 
     /// <summary>The configured fallback transports.</summary>
     private readonly IReadOnlyList<TransportKind> _fallbackTransports;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TunnelLinkItemViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="link">The link.</param>
-    public TunnelLinkItemViewModel(LinkDto link)
+    public TunnelLinkItemViewModel(ILocalizer localizer, LinkDto link)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentNullException.ThrowIfNull(link);
         LinkId = link.Id;
         Name = link.Name;
@@ -62,17 +68,17 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>Gets the fallback description.</summary>
     public string FallbackText => _fallbackTransports.Count == 0
-        ? Texts.Get("Tunnel.NoFallback")
-        : Texts.Format("Tunnel.Fallback", string.Join(", ", _fallbackTransports.Select(DisplayText.Transport)));
+        ? _localizer.Get("Tunnel.NoFallback")
+        : _localizer.Format("Tunnel.Fallback", string.Join(", ", _fallbackTransports.Select(kind => DisplayText.Transport(_localizer, kind))));
 
     /// <summary>Gets the label of the active transport.</summary>
-    public string ActiveTransportText => DisplayText.Transport(ActiveTransport);
+    public string ActiveTransportText => DisplayText.Transport(_localizer, ActiveTransport);
 
     /// <summary>Gets a value indicating whether the tunnel can be started or stopped (not for Direct).</summary>
     public bool CanToggle => Transport != TransportKind.Direct;
 
     /// <summary>Gets the status label.</summary>
-    public string StatusText => DisplayText.Link(Status);
+    public string StatusText => DisplayText.Link(_localizer, Status);
 
     /// <summary>Gets a value indicating whether the link is online.</summary>
     public bool IsOnline => Status == LinkStatusKind.Online;
@@ -82,6 +88,9 @@ public sealed partial class TunnelLinkItemViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the link is offline.</summary>
     public bool IsOffline => Status == LinkStatusKind.Offline;
+
+    /// <summary>Gets a value indicating whether there is a status message to show under the row.</summary>
+    public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
 
     /// <summary>
     /// Tells the bindings that the texts of the row changed with the language.

@@ -65,7 +65,7 @@ public sealed class HttpPatchSenderTests : IDisposable
             request.Headers[HttpPatchSender.LinkTokenHeader].Should().Be(SyncFixture.Token);
         }
 
-        var manifest = new PatchEnvelopeSerializer(_fixture.Paths).Deserialize(Gunzip(handler.Requests[0].Body));
+        var manifest = new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths).Deserialize(Gunzip(handler.Requests[0].Body));
         manifest.IsSigned.Should().BeTrue();
         _fixture.SourceSigner.Verify(PayloadCanonicalizer.Build(manifest), manifest.Signature, await _fixture.SourceSigner.ExportPublicKeyAsync()).Should().BeTrue();
         Encoding.UTF8.GetString(Gunzip(handler.Requests[1].Body)).Should().Be("v2\n");
@@ -312,10 +312,11 @@ public sealed class HttpPatchSenderTests : IDisposable
     /// <returns>The sender.</returns>
     private HttpPatchSender CreateSender(HttpMessageHandler handler, HttpPatchSenderOptions? options = null)
         => new(
+            TestTexts.English,
             handler,
             _forwards,
             _fixture.SourceSigner,
-            new PatchEnvelopeSerializer(_fixture.Paths),
+            new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths),
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.Token }, new InMemorySecretStore()),
             _fixture.SourceNode,
             options ?? new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero });

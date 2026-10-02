@@ -25,15 +25,20 @@ public sealed class PeerAccessService
     /// <summary>The authorized keys file.</summary>
     private readonly AuthorizedKeysManager _keys;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PeerAccessService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The node options.</param>
     /// <param name="peers">The peer repository.</param>
     /// <param name="keys">The authorized keys file.</param>
-    public PeerAccessService(NodeConfig node, SyncBridgeOptions options, IPeerRepository peers, AuthorizedKeysManager keys)
+    public PeerAccessService(ILocalizer localizer, NodeConfig node, SyncBridgeOptions options, IPeerRepository peers, AuthorizedKeysManager keys)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _peers = peers ?? throw new ArgumentNullException(nameof(peers));
@@ -54,7 +59,7 @@ public sealed class PeerAccessService
         {
             return new PeerAccessResult(
                 false, false, _keys.FilePath, 0, Array.Empty<string>(), Array.Empty<string>(),
-                Texts.Get("Access.NoSshServer"));
+                _localizer.Get("Access.NoSshServer"));
         }
 
         var plan = PeerAccessPlanner.Plan(_node, _options.ListenPort, await _peers.GetAllAsync(cancellationToken), allowGitCommand: !OperatingSystem.IsWindows());
@@ -63,17 +68,17 @@ public sealed class PeerAccessService
 
         if (plan.Entries.Count == 0)
         {
-            return new PeerAccessResult(false, false, _keys.FilePath, 0, missing, waiting, Texts.Get("Access.NobodyNeedsAccess"));
+            return new PeerAccessResult(false, false, _keys.FilePath, 0, missing, waiting, _localizer.Get("Access.NobodyNeedsAccess"));
         }
 
         if (!_keys.CanWrite)
         {
             return new PeerAccessResult(false, true, _keys.FilePath, plan.Entries.Count, missing, waiting,
-                Texts.Format("Access.NeedsAdmin", _keys.FilePath));
+                _localizer.Format("Access.NeedsAdmin", _keys.FilePath));
         }
 
         var changed = await _keys.UpsertAsync(plan.Entries.Select(entry => entry.Line).ToArray(), cancellationToken);
         return new PeerAccessResult(true, false, _keys.FilePath, plan.Entries.Count, missing, waiting,
-            Texts.Format("Access.Allowed", plan.Entries.Count, _keys.FilePath, changed));
+            _localizer.Format("Access.Allowed", plan.Entries.Count, _keys.FilePath, changed));
     }
 }

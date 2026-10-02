@@ -23,6 +23,17 @@
         </Border>
       </StackPanel>
 
+      <StackPanel>
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Data.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10">
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Data.Hint}" />
+            <Button Classes="outline" HorizontalAlignment="Left" IsEnabled="{Binding !IsBusy}"
+                    Content="{loc:Loc Settings.Data.Clean}" Command="{Binding CleanDataCommand}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
     </StackPanel>
   </ScrollViewer>
 </UserControl>

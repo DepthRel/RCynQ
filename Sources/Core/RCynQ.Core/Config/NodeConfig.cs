@@ -43,11 +43,11 @@ public sealed record NodeConfig
         switch (Role)
         {
             case NodeRole.Source when WorkdirPath is null:
-                throw new ArgumentException(Texts.Get("Node.SourceNeedsWorkdir"), nameof(workdirPath));
+                throw LocalizedError.Argument(nameof(workdirPath), "Node.SourceNeedsWorkdir");
             case NodeRole.Dest when RepoPath is null:
-                throw new ArgumentException(Texts.Get("Node.DestNeedsRepo"), nameof(repoPath));
+                throw LocalizedError.Argument(nameof(repoPath), "Node.DestNeedsRepo");
             case NodeRole.Mediator when RepoPath is not null || WorkdirPath is not null:
-                throw new ArgumentException(Texts.Get("Node.MediatorNoPaths"), nameof(role));
+                throw LocalizedError.Argument(nameof(role), "Node.MediatorNoPaths");
         }
     }
 

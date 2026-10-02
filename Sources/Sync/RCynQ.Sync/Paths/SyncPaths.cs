@@ -21,12 +21,19 @@ public sealed class SyncPaths
     private readonly NodeConfig _node;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SyncPaths"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="appData">The application data factory.</param>
     /// <param name="node">The local node.</param>
-    public SyncPaths(IAppDataFactory appData, NodeConfig node)
+    public SyncPaths(ILocalizer localizer, IAppDataFactory appData, NodeConfig node)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _appData = appData;
         _node = node;
     }
@@ -36,7 +43,7 @@ public sealed class SyncPaths
     /// </summary>
     /// <exception cref="SyncBridgeException">The node is a Mediator.</exception>
     public string Workdir => Path.GetFullPath(_node.EffectiveWorkdir
-        ?? throw new SyncBridgeException(Texts.Format("Node.NoWorkingTree", _node.Role)));
+        ?? throw new SyncBridgeException(_localizer.Format("Node.NoWorkingTree", _node.Role)));
 
     /// <summary>
     /// Gets the sync base directory.

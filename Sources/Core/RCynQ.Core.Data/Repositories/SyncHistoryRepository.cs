@@ -71,4 +71,11 @@ public sealed class SyncHistoryRepository : ISyncHistoryRepository
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.SyncHistory.Where(entry => entry.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
     }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset recordedBeforeUtc, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.SyncHistory.Where(entry => entry.TimestampUtc < recordedBeforeUtc).ExecuteDeleteAsync(cancellationToken);
+    }
 }

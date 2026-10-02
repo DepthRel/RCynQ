@@ -23,6 +23,9 @@ public static class DiagnosticsServiceCollectionExtensions
     public static IServiceCollection AddRCynQDiagnostics(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton<ILocalEndpointProbe, HttpLocalEndpointProbe>();
         services.TryAddSingleton<ILocalEndpointController, ExternalLocalEndpointController>();
 
@@ -30,7 +33,7 @@ public static class DiagnosticsServiceCollectionExtensions
         {
             typeof(GitInstalledCheck), typeof(GitVersionCheck), typeof(SshClientCheck), typeof(SshdListeningCheck),
             typeof(WorkdirWritableCheck), typeof(RepoValidCheck), typeof(SnapshotIntegrityCheck), typeof(NeighborReachabilityCheck),
-            typeof(TransportAvailabilityCheck), typeof(AuthorizedKeysFormatCheck), typeof(PatchEndpointLocalCheck), typeof(ChainLinkConfigCheck)
+            typeof(CounterpartReachabilityCheck), typeof(TransportAvailabilityCheck), typeof(AuthorizedKeysFormatCheck), typeof(PatchEndpointLocalCheck), typeof(ChainLinkConfigCheck)
         })
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IDiagnosticCheck), check));
@@ -41,6 +44,7 @@ public static class DiagnosticsServiceCollectionExtensions
             services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IAutoFixHandler), handler));
         }
 
+        services.TryAddSingleton<IssuedFixRegistry>();
         services.TryAddSingleton<IDiagnosticsRunner>(provider => ActivatorUtilities.CreateInstance<DiagnosticsRunner>(
             provider,
             provider.GetService<IDiagnosticRunRepository>() ?? (object)NoRunRepository.Instance));
@@ -62,5 +66,8 @@ public static class DiagnosticsServiceCollectionExtensions
         /// <inheritdoc />
         public Task<IReadOnlyList<DiagnosticsEvent>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiagnosticsEvent>>(Array.Empty<DiagnosticsEvent>());
+
+        /// <inheritdoc />
+        public Task<int> DeleteOlderThanAsync(DateTimeOffset madeBeforeUtc, CancellationToken cancellationToken = default) => Task.FromResult(0);
     }
 }

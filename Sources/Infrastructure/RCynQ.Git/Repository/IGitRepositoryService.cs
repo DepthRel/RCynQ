@@ -296,10 +296,3 @@ public interface IGitRepositoryService
     /// <exception cref="GitExecutionException">git reported an error, for example an unreachable remote.</exception>
     Task<string?> GetRemoteHeadBranchAsync(string directory, string remoteUrl, string? sshCommand, CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// A file that differs between two commits.
-/// </summary>
-/// <param name="Deleted"><see langword="true"/> when the file no longer exists in the newer commit.</param>
-/// <param name="Path">The path relative to the root of the repository, with <c>/</c> separators.</param>
-public sealed record GitPathChange(bool Deleted, string Path);

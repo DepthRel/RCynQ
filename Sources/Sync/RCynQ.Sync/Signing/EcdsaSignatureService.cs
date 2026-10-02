@@ -36,11 +36,18 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
     private ECDsa? _key;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EcdsaSignatureService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="secrets">The secret store.</param>
-    public EcdsaSignatureService(ISecretStore secrets)
+    public EcdsaSignatureService(ILocalizer localizer, ISecretStore secrets)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _secrets = secrets;
     }
 
@@ -122,7 +129,7 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
                 catch (Exception ex) when (ex is FormatException or CryptographicException)
                 {
                     key.Dispose();
-                    throw new SyncBridgeException(Texts.Get("Signing.KeyMalformed"), ex);
+                    throw new SyncBridgeException(_localizer.Get("Signing.KeyMalformed"), ex);
                 }
             }
 

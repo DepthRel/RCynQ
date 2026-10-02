@@ -14,33 +14,38 @@ public sealed class ChainLinkConfigCheck : DiagnosticCheckBase
     /// <summary>The link token provider.</summary>
     private readonly LinkTokenProvider _tokens;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ChainLinkConfigCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="tokens">The link token provider.</param>
-    public ChainLinkConfigCheck(LinkTokenProvider tokens)
+    public ChainLinkConfigCheck(ILocalizer localizer, LinkTokenProvider tokens)
         : base("ChainLinkConfig", AllRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _tokens = tokens;
     }
 
     /// <inheritdoc />
     public override async Task<DiagnosticResult> RunAsync(DiagnosticContext context, CancellationToken cancellationToken = default)
     {
-        var problems = SyncBridgeOptionsValidator.Validate(context.Options).ToList();
+        var problems = SyncBridgeOptionsValidator.Validate(context.Options, _localizer).ToList();
         var chain = context.Chain;
         if (context.Node.Role == NodeRole.Mediator)
         {
             if (chain.Count == 0)
             {
-                problems.Add(Texts.Get("Diag.Chain.MediatorLinks"));
+                problems.Add(_localizer.Get("Diag.Chain.MediatorLinks"));
             }
         }
         else
         {
             if (chain.Count == 0)
             {
-                problems.Add(Texts.Get("Diag.Chain.None"));
+                problems.Add(_localizer.Get("Diag.Chain.None"));
             }
             else
             {
@@ -48,31 +53,31 @@ public sealed class ChainLinkConfigCheck : DiagnosticCheckBase
                 var endpoint = chain[^1];
                 if (endpoint.Peer.Role != counterpart)
                 {
-                    problems.Add(Texts.Format("Diag.Chain.LastLink", endpoint.Name, counterpart));
+                    problems.Add(_localizer.Format("Diag.Chain.LastLink", endpoint.Name, counterpart));
                 }
 
                 if (endpoint.Peer.SigningPublicKey is null)
                 {
-                    problems.Add(Texts.Format("Diag.Chain.NoSigningKey", endpoint.Peer.Id));
+                    problems.Add(_localizer.Format("Diag.Chain.NoSigningKey", endpoint.Peer.Id));
                 }
 
                 problems.AddRange(chain.Take(chain.Count - 1).Where(link => link.Peer.Role != NodeRole.Mediator)
-                    .Select(link => Texts.Format("Diag.Chain.Intermediate", link.Name)));
+                    .Select(link => _localizer.Format("Diag.Chain.Intermediate", link.Name)));
             }
 
             var token = await _tokens.GetTokenAsync(cancellationToken);
             if (string.IsNullOrEmpty(token))
             {
-                problems.Add(Texts.Get("Diag.Chain.NoToken"));
+                problems.Add(_localizer.Get("Diag.Chain.NoToken"));
             }
             else if (token.Length < LinkTokenProvider.MinimumLength)
             {
-                problems.Add(Texts.Format("Diag.Chain.ShortToken", LinkTokenProvider.MinimumLength));
+                problems.Add(_localizer.Format("Diag.Chain.ShortToken", LinkTokenProvider.MinimumLength));
             }
         }
 
         return problems.Count == 0
-            ? Pass($"{chain.Count} link(s) configured correctly.")
-            : Fail(string.Join(" ", problems), Texts.Get("Diag.Chain.Fix"));
+            ? Pass(_localizer.Format("Diag.Chain.Ok", chain.Count))
+            : Fail(string.Join(" ", problems), _localizer.Get("Diag.Chain.Fix"));
     }
 }

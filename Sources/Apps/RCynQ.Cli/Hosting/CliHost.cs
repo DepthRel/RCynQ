@@ -1,6 +1,7 @@
 using CliFx;
 using CliFx.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Hosting;
 
@@ -18,13 +19,16 @@ public static class CliHost
     /// Creates the application.
     /// </summary>
     /// <param name="contexts">The node context factory handed to commands.</param>
+    /// <param name="localizer">The localizer of the messages the commands print.</param>
     /// <param name="console">The console, or <see langword="null"/> for the system console.</param>
     /// <returns>The application.</returns>
-    public static CliApplication CreateApplication(INodeContextFactory contexts, IConsole? console = null)
+    public static CliApplication CreateApplication(INodeContextFactory contexts, ILocalizer localizer, IConsole? console = null)
     {
         ArgumentNullException.ThrowIfNull(contexts);
+        ArgumentNullException.ThrowIfNull(localizer);
         var services = new ServiceCollection();
         services.AddSingleton(contexts);
+        services.AddSingleton(localizer);
         foreach (var command in typeof(CliHost).Assembly.GetTypes().Where(type => typeof(ICommand).IsAssignableFrom(type) && type is { IsAbstract: false, IsInterface: false }))
         {
             services.AddTransient(command);

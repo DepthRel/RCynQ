@@ -11,6 +11,7 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Localization;
+using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Signing;
@@ -81,8 +82,14 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     private readonly HttpPatchSenderOptions _options;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="HttpPatchSender"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="handler">The HTTP handler; production code uses a handler with the system proxy disabled.</param>
     /// <param name="forwards">The forward manager.</param>
     /// <param name="signatures">The signature service.</param>
@@ -94,7 +101,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// Creates the handler used for a peer that accepts connections on its own TLS port, given its pinned
     /// fingerprint; <see langword="null"/> uses a handler that trusts that certificate and no other.
     /// </param>
+    /// <param name="hostKeys">
+    /// Holds SSH connections to the pinned host keys of the peers, or <see langword="null"/> to check nothing.
+    /// </param>
     public HttpPatchSender(
+        ILocalizer localizer,
         HttpMessageHandler handler,
         ILocalForwardManager forwards,
         ISignatureService signatures,
@@ -102,9 +113,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         LinkTokenProvider tokens,
         NodeConfig node,
         HttpPatchSenderOptions options,
-        Func<string, HttpMessageHandler>? pinnedHandlers = null)
+        Func<string, HttpMessageHandler>? pinnedHandlers = null,
+        IPinnedHostKeyGuard? hostKeys = null)
     {
-        _links = new PeerLinkFactory(handler, forwards, pinnedHandlers);
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _links = new PeerLinkFactory(handler, forwards, pinnedHandlers, hostKeys);
         _signatures = signatures;
         _serializer = serializer;
         _tokens = tokens;
@@ -137,7 +150,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         var token = await _tokens.GetTokenAsync(cancellationToken);
         if (string.IsNullOrEmpty(token))
         {
-            throw new SyncBridgeException(Texts.Get("Send.NoToken"));
+            throw new SyncBridgeException(_localizer.Get("Send.NoToken"));
         }
 
         var uploads = UploadsOf(envelope);
@@ -156,7 +169,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             {
                 if (!uploads.TryGetValue(hash, out var change))
                 {
-                    throw new SyncBridgeException(Texts.Format("Send.UnknownContent", envelope.Id, hash));
+                    throw new SyncBridgeException(_localizer.Format("Send.UnknownContent", envelope.Id, hash));
                 }
 
                 await WithRetryAsync(
@@ -176,9 +189,9 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         {
             var destination = route.UsesTls ? $"{route.Endpoint.Peer.Id} ({route.RemoteHost}:{route.RemotePort})" : $"{route.Target}";
             var hint = route.UsesTls && ex.GetBaseException() is System.Security.Authentication.AuthenticationException
-                ? Texts.Get("Send.CertificateMismatch")
+                ? _localizer.Get("Send.CertificateMismatch")
                 : string.Empty;
-            throw new SyncBridgeException(Texts.Format("Send.NotDelivered", envelope.Id, destination, ex.Message, hint), ex);
+            throw new SyncBridgeException(_localizer.Format("Send.NotDelivered", envelope.Id, destination, _localizer.Describe(ex), hint), ex);
         }
     }
 
@@ -200,7 +213,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
         {
             if (change.SizeBytes > _options.MaxFileBytes)
             {
-                throw new SyncBridgeException(Texts.Format("Send.FileTooLarge", change.Path, change.SizeBytes / (1024 * 1024), _options.MaxFileBytes / (1024 * 1024)));
+                throw new SyncBridgeException(_localizer.Format("Send.FileTooLarge", change.Path, change.SizeBytes / (1024 * 1024), _options.MaxFileBytes / (1024 * 1024)));
             }
 
             uploads.TryAdd(change.Sha256!, change);
@@ -232,7 +245,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             // never with the rejection body a current peer sends.
             if (response.StatusCode == HttpStatusCode.NotFound && !IsRejectionBody(text))
             {
-                throw new SyncBridgeException(Texts.Format("Send.OlderPeer", envelope.Id));
+                throw new SyncBridgeException(_localizer.Format("Send.OlderPeer", envelope.Id));
             }
 
             if (!response.IsSuccessStatusCode)
@@ -293,7 +306,7 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             var rejection = TryParseRejection(text);
             if (attempt > 1 && rejection?.Reason == PatchRejectionReason.Replay)
             {
-                return new PatchApplyResult(patchId, PatchStatus.Pending, 0, Array.Empty<ConflictFile>(), Texts.Get("Send.ResponseLost"));
+                return new PatchApplyResult(patchId, PatchStatus.Pending, 0, Array.Empty<ConflictFile>(), _localizer.Get("Send.ResponseLost"));
             }
 
             throw Refusal(patchId, response, text);
@@ -352,11 +365,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <param name="response">The response.</param>
     /// <param name="text">The body text.</param>
     /// <returns>The exception.</returns>
-    private static SyncBridgeException Refusal(Guid patchId, HttpResponseMessage response, string text)
+    private SyncBridgeException Refusal(Guid patchId, HttpResponseMessage response, string text)
     {
         var rejection = TryParseRejection(text);
         var reason = rejection is null ? text : $"{rejection.Reason}: {rejection.Error}";
-        return new SyncBridgeException(Texts.Format("Send.Refused", patchId, (int)response.StatusCode, reason).Trim());
+        return new SyncBridgeException(_localizer.Format("Send.Refused", patchId, (int)response.StatusCode, reason).Trim());
     }
 
     /// <summary>
@@ -367,17 +380,17 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <param name="patchId">The patch identifier.</param>
     /// <returns>The body.</returns>
     /// <exception cref="SyncBridgeException">The body is empty or invalid.</exception>
-    private static T Parse<T>(string text, Guid patchId)
+    private T Parse<T>(string text, Guid patchId)
         where T : class
     {
         try
         {
             return JsonSerializer.Deserialize<T>(text, JsonOptions)
-                ?? throw new SyncBridgeException(Texts.Format("Send.EmptyResult", patchId));
+                ?? throw new SyncBridgeException(_localizer.Format("Send.EmptyResult", patchId));
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException(Texts.Format("Send.InvalidResult", patchId, ex.Message), ex);
+            throw new SyncBridgeException(_localizer.Format("Send.InvalidResult", patchId, _localizer.Describe(ex)), ex);
         }
     }
 

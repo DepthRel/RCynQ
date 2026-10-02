@@ -49,7 +49,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     private int _tlsPort;
 
     /// <summary>The Git command runner.</summary>
-    private readonly GitCommandRunner _git = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _git = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>The forward manager, replaced by a direct connection.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
@@ -401,7 +401,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     /// Gets the sync paths of the simulated Source.
     /// </summary>
     /// <returns>The paths.</returns>
-    private SyncPaths SourcePaths() => new(SourceAppData(), SourceNode());
+    private SyncPaths SourcePaths() => new(TestTexts.English, SourceAppData(), SourceNode());
 
     /// <summary>
     /// Gets the sync base manager of the simulated Source, shared by every channel of a test.
@@ -409,17 +409,18 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     /// <returns>The manager.</returns>
     private SyncBaseManager SourceSyncBase()
     {
-        var git = new GitRepositoryService(_git);
+        var git = new GitRepositoryService(TestTexts.English, _git);
         return _sourceSyncBase ??= new SyncBaseManager(
+            TestTexts.English,
             SourceNode(),
             SourcePaths(),
-            new GitSyncBaseLocator(SourceNode(), git),
+            new GitSyncBaseLocator(TestTexts.English, SourceNode(), git),
             git,
             new SyncBaseMetadataStore(SourceAppData()),
             new DefaultFileManifestBuilder(new SnapshotFilter()),
             new RCynQ.Git.Hashing.DefaultStateHasher(),
             Substitute.For<ISnapshotRepository>(),
-            new PathUtility(),
+            new PathUtility(TestTexts.English),
             _sourceLock,
             TimeProvider.System);
     }
@@ -450,19 +451,21 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
         var links = Substitute.For<IChainLinkRepository>();
         links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(chain);
         var bundles = new GitBundleClient(
+            TestTexts.English,
             new PeerLinkFactory(new SocketsHttpHandler { UseProxy = false }, _forwards),
             node,
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = token }, new InMemorySecretStore()));
         return new GitChannelService(
+            TestTexts.English,
             node,
             links,
-            new GitRepositoryService(_git),
+            new GitRepositoryService(TestTexts.English, _git),
             new SshCommandBuilder(new SshClientOptions()),
             bundles,
             SourceAppData(),
             SourceSyncBase(),
             SourcePaths(),
-            new PathUtility(),
+            new PathUtility(TestTexts.English),
             _sourceLock);
     }
 
@@ -516,7 +519,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     {
         try
         {
-            return (await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
+            return (await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
         }
         catch (RCynQ.Core.Exceptions.SyncBridgeException)
         {

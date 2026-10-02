@@ -125,6 +125,11 @@ public interface IServiceApiClient
     /// <returns>A task that completes when the request was accepted.</returns>
     Task ShutdownServiceAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Removes the finished data of the node whatever its age: patches, history, diagnostics runs, backups.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>What was removed.</returns>
+    Task<DataCleanupReport> CleanDataAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Probes the network and SSH environment for an export.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The report.</returns>

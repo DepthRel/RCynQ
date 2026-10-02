@@ -51,9 +51,12 @@ public class ServiceStartupOrderTests
             };
 
             var status = await PollHealthAsync(client, TimeSpan.FromSeconds(15), cancellationToken);
-
-            pipeline.WasEntered.Should().BeTrue("the role pipeline start must have been triggered");
             status.Should().Be(HttpStatusCode.OK, "the listener must be up before the role pipeline finishes");
+
+            // The listener is bound a moment before the host reaches the pipeline, so the start is awaited, not sampled.
+            var entered = async () => await pipeline.Entered.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+            await entered.Should().NotThrowAsync("the role pipeline start must have been triggered");
+            starting.IsCompleted.Should().BeFalse("the pipeline is still blocked, so the health answer came while it was starting");
 
             pipeline.Release();
             await starting;
@@ -159,8 +162,11 @@ public class ServiceStartupOrderTests
         /// <summary>Signals that the start may finish.</summary>
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <summary>Gets a value indicating whether <see cref="StartAsync"/> was entered.</summary>
-        public bool WasEntered { get; private set; }
+        /// <summary>Signals that <see cref="StartAsync"/> was entered.</summary>
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Gets a task that completes once <see cref="StartAsync"/> was entered.</summary>
+        public Task Entered => _entered.Task;
 
         /// <inheritdoc />
         public NodeRole Role => NodeRole.Source;
@@ -176,7 +182,7 @@ public class ServiceStartupOrderTests
         /// <inheritdoc />
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            WasEntered = true;
+            _entered.TrySetResult();
             await _release.Task.WaitAsync(cancellationToken);
         }
 

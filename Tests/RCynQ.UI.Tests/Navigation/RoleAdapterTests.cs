@@ -34,9 +34,9 @@ public sealed class RoleAdapterTests
     [Fact]
     public void Apply_Moves_Selection_Away_From_Hidden_Tab()
     {
-        var page = Substitute.For<PageViewModelBase>();
-        var overview = new NavigationItemViewModel(TabKey.Overview, "Icon.Home", page);
-        var sync = new NavigationItemViewModel(TabKey.Sync, "Icon.Sync", page) { IsSelected = true };
+        var page = Substitute.For<PageViewModelBase>(TestTexts.Russian);
+        var overview = new NavigationItemViewModel(TestTexts.Russian, TabKey.Overview, "Icon.Home", page);
+        var sync = new NavigationItemViewModel(TestTexts.Russian, TabKey.Sync, "Icon.Sync", page) { IsSelected = true };
 
         var selected = new RoleAdapter().Apply(new[] { overview, sync }, NodeRole.Mediator);
 

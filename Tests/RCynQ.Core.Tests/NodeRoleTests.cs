@@ -60,4 +60,39 @@ public class NodeRoleTests
         TransportKindValidation.TryParse("amneziawg", true, out var kind).Should().BeTrue();
         kind.Should().Be(TransportKind.AmneziaWG);
     }
+
+    /// <summary>
+    /// Verifies that only member names are parsed: a number or a list of names is not a name, even when the number is the
+    /// value of a member.
+    /// </summary>
+    /// <param name="text">The input text.</param>
+    [Theory]
+    [InlineData("42")]
+    [InlineData("1")]
+    [InlineData("-1")]
+    [InlineData("Source,Dest")]
+    [InlineData("Source, Mediator")]
+    public void Validation_Rejects_Numbers_And_Lists(string text)
+    {
+        var parse = () => NodeRoleValidation.Parse(text);
+
+        parse.Should().Throw<ArgumentException>();
+        NodeRoleValidation.TryParse(text, true, out var role).Should().BeFalse();
+        role.Should().Be(default(NodeRole));
+        PatchStatusValidation.TryParse(text, true, out _).Should().BeFalse();
+        TransportKindValidation.TryParse(text, true, out _).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that the case of a name matters when it is asked to, and that surrounding white space does not.
+    /// </summary>
+    [Fact]
+    public void Validation_Honours_Case_And_Trims()
+    {
+        NodeRoleValidation.TryParse("source", false, out _).Should().BeFalse();
+        NodeRoleValidation.TryParse("Source", false, out var exact).Should().BeTrue();
+        exact.Should().Be(NodeRole.Source);
+        NodeRoleValidation.TryParse("  dest ", true, out var trimmed).Should().BeTrue();
+        trimmed.Should().Be(NodeRole.Dest);
+    }
 }

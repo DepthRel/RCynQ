@@ -48,7 +48,7 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _dataRoot;
 
     /// <summary>Produces the connection status text in the current language.</summary>
-    private Func<string> _connectionText = () => Texts.Get("Main.Connecting");
+    private Func<string> _connectionText;
 
     /// <summary>Produces the window title in the current language.</summary>
     private Func<string> _nodeTitle = () => "RCynQ";
@@ -76,9 +76,13 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasStartupError))]
     private string? _startupError;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="api">The API client.</param>
     /// <param name="events">The live event stream.</param>
     /// <param name="dispatcher">The UI dispatcher.</param>
@@ -94,6 +98,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="logs">The logs page.</param>
     /// <param name="settings">The settings page.</param>
     public MainViewModel(
+        ILocalizer localizer,
         IServiceApiClient api,
         INodeEventStream events,
         IUiDispatcher dispatcher,
@@ -109,6 +114,8 @@ public sealed partial class MainViewModel : ObservableObject
         LogsViewModel logs,
         SettingsViewModel settings)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _connectionText = () => _localizer.Get("Main.Connecting");
         _api = api;
         _events = events;
         _dispatcher = dispatcher;
@@ -126,14 +133,14 @@ public sealed partial class MainViewModel : ObservableObject
 
         _allTabs = new List<NavigationItemViewModel>
         {
-            new(TabKey.Overview, "Icon.Home", overview),
-            new(TabKey.RoleAndNodes, "Icon.Nodes", roleAndNodes),
-            new(TabKey.Sync, "Icon.Upload", sync),
-            new(TabKey.Tunnel, "Icon.Tunnel", tunnel),
-            new(TabKey.Diagnostics, "Icon.Stethoscope", diagnostics),
-            new(TabKey.Branches, "Icon.Branch", branches),
-            new(TabKey.Logs, "Icon.Logs", logs),
-            new(TabKey.Settings, "Icon.Settings", settings)
+            new(_localizer, TabKey.Overview, "Icon.Home", overview),
+            new(_localizer, TabKey.RoleAndNodes, "Icon.Nodes", roleAndNodes),
+            new(_localizer, TabKey.Sync, "Icon.Upload", sync),
+            new(_localizer, TabKey.Tunnel, "Icon.Tunnel", tunnel),
+            new(_localizer, TabKey.Diagnostics, "Icon.Stethoscope", diagnostics),
+            new(_localizer, TabKey.Branches, "Icon.Branch", branches),
+            new(_localizer, TabKey.Logs, "Icon.Logs", logs),
+            new(_localizer, TabKey.Settings, "Icon.Settings", settings)
         };
 
         foreach (var tab in _allTabs)
@@ -149,7 +156,7 @@ public sealed partial class MainViewModel : ObservableObject
             _serviceStatus = status;
             OnPropertyChanged(nameof(ServiceText));
         });
-        Texts.Localizer.LanguageChanged += (_, _) => _dispatcher.Post(OnLanguageChanged);
+        _localizer.LanguageChanged += (_, _) => _dispatcher.Post(OnLanguageChanged);
         _events.LinkStateChanged += (_, evt) => _dispatcher.Post(() => OnLinkStateChanged(evt));
         _events.PatchChanged += (_, evt) => _dispatcher.Post(() => OnPatchChanged(evt));
         _events.DiagnosticsCompleted += (_, evt) => _dispatcher.Post(() => OnDiagnosticsCompleted(evt));
@@ -193,7 +200,7 @@ public sealed partial class MainViewModel : ObservableObject
     public string NodeTitle => _nodeTitle();
 
     /// <summary>Gets the warning shown when the installation was copied from another computer together with its data.</summary>
-    public string? InstallationWarning => _installationCopiedFrom is null ? null : Texts.Format("Main.InstallationCopied", _installationCopiedFrom);
+    public string? InstallationWarning => _installationCopiedFrom is null ? null : _localizer.Format("Main.InstallationCopied", _installationCopiedFrom);
 
     /// <summary>Gets all tabs in display order; the view moves tabs that do not fit into the "…" menu.</summary>
     public ObservableCollection<NavigationItemViewModel> Tabs { get; } = new();
@@ -220,7 +227,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        SetConnectionText(() => Texts.Get("Main.StartingService"));
+        SetConnectionText(() => _localizer.Get("Main.StartingService"));
         var start = await _controller.EnsureRunningAsync();
         if (start.IsConfigurationError)
         {
@@ -244,7 +251,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is ServiceApiException or HttpRequestException)
         {
             _initialized = false;
-            SetConnectionText(start.IsRunning ? () => Texts.Format("Main.ServiceUnreachable", ex.Message) : () => start.Message);
+            SetConnectionText(start.IsRunning ? () => _localizer.Format("Main.ServiceUnreachable", _localizer.Describe(ex)) : () => start.Message);
             StartupError = ConnectionText;
         }
 
@@ -319,9 +326,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     /// <param name="status">The status.</param>
     /// <returns>The text.</returns>
-    private static string FormatService(ServiceControllerStatus status)
+    private string FormatService(ServiceControllerStatus status)
     {
-        var text = DisplayText.Service(status);
+        var text = DisplayText.Service(_localizer, status);
         return text.Length == 0 ? string.Empty : "· " + text;
     }
 
@@ -441,8 +448,8 @@ public sealed partial class MainViewModel : ObservableObject
         Setup.Load(LocalConfigFile.TryLoad(_controller.ConfigPath), error);
         StartupError = null;
         IsSetupVisible = true;
-        SetNodeTitle(() => Texts.Get("Main.NodeTitleSetup"));
-        SetConnectionText(error is null ? () => Texts.Get("Main.SetupNeeded") : () => Texts.Get("Main.ConfigRejected"));
+        SetNodeTitle(() => _localizer.Get("Main.NodeTitleSetup"));
+        SetConnectionText(error is null ? () => _localizer.Get("Main.SetupNeeded") : () => _localizer.Get("Main.ConfigRejected"));
     }
 
     /// <summary>
@@ -454,7 +461,7 @@ public sealed partial class MainViewModel : ObservableObject
         IsSetupVisible = false;
         if (_controller.IsManaged)
         {
-            SetConnectionText(() => Texts.Get("Main.RestartingService"));
+            SetConnectionText(() => _localizer.Get("Main.RestartingService"));
             var restart = await _controller.RestartAsync();
             if (restart.IsConfigurationError)
             {
@@ -473,12 +480,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <returns>A task representing the operation.</returns>
     private async Task RestartServiceAsync()
     {
-        SetConnectionText(() => Texts.Get("Main.RestartingNewConfig"));
+        SetConnectionText(() => _localizer.Get("Main.RestartingNewConfig"));
         var result = await _controller.RestartAsync();
         if (result.Outcome == ServiceStartOutcome.NotManaged)
         {
             SetConnectionText(() => result.Message);
-            RoleAndNodes.InfoMessage = Texts.Format("Main.RoleSaved", result.Message);
+            RoleAndNodes.InfoMessage = _localizer.Format("Main.RoleSaved", result.Message);
             return;
         }
 
@@ -490,7 +497,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _initialized = false;
         await InitializeAsync();
-        RoleAndNodes.InfoMessage = result.IsRunning ? Texts.Get("Main.RoleApplied") : result.Message;
+        RoleAndNodes.InfoMessage = result.IsRunning ? _localizer.Get("Main.RoleApplied") : result.Message;
     }
 
     /// <summary>
@@ -556,6 +563,6 @@ public sealed partial class MainViewModel : ObservableObject
     private void SetConnected(bool connected)
     {
         IsConnected = connected;
-        SetConnectionText(connected ? () => Texts.Get("Main.Connected") : () => Texts.Get("Main.EventsReconnecting"));
+        SetConnectionText(connected ? () => _localizer.Get("Main.Connected") : () => _localizer.Get("Main.EventsReconnecting"));
     }
 }

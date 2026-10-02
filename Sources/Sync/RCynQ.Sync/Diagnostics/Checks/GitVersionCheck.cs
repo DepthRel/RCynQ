@@ -21,14 +21,19 @@ public sealed partial class GitVersionCheck : DiagnosticCheckBase
     /// <summary>The git options.</summary>
     private readonly GitOptions _git;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitVersionCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processes">The process runner.</param>
     /// <param name="git">The git options.</param>
-    public GitVersionCheck(IProcessRunner processes, GitOptions git)
+    public GitVersionCheck(ILocalizer localizer, IProcessRunner processes, GitOptions git)
         : base("GitVersion", PatchRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processes = processes;
         _git = git;
     }
@@ -39,18 +44,18 @@ public sealed partial class GitVersionCheck : DiagnosticCheckBase
         var output = await TryGetVersionOutputAsync(_processes, _git, cancellationToken);
         if (output is null)
         {
-            return Fail(Texts.Get("Diag.GitVersion.NotAvailable"), Texts.Get("Diag.GitVersion.Install"));
+            return Fail(_localizer.Get("Diag.GitVersion.NotAvailable"), _localizer.Get("Diag.GitVersion.Install"));
         }
 
         var version = ParseVersion(output);
         if (version is null)
         {
-            return Fail(Texts.Format("Diag.GitVersion.Unrecognized", output));
+            return Fail(_localizer.Format("Diag.GitVersion.Unrecognized", output));
         }
 
         return version >= MinimumVersion
-            ? Pass(Texts.Format("Diag.GitVersion.Ok", version))
-            : Fail(Texts.Format("Diag.GitVersion.Old", version, MinimumVersion), Texts.Get("Diag.GitVersion.Upgrade"));
+            ? Pass(_localizer.Format("Diag.GitVersion.Ok", version))
+            : Fail(_localizer.Format("Diag.GitVersion.Old", version, MinimumVersion), _localizer.Get("Diag.GitVersion.Upgrade"));
     }
 
     /// <summary>

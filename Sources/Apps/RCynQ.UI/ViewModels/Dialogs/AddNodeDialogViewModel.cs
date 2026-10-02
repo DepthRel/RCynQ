@@ -12,6 +12,20 @@ namespace RCynQ.UI.ViewModels.Dialogs;
 /// </summary>
 public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AddNodeDialogViewModel"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public AddNodeDialogViewModel(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        Transports = TransportOption.CreateAll(localizer);
+        SelectedTransport = Transports[0];
+    }
+
     /// <summary>The peer node identifier.</summary>
     [ObservableProperty]
     private string _nodeId = string.Empty;
@@ -43,7 +57,7 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
     /// <summary>The transport: how the neighbour is reachable over the network.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsConfigPath), nameof(Transport))]
-    private TransportOption _selectedTransport = TransportOption.All[0];
+    private TransportOption _selectedTransport = null!;
 
     /// <summary>The AmneziaWG configuration path.</summary>
     [ObservableProperty]
@@ -57,7 +71,7 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
     public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
 
     /// <summary>Gets the selectable transports.</summary>
-    public IReadOnlyList<TransportOption> Transports { get; } = TransportOption.All;
+    public IReadOnlyList<TransportOption> Transports { get; }
 
     /// <summary>Gets the selected transport.</summary>
     public TransportKind Transport => SelectedTransport.Value;
@@ -112,14 +126,14 @@ public sealed partial class AddNodeDialogViewModel : DialogViewModelBase
         {
             if (!Core.Ids.NodeId.TryParse(NodeId.Trim(), out _))
             {
-                throw new ArgumentException(Texts.Get("AddNode.InvalidNodeId"));
+                throw new ArgumentException(_localizer.Get("AddNode.InvalidNodeId"));
             }
 
             SyncBridgeOptionsValidator.ToChainLink(ToOptions());
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException)
         {
-            Error = ex.Message;
+            Error = _localizer.Describe(ex);
             return;
         }
 

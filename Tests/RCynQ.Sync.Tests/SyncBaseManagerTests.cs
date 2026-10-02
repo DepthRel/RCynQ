@@ -21,7 +21,7 @@ public sealed class SyncBaseManagerTests : IDisposable
     private readonly SyncFixture _fixture = new();
 
     /// <summary>The Git runner.</summary>
-    private readonly GitCommandRunner _git = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _git = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>
     /// Verifies that a Git working tree that was never pulled explains why it is not ready and does not offer a manual baseline.
@@ -526,7 +526,7 @@ public sealed class SyncBaseManagerTests : IDisposable
     {
         try
         {
-            return (await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
+            return (await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
         }
         catch (SyncBridgeException)
         {

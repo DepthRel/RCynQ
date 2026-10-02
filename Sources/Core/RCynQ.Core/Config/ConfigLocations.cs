@@ -141,7 +141,7 @@ public static class ConfigLocations
 
     /// <summary>
     /// Makes the storage settings absolute so every component uses the same files: resolves <c>DataRoot</c> and points
-    /// the SSH <c>known_hosts</c> file into the data directory unless it was configured.
+    /// the SSH <c>known_hosts</c> file and the SSH client configuration into the data directory unless they were configured.
     /// </summary>
     /// <param name="options">The node options to update.</param>
     /// <param name="configPath">The configuration file, or <see langword="null"/>.</param>
@@ -153,6 +153,11 @@ public static class ConfigLocations
         if (string.IsNullOrWhiteSpace(options.Ssh.KnownHostsFile))
         {
             options.Ssh.KnownHostsFile = AppDataPaths.FromRoot(options.DataRoot).KnownHostsPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Ssh.ConfigFile))
+        {
+            options.Ssh.ConfigFile = AppDataPaths.FromRoot(options.DataRoot).SshConfigPath;
         }
     }
 }

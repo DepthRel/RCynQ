@@ -78,6 +78,7 @@ public sealed class PublicEndpointMiddlewareTests
         context.Response.Body = new MemoryStream();
 
         var middleware = new PublicEndpointMiddleware(
+            TestTexts.English,
             _ =>
             {
                 reached = true;

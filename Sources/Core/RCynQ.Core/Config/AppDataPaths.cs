@@ -102,6 +102,11 @@ public sealed record AppDataPaths
     public string KnownHostsPath => Path.Combine(KeysDirectory, "known_hosts");
 
     /// <summary>
+    /// Gets the SSH client configuration file RCynQ writes for its own connections.
+    /// </summary>
+    public string SshConfigPath => Path.Combine(KeysDirectory, "ssh_config");
+
+    /// <summary>
     /// Gets the directory holding the node's TLS certificate for the direct endpoint.
     /// </summary>
     public string TlsDirectory => Path.Combine(KeysDirectory, "tls");

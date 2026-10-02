@@ -22,11 +22,11 @@ public static class GitEndpoints
     /// <returns>The same route builder.</returns>
     public static IEndpointRouteBuilder MapGitEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet(ApiRoutes.GitBranch, async (NodeConfig node, GitChannelService git, CancellationToken ct) =>
+        app.MapGet(ApiRoutes.GitBranch, async (NodeConfig node, GitChannelService git, ILocalizer localizer, CancellationToken ct) =>
         {
             if (!RoleCapabilities.For(node.Role).ShowsBranchesTab)
             {
-                return Results.NotFound(new ErrorResponse(Texts.Format("Node.NoWorkingTree", node.Role)));
+                return Results.NotFound(new ErrorResponse(localizer.Format("Node.NoWorkingTree", node.Role)));
             }
 
             try
@@ -35,19 +35,19 @@ public static class GitEndpoints
             }
             catch (SyncBridgeException ex)
             {
-                return Results.BadRequest(new ErrorResponse(ex.Message));
+                return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
             }
         });
 
-        app.MapPost(ApiRoutes.GitFetch, async (NodeConfig node, GitChannelService git, CancellationToken ct) =>
+        app.MapPost(ApiRoutes.GitFetch, async (NodeConfig node, GitChannelService git, ILocalizer localizer, CancellationToken ct) =>
             RoleCapabilities.For(node.Role).FetchesGit
                 ? Results.Ok(await git.FetchAsync(ct))
-                : Results.NotFound(new ErrorResponse(Texts.Format("Api.NoFetch", node.Role))));
+                : Results.NotFound(new ErrorResponse(localizer.Format("Api.NoFetch", node.Role))));
 
-        app.MapPost(ApiRoutes.GitPull, async (NodeConfig node, GitChannelService git, CancellationToken ct) =>
+        app.MapPost(ApiRoutes.GitPull, async (NodeConfig node, GitChannelService git, ILocalizer localizer, CancellationToken ct) =>
             RoleCapabilities.For(node.Role).FetchesGit
                 ? Results.Ok(await git.PullAsync(ct))
-                : Results.NotFound(new ErrorResponse(Texts.Format("Api.NoPull", node.Role))));
+                : Results.NotFound(new ErrorResponse(localizer.Format("Api.NoPull", node.Role))));
 
         app.MapPost(ApiRoutes.GitBundle, BundleAsync);
         return app;
@@ -59,9 +59,10 @@ public static class GitEndpoints
     /// <param name="http">The HTTP context.</param>
     /// <param name="request">The commits the Source already has.</param>
     /// <param name="bundles">The bundle service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The bundle, <c>204</c> when the Source has everything, or the rejection.</returns>
-    private static async Task<IResult> BundleAsync(HttpContext http, GitBundleRequest request, GitBundleService bundles, CancellationToken cancellationToken)
+    private static async Task<IResult> BundleAsync(HttpContext http, GitBundleRequest request, GitBundleService bundles, ILocalizer localizer, CancellationToken cancellationToken)
     {
         var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NodeId].FirstOrDefault(), http.Request.Headers[ApiHeaders.LinkToken].FirstOrDefault());
         GitBundleFile? bundle;
@@ -71,11 +72,11 @@ public static class GitEndpoints
         }
         catch (PatchRejectedException ex)
         {
-            return Results.Json(new PatchRejectionResponse(ex.Reason, ex.Message), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
+            return Results.Json(new PatchRejectionResponse(ex.Reason, localizer.Describe(ex)), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
         }
         catch (SyncBridgeException ex)
         {
-            return Results.BadRequest(new ErrorResponse(ex.Message));
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }
 
         if (bundle is null)

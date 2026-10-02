@@ -47,8 +47,8 @@ public class GitIntegrationTests
         File.WriteAllBytes(work["latin1.txt"], new byte[] { 0xE9, (byte)'t', 0xE9, (byte)'\n' });
         File.WriteAllBytes(work["bin.dat"], new byte[] { 0, 1, 2, 255 });
 
-        var paths = new PathUtility();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var paths = new PathUtility(TestTexts.English);
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(baseDir.Path, work.Path);
         var diff = await new PatchDiffBuilder(new GitDiffBuilder(git), paths).BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), PatchDiffLimits.Full);
         var diffFile = Path.Combine(target.Path, "..", Guid.NewGuid().ToString("N") + ".diff");
@@ -82,7 +82,7 @@ public class GitIntegrationTests
             return;
         }
 
-        var runner = new SystemProcessRunner();
+        var runner = new SystemProcessRunner(TestTexts.English);
         var version = await runner.RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
         version.ExitCode.Should().Be(0);
         version.StandardOutput.Should().StartWith("git version");
@@ -115,7 +115,7 @@ public class GitIntegrationTests
 
         using var dest = new TempDirectory();
         using var source = new TempDirectory();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         await RunGit(git, dest.Path, "init", "-b", "main");
         dest.Write("readme.md", "v1");
         await Commit(git, dest.Path, "v1");
@@ -124,7 +124,7 @@ public class GitIntegrationTests
         dest.Write("readme.md", "v2");
         await Commit(git, dest.Path, "v2");
 
-        var service = new GitRepositoryService(git);
+        var service = new GitRepositoryService(TestTexts.English, git);
         await service.FetchAsync(source.Path, Path.GetFullPath(dest.Path), "dest", null);
         var info = await service.GetBranchInfoAsync(source.Path, "dest");
         info.Should().Be(new Core.State.GitBranchInfo(true, "main", "refs/remotes/dest/main", 0, 1));
@@ -142,7 +142,7 @@ public class GitIntegrationTests
     {
         try
         {
-            var result = await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
+            var result = await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
             return result.ExitCode == 0;
         }
         catch (SyncBridgeException)

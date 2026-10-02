@@ -57,7 +57,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The SSH key description.</summary>
     [ObservableProperty]
-    private string _sshKeyDescription = Texts.Get("Export.Detecting");
+    private string _sshKeyDescription = string.Empty;
 
     /// <summary>Whether the SSH public key is exported.</summary>
     [ObservableProperty]
@@ -74,7 +74,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The sshd check label.</summary>
     [ObservableProperty]
-    private string _sshdStatus = Texts.Get("Export.SshdChecking");
+    private string _sshdStatus = string.Empty;
 
     /// <summary>Whether sshd accepts connections.</summary>
     [ObservableProperty]
@@ -82,19 +82,27 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
 
     /// <summary>The service port check label.</summary>
     [ObservableProperty]
-    private string _servicePortStatus = Texts.Get("Export.ServicePortChecking");
+    private string _servicePortStatus = string.Empty;
 
     /// <summary>Whether the service port accepts connections.</summary>
     [ObservableProperty]
     private bool _servicePortOk;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ExportDialogViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="api">The API client used for probing.</param>
-    public ExportDialogViewModel(IServiceApiClient api)
+    public ExportDialogViewModel(ILocalizer localizer, IServiceApiClient api)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _api = api ?? throw new ArgumentNullException(nameof(api));
+        SshKeyDescription = _localizer.Get("Export.Detecting");
+        SshdStatus = _localizer.Get("Export.SshdChecking");
+        ServicePortStatus = _localizer.Get("Export.ServicePortChecking");
         Warnings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasWarnings));
         Addresses.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasAddresses));
     }
@@ -134,10 +142,10 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     private string? _tlsFingerprint;
 
     /// <summary>Gets the host key fingerprint, or the word for "not determined".</summary>
-    public string HostKeyFingerprintText => HostKeyFingerprint ?? Texts.Get("Export.NotDetermined");
+    public string HostKeyFingerprintText => HostKeyFingerprint ?? _localizer.Get("Export.NotDetermined");
 
     /// <summary>Gets the fingerprint of the TLS certificate, or the word for "not determined".</summary>
-    public string TlsFingerprintText => TlsFingerprint ?? Texts.Get("Export.NotDetermined");
+    public string TlsFingerprintText => TlsFingerprint ?? _localizer.Get("Export.NotDetermined");
 
     /// <summary>Gets a value indicating whether the node accepts connections through its SSH server.</summary>
     public bool IsSshEndpoint => !IsDirectEndpoint;
@@ -163,7 +171,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         Addresses.Clear();
         foreach (var address in report.Addresses)
         {
-            Addresses.Add(new AddressOptionViewModel(address, IsDirectEndpoint));
+            Addresses.Add(new AddressOptionViewModel(_localizer, address, IsDirectEndpoint));
         }
 
         SelectedAddress = Addresses.FirstOrDefault(option => option.Address == report.SuggestedHost) ?? Addresses.FirstOrDefault();
@@ -176,18 +184,18 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         if (IsDirectEndpoint)
         {
             SshdOk = report.Addresses.Any(address => address.SshReachable);
-            SshdStatus = Texts.Format(SshdOk ? "Export.Direct.Ok" : "Export.Direct.Closed", report.EndpointPort);
+            SshdStatus = _localizer.Format(SshdOk ? "Export.Direct.Ok" : "Export.Direct.Closed", report.EndpointPort);
         }
         else
         {
             SshdOk = report.SshdListening;
-            SshdStatus = Texts.Format(report.SshdListening ? "Export.Ssh.Ok" : "Export.Ssh.Closed", report.SshPort);
+            SshdStatus = _localizer.Format(report.SshdListening ? "Export.Ssh.Ok" : "Export.Ssh.Closed", report.SshPort);
         }
         ServicePortOk = report.ServicePortListening;
-        ServicePortStatus = Texts.Get(report.ServicePortListening ? "Export.ServicePort.Ok" : "Export.ServicePort.Closed");
+        ServicePortStatus = _localizer.Get(report.ServicePortListening ? "Export.ServicePort.Ok" : "Export.ServicePort.Closed");
 
         SshPublicKey = report.SshPublicKey;
-        SshKeyDescription = report.SshPublicKey is null ? Texts.Get("Export.SshKeyMissing") : $"{report.SshKeyFingerprint} · {report.SshPublicKeyPath}";
+        SshKeyDescription = report.SshPublicKey is null ? _localizer.Get("Export.SshKeyMissing") : $"{report.SshKeyFingerprint} · {report.SshPublicKeyPath}";
         IncludeSshKey = HasSshKey;
 
         HostKeyFingerprint = report.HostKeyFingerprints.FirstOrDefault();
@@ -196,7 +204,7 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         Warnings.Clear();
         foreach (var warning in report.Warnings)
         {
-            Warnings.Add(DisplayText.Warning(warning));
+            Warnings.Add(DisplayText.Warning(_localizer, warning));
         }
     }
 
@@ -235,25 +243,25 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         var host = Host.Trim();
         if (host.Length == 0)
         {
-            Error = Texts.Get("Export.Error.HostRequired");
+            Error = _localizer.Get("Export.Error.HostRequired");
             return;
         }
 
         if (!SshEndpoint.IsValidHost(host))
         {
-            Error = Texts.Get("Export.Error.HostInvalid");
+            Error = _localizer.Get("Export.Error.HostInvalid");
             return;
         }
 
         if (User.Length > 0 && !SshEndpoint.IsValidUser(User.Trim()))
         {
-            Error = Texts.Get("Export.Error.UserInvalid");
+            Error = _localizer.Get("Export.Error.UserInvalid");
             return;
         }
 
         if (SshPort is < 1 or > 65535)
         {
-            Error = Texts.Get("Export.Error.Port");
+            Error = _localizer.Get("Export.Error.Port");
             return;
         }
 
@@ -282,11 +290,11 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
         }
         catch (ServiceApiException ex)
         {
-            ProbeError = ex.Message;
+            ProbeError = _localizer.Describe(ex);
         }
         catch (HttpRequestException ex)
         {
-            ProbeError = Texts.Format("Common.ServiceUnavailable", ex.Message);
+            ProbeError = _localizer.Format("Common.ServiceUnavailable", _localizer.Describe(ex));
         }
         finally
         {

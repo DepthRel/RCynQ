@@ -271,7 +271,7 @@ public sealed partial class AuthorizedKeysManager
         var tokens = line.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0)
         {
-            throw new FormatException(Texts.Format("Keys.LineEmpty", lineNumber));
+            throw LocalizedError.Format("Keys.LineEmpty", lineNumber);
         }
 
         if (SshPublicKey.AllowedTypes.Contains(tokens[0]))
@@ -296,7 +296,7 @@ public sealed partial class AuthorizedKeysManager
 
         if (end < 0 || inQuotes)
         {
-            throw new FormatException(Texts.Format("Keys.LineNoKey", lineNumber));
+            throw LocalizedError.Format("Keys.LineNoKey", lineNumber);
         }
 
         return new AuthorizedKeyEntry(line[..end], SshPublicKey.Parse(line[end..]), lineNumber);

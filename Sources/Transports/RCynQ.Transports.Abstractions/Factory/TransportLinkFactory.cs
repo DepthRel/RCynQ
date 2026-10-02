@@ -17,11 +17,18 @@ public sealed class TransportLinkFactory : ITransportLinkFactory
     private readonly IReadOnlyDictionary<TransportKind, ITransportLinkProvider> _providers;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransportLinkFactory"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="providers">The registered providers; the last registration of a kind wins.</param>
-    public TransportLinkFactory(IEnumerable<ITransportLinkProvider> providers)
+    public TransportLinkFactory(ILocalizer localizer, IEnumerable<ITransportLinkProvider> providers)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         var map = new Dictionary<TransportKind, ITransportLinkProvider>();
         foreach (var provider in providers)
         {
@@ -50,7 +57,7 @@ public sealed class TransportLinkFactory : ITransportLinkFactory
         if (!_providers.TryGetValue(config.Transport, out var provider))
         {
             throw new ArgumentException(
-                Texts.Format("Transport.NotAvailableList", config.Transport, string.Join(", ", _providers.Keys)),
+                _localizer.Format("Transport.NotAvailableList", config.Transport, string.Join(", ", _providers.Keys)),
                 nameof(config));
         }
 

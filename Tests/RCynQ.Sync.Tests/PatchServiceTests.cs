@@ -141,6 +141,75 @@ public sealed class PatchServiceTests : IDisposable
         result.Result!.Status.Should().Be(PatchStatus.Failed);
         result.Message.Should().Contain("Permission denied");
         SyncFixture.Read(_fixture.SourcePaths.SyncBase, "a.txt").Should().Be("v1\n");
+        await _fixture.StateStore.DidNotReceive().SaveAsync(Arg.Is<SyncState>(state => state.LastSentAtUtc != null), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that a delivery that fails in a way nobody planned for still ends as a failed patch: the record written
+    /// before the delivery must not stay "pending" for ever.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Unexpected_Delivery_Error_Is_Recorded_As_Failed()
+    {
+        _sender.SendAsync(Arg.Any<PatchEnvelope>(), Arg.Any<IPatchContent>(), Arg.Any<IReadOnlyList<ChainLinkConfig>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("the forward is busy"));
+        var service = _fixture.CreateSourceService(_sender, _chain);
+        await service.RebuildBaselineAsync();
+        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
+
+        var result = await service.SendAsync();
+
+        result.Result!.Status.Should().Be(PatchStatus.Failed);
+        result.Result.Error.Should().Contain("the forward is busy");
+        _fixture.Patches.Items[result.PatchId!.Value].Status.Should().Be(PatchStatus.Failed);
+        SyncFixture.Read(_fixture.SourcePaths.SyncBase, "a.txt").Should().Be("v1\n");
+    }
+
+    /// <summary>
+    /// Verifies that a caller who gives up right after the peer applied the patch does not stop the bookkeeping: the base
+    /// is updated and the patch is recorded as applied.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Cancellation_After_Delivery_Still_Records_The_Applied_Patch()
+    {
+        using var caller = new CancellationTokenSource();
+        _sender.SendAsync(Arg.Any<PatchEnvelope>(), Arg.Any<IPatchContent>(), Arg.Any<IReadOnlyList<ChainLinkConfig>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                caller.Cancel();
+                return PatchApplyResult.Applied(call.Arg<PatchEnvelope>().Id, 1);
+            });
+        var service = _fixture.CreateSourceService(_sender, _chain);
+        await service.RebuildBaselineAsync();
+        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
+
+        var result = await service.SendAsync(null, caller.Token);
+
+        result.Result!.Status.Should().Be(PatchStatus.Applied);
+        SyncFixture.Read(_fixture.SourcePaths.SyncBase, "a.txt").Should().Be("v2\n", "the peer has the file, so it is the base");
+        _fixture.Patches.Items[result.PatchId!.Value].Status.Should().Be(PatchStatus.Applied);
+    }
+
+    /// <summary>
+    /// Verifies that the base a sender reports for a changed file is the hash of its content with CRLF counted as LF: the
+    /// receiver compares its own file the same way, so the line endings of either checkout never look like an edit.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Sent_Base_Hash_Ignores_The_Line_Endings_Of_The_Base()
+    {
+        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v1\r\n");
+        var service = _fixture.CreateSourceService(_sender, _chain);
+        await service.RebuildBaselineAsync();
+        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\r\n");
+
+        var result = await service.SendAsync();
+
+        var sent = _fixture.Patches.Items[result.PatchId!.Value].Manifest.Single();
+        sent.BaseSha256.Should().Be(RCynQ.Git.Hashing.DefaultStateHasher.Sha256Hex("v1\n"u8), "the base is reported by content, not by its bytes");
+        sent.Sha256.Should().Be(RCynQ.Git.Hashing.DefaultStateHasher.Sha256Hex("v2\r\n"u8), "the content itself travels as it is");
     }
 
     /// <summary>
@@ -339,7 +408,7 @@ public sealed class PatchServiceTests : IDisposable
             return;
         }
 
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         await RunGitAsync(git, _fixture.SourceWork, "init", "--quiet", "--initial-branch=main");
         await RunGitAsync(git, _fixture.SourceWork, "config", "core.autocrlf", "true");
         await RunGitAsync(git, _fixture.SourceWork, "add", "-A");
@@ -394,7 +463,7 @@ public sealed class PatchServiceTests : IDisposable
     /// <returns>The Git runner.</returns>
     private async Task<GitCommandRunner> InitSourceRepositoryAsync()
     {
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         await RunGitAsync(git, _fixture.SourceWork, "init", "--quiet", "--initial-branch=main");
         await RunGitAsync(git, _fixture.SourceWork, "add", "-A");
         await RunGitAsync(git, _fixture.SourceWork, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "first");
@@ -410,7 +479,7 @@ public sealed class PatchServiceTests : IDisposable
     {
         try
         {
-            return (await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
+            return (await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
         }
         catch (SyncBridgeException)
         {

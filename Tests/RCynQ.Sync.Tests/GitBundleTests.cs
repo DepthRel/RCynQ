@@ -235,6 +235,7 @@ public sealed class GitBundleTests : IDisposable
         var appData = Substitute.For<IAppDataFactory>();
         appData.Create().Returns(AppDataPaths.FromRoot(Path.Combine(_root, "data")));
         return new GitBundleService(
+            TestTexts.English,
             node ?? new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, _root, null),
             _peers,
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = Token }, new InMemorySecretStore()),
@@ -251,6 +252,7 @@ public sealed class GitBundleTests : IDisposable
     {
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(45555);
         return new GitBundleClient(
+            TestTexts.English,
             new PeerLinkFactory(handler, _forwards),
             new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _root),
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = Token }, new InMemorySecretStore()));

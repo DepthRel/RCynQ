@@ -1,9 +1,9 @@
-using RCynQ.Localization;
 using System.Globalization;
 using System.Text;
 using RCynQ.Cli.Output;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 using RCynQ.Sync.Services;
 
 namespace RCynQ.Cli.Services;
@@ -16,12 +16,17 @@ public sealed class PatchCommandService
     /// <summary>The patch service.</summary>
     private readonly IPatchService _patches;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchCommandService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="patches">The patch service.</param>
-    public PatchCommandService(IPatchService patches)
+    public PatchCommandService(ILocalizer localizer, IPatchService patches)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _patches = patches;
     }
 
@@ -98,7 +103,7 @@ public sealed class PatchCommandService
         text.Append('\n');
         if (result.Error is not null)
         {
-            text.Append("Error: ").Append(LocalizedText.Render(result.Error)).Append('\n');
+            text.Append("Error: ").Append(LocalizedText.Render(result.Error, _localizer)).Append('\n');
         }
 
         AppendConflicts(text, result);
@@ -121,7 +126,7 @@ public sealed class PatchCommandService
     /// </summary>
     /// <param name="text">The builder.</param>
     /// <param name="result">The result.</param>
-    private static void AppendConflicts(StringBuilder text, PatchApplyResult result)
+    private void AppendConflicts(StringBuilder text, PatchApplyResult result)
     {
         if (!result.HasConflicts)
         {
@@ -134,7 +139,7 @@ public sealed class PatchCommandService
             text.Append("  ").Append(conflict.Path);
             if (conflict.Detail is not null)
             {
-                text.Append(" - ").Append(LocalizedText.Render(conflict.Detail));
+                text.Append(" - ").Append(LocalizedText.Render(conflict.Detail, _localizer));
             }
 
             text.Append('\n');

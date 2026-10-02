@@ -3,7 +3,7 @@
                      xmlns:loc="using:RCynQ.UI.Localization"
                      xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
-                     xmlns:patches="using:RCynQ.Core.Patches"
+                     xmlns:items="using:RCynQ.UI.ViewModels.Items"
                      xmlns:controls="using:RCynQ.UI.Controls"
                      x:Class="RCynQ.UI.Views.Dialogs.ConflictDialog"
                      x:DataType="vm:ConflictDialogViewModel"
@@ -29,12 +29,12 @@
       <ScrollViewer>
         <ItemsControl Classes="rows" ItemsSource="{Binding Files}">
           <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="patches:ConflictFile">
+            <DataTemplate x:DataType="items:ConflictFileItemViewModel">
               <Border Classes="row" Padding="14,7">
                 <StackPanel Spacing="2">
-                  <TextBlock Classes="mono" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Classes="mono" FontSize="12.5" Text="{Binding Path}" TextWrapping="Wrap" />
                   <TextBlock Classes="muted" FontSize="12" Text="{Binding Detail}" TextWrapping="Wrap"
-                             IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                             IsVisible="{Binding HasDetail}" />
                 </StackPanel>
               </Border>
             </DataTemplate>

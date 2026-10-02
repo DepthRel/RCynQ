@@ -39,22 +39,26 @@ public readonly record struct NodeId
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
         {
-            throw new ArgumentException(Texts.Get("NodeId.Blank"), nameof(value));
+            throw LocalizedError.Argument(nameof(value), "NodeId.Blank");
         }
 
         if (trimmed.Length > MaxLength)
         {
-            throw new ArgumentException(Texts.Format("NodeId.TooLong", MaxLength), nameof(value));
+            throw LocalizedError.Argument(nameof(value), "NodeId.TooLong", MaxLength);
         }
 
         foreach (var c in trimmed)
         {
             if (!(char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
             {
-                throw new ArgumentException(
-                    Texts.Get("NodeId.Forbidden"),
-                    nameof(value));
+                throw LocalizedError.Argument(nameof(value), "NodeId.Forbidden");
             }
+        }
+
+        // "." and ".." pass the character check, but as a directory name they are the directory itself and its parent.
+        if (trimmed.All(c => c == '.'))
+        {
+            throw LocalizedError.Argument(nameof(value), "NodeId.OnlyDots");
         }
 
         _value = trimmed;

@@ -25,7 +25,7 @@ public class PatchBuildingTests
     /// <summary>
     /// The path utility.
     /// </summary>
-    private readonly PathUtility _paths = new();
+    private readonly PathUtility _paths = new(TestTexts.English);
 
     /// <summary>
     /// Verifies that git commands get byte-exact configuration and a non-interactive environment.
@@ -227,7 +227,7 @@ public class PatchBuildingTests
     [Fact]
     public void Serializer_RoundTrip_And_Validation()
     {
-        var serializer = new PatchEnvelopeSerializer(_paths);
+        var serializer = new PatchEnvelopeSerializer(TestTexts.English, _paths);
         var hash = new string('c', 64);
         var envelope = new PatchEnvelope(
             Guid.NewGuid(), new NodeId("source"), new NodeId("dest"), DateTimeOffset.UtcNow, hash, hash,
@@ -270,5 +270,24 @@ public class PatchBuildingTests
 
         var malformed = () => serializer.Deserialize("{not json"u8);
         malformed.Should().Throw<FormatException>();
+    }
+
+    /// <summary>
+    /// Verifies that a manifest with a <c>null</c> entry, which is valid JSON, is refused as malformed instead of failing
+    /// with a null reference.
+    /// </summary>
+    [Fact]
+    public void Serializer_Refuses_A_Null_Manifest_Entry()
+    {
+        var serializer = new PatchEnvelopeSerializer(TestTexts.English, _paths);
+        var hash = new string('c', 64);
+        var json = $$"""
+            {"patchId":"{{Guid.NewGuid()}}","sender":"source","receiver":"dest","createdAt":"2026-01-01T00:00:00+00:00",
+             "baseStateHash":"{{hash}}","incomingStateHash":"{{hash}}","changes":[null]}
+            """;
+
+        var deserialize = () => serializer.Deserialize(Encoding.UTF8.GetBytes(json));
+
+        deserialize.Should().Throw<FormatException>();
     }
 }

@@ -44,6 +44,12 @@ public sealed record ChainRoute(
     public bool UsesTls => TlsFingerprint is not null;
 
     /// <summary>
+    /// Gets the peers whose SSH servers the route passes through, in order: the mediators and, when it runs an SSH
+    /// server, the endpoint. These are the hosts whose pinned host keys a connection along the route is checked against.
+    /// </summary>
+    public IReadOnlyList<PeerDescriptor> SshPeers { get; init; } = Array.Empty<PeerDescriptor>();
+
+    /// <summary>
     /// Resolves the route from the chain links.
     /// </summary>
     /// <param name="chain">The chain links; mediators first, the counterpart endpoint last.</param>
@@ -64,7 +70,10 @@ public sealed record ChainRoute(
         var mediators = ordered[..^1];
         if (endpoint.Peer.EndpointMode != EndpointMode.Direct)
         {
-            return new ChainRoute(endpoint, endpoint.Peer.Ssh, mediators.Select(link => link.Peer.Ssh).ToArray(), "127.0.0.1", endpoint.RemotePort, null);
+            return new ChainRoute(endpoint, endpoint.Peer.Ssh, mediators.Select(link => link.Peer.Ssh).ToArray(), "127.0.0.1", endpoint.RemotePort, null)
+            {
+                SshPeers = ordered.Select(link => link.Peer).ToArray()
+            };
         }
 
         // The endpoint has no SSH server: its own TLS port is the destination.
@@ -76,9 +85,7 @@ public sealed record ChainRoute(
         var relay = mediators[^1];
         if (relay.Peer.EndpointMode == EndpointMode.Direct)
         {
-            throw new ArgumentException(
-                Texts.Format("Route.MediatorNeedsSsh", endpoint.Peer.Id, relay.Peer.Id),
-                nameof(chain));
+            throw LocalizedError.Argument(nameof(chain), "Route.MediatorNeedsSsh", endpoint.Peer.Id, relay.Peer.Id);
         }
 
         return new ChainRoute(
@@ -87,6 +94,9 @@ public sealed record ChainRoute(
             mediators[..^1].Select(link => link.Peer.Ssh).ToArray(),
             endpoint.Peer.Host,
             endpoint.RemotePort,
-            endpoint.Peer.TlsFingerprint);
+            endpoint.Peer.TlsFingerprint)
+        {
+            SshPeers = mediators.Select(link => link.Peer).ToArray()
+        };
     }
 }

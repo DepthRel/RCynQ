@@ -39,6 +39,9 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="FluentAssertions" />
     <Using Include="Xunit" />
+    <!-- The localizers the tests hand to the code under test; a test names the language of its expectations. -->
+    <Compile Include="$(MSBuildThisFileDirectory)Tests\Shared\TestTexts.cs" Link="Shared\TestTexts.cs" />
+    <Using Include="RCynQ.Tests" />
   </ItemGroup>
 
 </Project>

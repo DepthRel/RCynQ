@@ -12,7 +12,7 @@ namespace RCynQ.Git.Tests;
 public class GitBundleRepositoryTests
 {
     /// <summary>The Git command runner.</summary>
-    private readonly GitCommandRunner _runner = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _runner = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>
     /// Verifies that a bundle holds only what the receiver lacks, and that there is no bundle when the receiver has everything.
@@ -29,7 +29,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         var first = await CommitAsync(source.Path, "first");
@@ -68,7 +68,7 @@ public class GitBundleRepositoryTests
 
         using var source = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         var commit = await CommitAsync(source.Path, "first");
@@ -95,7 +95,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         await CommitAsync(source.Path, "first");
@@ -131,7 +131,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         await CommitAsync(source.Path, "first");
@@ -172,7 +172,7 @@ public class GitBundleRepositoryTests
         }
 
         using var directory = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(directory.Path);
         (await _runner.RunAsync(new[] { "remote", "add", "dest", "ssh://real-remote-someone-configured-by-hand/repo" }, directory.Path)).ExitCode.Should().Be(0);
 
@@ -196,7 +196,7 @@ public class GitBundleRepositoryTests
     public async Task Unsafe_Branch_Names_Are_Refused(string branch)
     {
         using var directory = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
 
         var initialize = () => service.InitializeAsync(directory.Path, branch);
         var adopt = () => service.AdoptRemoteBranchAsync(directory.Path, "dest", branch, keepWorkingFiles: false);

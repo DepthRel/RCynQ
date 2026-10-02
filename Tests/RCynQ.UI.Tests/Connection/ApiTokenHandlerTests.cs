@@ -24,7 +24,7 @@ public sealed class ApiTokenHandlerTests : IDisposable
         var tokenFile = Path.Combine(_root, "api.token");
         var tokens = new ApiTokenProvider(new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, tokenFile, "syncbridge.json"));
         var inner = new RecordingHttpHandler();
-        using var client = new HttpClient(new ApiTokenHandler(tokens, inner)) { BaseAddress = new Uri("http://127.0.0.1:1/") };
+        using var client = new HttpClient(new ApiTokenHandler(TestTexts.Russian, tokens, inner)) { BaseAddress = new Uri("http://127.0.0.1:1/") };
 
         await client.GetAsync("state");
         File.WriteAllText(tokenFile, "first\n");
@@ -63,7 +63,7 @@ public sealed class ApiTokenHandlerTests : IDisposable
         File.WriteAllText(tokenFile, "abc\r\nX-Injected: 1");
         var tokens = new ApiTokenProvider(new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, tokenFile, "syncbridge.json"));
         var inner = new RecordingHttpHandler();
-        using var client = new HttpClient(new ApiTokenHandler(tokens, inner)) { BaseAddress = new Uri("http://127.0.0.1:1/") };
+        using var client = new HttpClient(new ApiTokenHandler(TestTexts.Russian, tokens, inner)) { BaseAddress = new Uri("http://127.0.0.1:1/") };
 
         var send = () => client.GetAsync("state");
 

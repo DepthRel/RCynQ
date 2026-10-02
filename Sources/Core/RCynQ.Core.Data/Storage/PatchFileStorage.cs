@@ -47,11 +47,18 @@ public sealed class PatchFileStorage : IPatchFileStorage
     private readonly IAppDataFactory _appDataFactory;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PatchFileStorage"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="appDataFactory">The application data factory.</param>
-    public PatchFileStorage(IAppDataFactory appDataFactory)
+    public PatchFileStorage(ILocalizer localizer, IAppDataFactory appDataFactory)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _appDataFactory = appDataFactory;
     }
 
@@ -70,7 +77,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
         var path = Path.Combine(GetPatchDirectory(patchId), DiffFileName);
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("Patch.PayloadMissing", DiffFileName, patchId));
+            throw new SyncBridgeException(_localizer.Format("Patch.PayloadMissing", DiffFileName, patchId));
         }
 
         return await File.ReadAllBytesAsync(path, cancellationToken);
@@ -108,7 +115,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
                     total += read;
                     if (total > expectedSize)
                     {
-                        throw new FormatException(Texts.Format("Upload.TooLarge", hash, expectedSize));
+                        throw new FormatException(_localizer.Format("Upload.TooLarge", hash, expectedSize));
                     }
 
                     hasher.AppendData(buffer, 0, read);
@@ -118,7 +125,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
 
             if (!string.Equals(Convert.ToHexString(hasher.GetHashAndReset()), hash, StringComparison.OrdinalIgnoreCase))
             {
-                throw new FormatException(Texts.Format("Upload.HashMismatch", hash));
+                throw new FormatException(_localizer.Format("Upload.HashMismatch", hash));
             }
 
             FilePermissions.RestrictFileToOwner(temp);
@@ -152,7 +159,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
             var upload = UploadPath(hash);
             if (!File.Exists(upload))
             {
-                throw new SyncBridgeException(Texts.Format("Patch.ContentMissing", hash, patchId));
+                throw new SyncBridgeException(_localizer.Format("Patch.ContentMissing", hash, patchId));
             }
 
             File.Move(upload, target, overwrite: true);
@@ -167,7 +174,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
         var path = StagedPath(patchId, ValidateHash(sha256));
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("Patch.ContentMissing", sha256, patchId));
+            throw new SyncBridgeException(_localizer.Format("Patch.ContentMissing", sha256, patchId));
         }
 
         return Task.FromResult<Stream>(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true));
@@ -211,6 +218,42 @@ public sealed class PatchFileStorage : IPatchFileStorage
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<long> DeletePatchAsync(Guid patchId, CancellationToken cancellationToken = default)
+    {
+        var directory = new DirectoryInfo(GetPatchDirectory(patchId));
+        if (!directory.Exists)
+        {
+            return Task.FromResult(0L);
+        }
+
+        var freed = directory.EnumerateFiles("*", SearchOption.AllDirectories).Sum(file => file.Length);
+        directory.Delete(recursive: true);
+        return Task.FromResult(freed);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ListStoredPatchesAsync(CancellationToken cancellationToken = default)
+    {
+        var root = _appDataFactory.Create().PatchesDirectory;
+        if (!Directory.Exists(root))
+        {
+            return Task.FromResult<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+        }
+
+        // Patch directories are named by the identifier without dashes; anything else (the uploads) is not a patch.
+        var ids = new List<Guid>();
+        foreach (var directory in Directory.EnumerateDirectories(root))
+        {
+            if (Guid.TryParseExact(Path.GetFileName(directory), "N", out var id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<Guid>>(ids);
     }
 
     /// <summary>

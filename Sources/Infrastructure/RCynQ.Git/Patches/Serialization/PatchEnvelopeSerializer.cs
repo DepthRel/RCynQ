@@ -27,11 +27,18 @@ public sealed class PatchEnvelopeSerializer
     private readonly IPathUtility _paths;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PatchEnvelopeSerializer"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="paths">The path utility.</param>
-    public PatchEnvelopeSerializer(IPathUtility paths)
+    public PatchEnvelopeSerializer(ILocalizer localizer, IPathUtility paths)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _paths = paths;
     }
 
@@ -77,26 +84,32 @@ public sealed class PatchEnvelopeSerializer
         {
             var manifest = (dto.Changes ?? new List<FileChangeDto>()).Select(change =>
             {
+                // "changes": [null] is valid JSON; it must be refused like any other malformed entry, not crash the request.
+                if (change is null)
+                {
+                    throw new FormatException(_localizer.Get("Envelope.NullEntry"));
+                }
+
                 var normalized = _paths.NormalizeRelativePath(change.Path);
                 if (normalized != change.Path)
                 {
-                    throw new FormatException(Texts.Format("Envelope.PathNotCanonical", change.Path));
+                    throw new FormatException(_localizer.Format("Envelope.PathNotCanonical", change.Path));
                 }
 
                 if (change.Kind == ChangeKind.Renamed || !Enum.IsDefined(change.Kind))
                 {
-                    throw new FormatException(Texts.Format("Envelope.KindUnsupported", change.Kind));
+                    throw new FormatException(_localizer.Format("Envelope.KindUnsupported", change.Kind));
                 }
 
                 if (change.Kind != ChangeKind.Deleted && change.Sha256 is null)
                 {
-                    throw new FormatException(Texts.Format("Envelope.NeedsHash", change.Path));
+                    throw new FormatException(_localizer.Format("Envelope.NeedsHash", change.Path));
                 }
 
                 // The size bounds the content the receiver accepts for the entry, so a compressed upload cannot expand without limit.
                 if (change.Kind != ChangeKind.Deleted && change.SizeBytes is null)
                 {
-                    throw new FormatException(Texts.Format("Envelope.NeedsSize", change.Path));
+                    throw new FormatException(_localizer.Format("Envelope.NeedsSize", change.Path));
                 }
 
                 // An added file has no base content; a base hash on it means nothing and is dropped.
@@ -106,7 +119,7 @@ public sealed class PatchEnvelopeSerializer
 
             if (manifest.Select(change => change.Path).Distinct(StringComparer.Ordinal).Count() != manifest.Length)
             {
-                throw new FormatException(Texts.Get("Envelope.DuplicatePaths"));
+                throw new FormatException(_localizer.Get("Envelope.DuplicatePaths"));
             }
 
             return new PatchEnvelope(
@@ -121,7 +134,7 @@ public sealed class PatchEnvelopeSerializer
         }
         catch (ArgumentException ex)
         {
-            throw new FormatException(Texts.Format("Envelope.Invalid", ex.Message), ex);
+            throw new FormatException(_localizer.Format("Envelope.Invalid", _localizer.Describe(ex)), ex);
         }
     }
 
@@ -147,9 +160,9 @@ public sealed class PatchEnvelopeSerializer
         }
         catch (JsonException ex)
         {
-            throw new FormatException(Texts.Format("Envelope.Malformed", ex.Message), ex);
+            throw new FormatException(_localizer.Format("Envelope.Malformed", _localizer.Describe(ex)), ex);
         }
 
-        return FromDto(dto ?? throw new FormatException(Texts.Get("Envelope.Empty")));
+        return FromDto(dto ?? throw new FormatException(_localizer.Get("Envelope.Empty")));
     }
 }

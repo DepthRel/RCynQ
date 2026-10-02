@@ -156,21 +156,15 @@ public sealed class LocalizerTests
     }
 
     /// <summary>
-    /// The ambient texts of the application follow the localizer that is put in place of the default one.
+    /// A text that is given fewer values than it asks for (a text encoded by a node of another version) is shown as it is
+    /// written instead of failing.
     /// </summary>
     [Fact]
-    public void Texts_FollowsTheReplacedLocalizer()
+    public void Localizer_ShowsTheTextAsWritten_WhenValuesAreMissing()
     {
-        var before = Texts.Localizer;
-        try
-        {
-            Texts.Localizer = new Localizer(Catalog(), "ru");
-            Assert.Equal("Привет", Texts.Get("Hello"));
-            Assert.Equal("2 шт., 0,5", Texts.Format("Count", 2, 0.5));
-        }
-        finally
-        {
-            Texts.Localizer = before;
-        }
+        var localizer = new Localizer(Catalog(), "en");
+
+        Assert.Equal("{0} items, {1:0.0}", localizer.Format("Count", 3));
+        Assert.Equal("{0} items, {1:0.0}", LocalizedText.Render(LocalizedText.Encode("Count", 3), localizer));
     }
 }

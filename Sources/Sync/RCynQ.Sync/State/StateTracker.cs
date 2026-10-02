@@ -60,6 +60,11 @@ public sealed class StateTracker
     private readonly WorkingTreeLock _lock;
 
     /// <summary>
+    /// Serializes the changes of the stored state, see <see cref="UpdateAsync"/>.
+    /// </summary>
+    private readonly SemaphoreSlim _stateGate = new(1, 1);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="StateTracker"/> class.
     /// </summary>
     /// <param name="store">The state store.</param>
@@ -104,10 +109,9 @@ public sealed class StateTracker
     /// <returns>The state, the sync base status and the changes the peer does not have yet.</returns>
     public async Task<SyncSnapshot> CaptureAsync(CancellationToken cancellationToken = default)
     {
-        var current = await _store.GetAsync(cancellationToken);
         if (!_node.ParticipatesInPatchChannel)
         {
-            return new SyncSnapshot(current, SyncBaseStatus.NotApplicable, Array.Empty<FileChange>(), Array.Empty<ChangedFile>());
+            return new SyncSnapshot(await _store.GetAsync(cancellationToken), SyncBaseStatus.NotApplicable, Array.Empty<FileChange>(), Array.Empty<ChangedFile>());
         }
 
         SyncBaseStatus status;
@@ -128,12 +132,13 @@ public sealed class StateTracker
             }
         }
 
-        var updated = new SyncState(
-            _hasher.ComputeHash(local),
-            syncBase is null ? null : _hasher.ComputeHash(syncBase),
-            current.LastSentAtUtc,
-            current.LastReceivedAtUtc);
-        await _store.SaveAsync(updated, cancellationToken);
+        // The stored state is read only now, not before the scan: the scan may take long, and a patch sent or received
+        // meanwhile has stamped its time, which a state read up front would write back as it was.
+        var localHash = _hasher.ComputeHash(local);
+        var baseHash = syncBase is null ? null : _hasher.ComputeHash(syncBase);
+        var updated = await UpdateAsync(
+            stored => new SyncState(localHash, baseHash, stored.LastSentAtUtc, stored.LastReceivedAtUtc),
+            cancellationToken);
         return new SyncSnapshot(updated, status, pending, changed);
     }
 
@@ -152,8 +157,8 @@ public sealed class StateTracker
     /// <returns>The updated state.</returns>
     public async Task<SyncState> MarkSentAsync(CancellationToken cancellationToken = default)
     {
-        var current = await _store.GetAsync(cancellationToken);
-        await _store.SaveAsync(new SyncState(current.LocalStateHash, current.SyncBaseHash, _timeProvider.GetUtcNow(), current.LastReceivedAtUtc), cancellationToken);
+        var now = _timeProvider.GetUtcNow();
+        await UpdateAsync(stored => new SyncState(stored.LocalStateHash, stored.SyncBaseHash, now, stored.LastReceivedAtUtc), cancellationToken);
         return await RefreshAsync(cancellationToken);
     }
 
@@ -164,17 +169,30 @@ public sealed class StateTracker
     /// <returns>The updated state.</returns>
     public async Task<SyncState> MarkReceivedAsync(CancellationToken cancellationToken = default)
     {
-        var current = await _store.GetAsync(cancellationToken);
-        await _store.SaveAsync(new SyncState(current.LocalStateHash, current.SyncBaseHash, current.LastSentAtUtc, _timeProvider.GetUtcNow()), cancellationToken);
+        var now = _timeProvider.GetUtcNow();
+        await UpdateAsync(stored => new SyncState(stored.LocalStateHash, stored.SyncBaseHash, stored.LastSentAtUtc, now), cancellationToken);
         return await RefreshAsync(cancellationToken);
     }
-}
 
-/// <summary>
-/// The result of <see cref="StateTracker.CaptureAsync"/>.
-/// </summary>
-/// <param name="State">The stored state.</param>
-/// <param name="SyncBase">The status of the sync base.</param>
-/// <param name="PendingChanges">The changes of the working tree the peer does not have yet; empty without a sync base.</param>
-/// <param name="ChangedFiles">Every file that differs from the Git commit, including those the peer already has; empty without a sync base.</param>
-public sealed record SyncSnapshot(SyncState State, SyncBaseStatus SyncBase, IReadOnlyList<FileChange> PendingChanges, IReadOnlyList<ChangedFile> ChangedFiles);
+    /// <summary>
+    /// Changes the stored state as one step: the state is read, changed and written while no other change of this
+    /// tracker runs, so a refresh and a time stamp that happen together never overwrite each other.
+    /// </summary>
+    /// <param name="change">Builds the new state from the stored one.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The stored state.</returns>
+    private async Task<SyncState> UpdateAsync(Func<SyncState, SyncState> change, CancellationToken cancellationToken)
+    {
+        await _stateGate.WaitAsync(cancellationToken);
+        try
+        {
+            var updated = change(await _store.GetAsync(cancellationToken));
+            await _store.SaveAsync(updated, cancellationToken);
+            return updated;
+        }
+        finally
+        {
+            _stateGate.Release();
+        }
+    }
+}

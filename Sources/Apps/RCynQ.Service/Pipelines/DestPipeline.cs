@@ -7,6 +7,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
+using RCynQ.Sync.Diagnostics.AutoFix;
 using RCynQ.Sync.State;
 
 namespace RCynQ.Service.Pipelines;
@@ -45,6 +46,9 @@ public sealed class DestPipeline : IRolePipeline
     /// <summary>The logger.</summary>
     private readonly ILogger<DestPipeline> _logger;
 
+    /// <summary>The registry of the fixes this node proposed.</summary>
+    private readonly IssuedFixRegistry _issuedFixes;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DestPipeline"/> class.
     /// </summary>
@@ -56,6 +60,7 @@ public sealed class DestPipeline : IRolePipeline
     /// <param name="appData">The application data factory.</param>
     /// <param name="events">The event publisher.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="issuedFixes">The registry of the fixes this node proposed.</param>
     public DestPipeline(
         StateTracker tracker,
         IEnumerable<IDiagnosticCheck> checks,
@@ -64,7 +69,8 @@ public sealed class DestPipeline : IRolePipeline
         IChainLinkRepository chain,
         IAppDataFactory appData,
         IEventPublisher events,
-        ILogger<DestPipeline> logger)
+        ILogger<DestPipeline> logger,
+        IssuedFixRegistry issuedFixes)
     {
         _tracker = tracker;
         _checks = checks;
@@ -74,6 +80,7 @@ public sealed class DestPipeline : IRolePipeline
         _appData = appData;
         _events = events;
         _logger = logger;
+        _issuedFixes = issuedFixes;
     }
 
     /// <inheritdoc />
@@ -93,6 +100,7 @@ public sealed class DestPipeline : IRolePipeline
             results.Add(await check.RunAsync(context, cancellationToken));
         }
 
+        _issuedFixes.Remember(results);
         await _events.PublishDiagnosticsAsync(new DiagnosticsEvent(Role, results, DateTimeOffset.UtcNow), cancellationToken);
         foreach (var failed in results.Where(result => !result.Passed))
         {

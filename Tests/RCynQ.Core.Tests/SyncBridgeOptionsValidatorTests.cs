@@ -17,7 +17,7 @@ public class SyncBridgeOptionsValidatorTests
     {
         var options = CreateSourceOptions();
 
-        SyncBridgeOptionsValidator.Validate(options).Should().BeEmpty();
+        SyncBridgeOptionsValidator.Validate(options, TestTexts.English).Should().BeEmpty();
 
         var node = SyncBridgeOptionsValidator.ToNodeConfig(options);
         node.Role.Should().Be(NodeRole.Source);
@@ -39,7 +39,7 @@ public class SyncBridgeOptionsValidatorTests
         options.ListenPort = 70000;
         options.Chain[0].Host = "-oProxyCommand=x";
 
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, TestTexts.English);
 
         errors.Should().HaveCount(3);
         errors.Should().Contain(error => error.StartsWith("Node:"));
@@ -58,7 +58,7 @@ public class SyncBridgeOptionsValidatorTests
         options.Chain[0].PeerRole = NodeRole.Mediator;
         options.Chain[1].PeerRole = NodeRole.Dest;
 
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, TestTexts.English);
 
         errors.Should().Contain(error => error.Contains("last chain link must point to a Dest"));
         errors.Should().Contain(error => error.Contains("must point to a Mediator"));
@@ -73,7 +73,42 @@ public class SyncBridgeOptionsValidatorTests
         var options = CreateSourceOptions();
         options.Chain[0].Name = "hop";
 
-        SyncBridgeOptionsValidator.Validate(options).Should().Contain(error => error.Contains("duplicate link identifier"));
+        SyncBridgeOptionsValidator.Validate(options, TestTexts.English).Should().Contain(error => error.Contains("duplicate link identifier"));
+    }
+
+    /// <summary>
+    /// Verifies the name of the SSH configuration file: the directory may be any, also one with spaces, but the name is
+    /// handed on to a shell unquoted and therefore may hold nothing a shell reads.
+    /// </summary>
+    /// <param name="path">The configured path.</param>
+    /// <param name="valid">Whether the path is accepted.</param>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("keys/ssh_config", true)]
+    [InlineData("/data/John Smith/keys/ssh_config", true)]
+    [InlineData("keys/rcynq-ssh.conf", true)]
+    [InlineData("keys/ssh config", false)]
+    [InlineData("keys/-F", false)]
+    [InlineData("keys/cfg;rm", false)]
+    [InlineData("keys/cfg$(x)", false)]
+    [InlineData("keys/..", false)]
+    [InlineData("keys/", false)]
+    public void Ssh_Config_File_Name_Is_Restricted(string? path, bool valid)
+    {
+        var options = CreateSourceOptions();
+        options.Ssh.ConfigFile = path;
+
+        var errors = SyncBridgeOptionsValidator.Validate(options, TestTexts.English);
+
+        if (valid)
+        {
+            errors.Should().BeEmpty();
+        }
+        else
+        {
+            errors.Should().ContainSingle().Which.Should().Contain("Ssh.ConfigFile").And.Contain(path);
+        }
     }
 
     /// <summary>

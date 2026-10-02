@@ -1,7 +1,8 @@
 using System.Net.Http.Json;
 using FluentAssertions;
 using RCynQ.Core.Api;
-using RCynQ.Service.Security;
+using RCynQ.Localization;
+using RCynQ.Service.Localization;
 using RCynQ.Service.Tests.Support;
 
 namespace RCynQ.Service.Tests;
@@ -34,7 +35,7 @@ public sealed class RequestLanguageTests
                 return (Language: (string?)pieces[0], Quality: pieces.Length > 1 ? double.Parse(pieces[1], System.Globalization.CultureInfo.InvariantCulture) : 1.0);
             }).ToArray();
 
-        RequestLanguageMiddleware.Choose(requested).Should().Be(expected);
+        new RequestLocalizer(LanguageCatalog.LoadEmbedded()).Choose(requested).Should().Be(expected);
     }
 
     /// <summary>

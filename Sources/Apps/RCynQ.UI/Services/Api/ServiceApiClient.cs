@@ -32,15 +32,22 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     private readonly HttpClient _long;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ServiceApiClient"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="settings">The connection settings.</param>
     /// <param name="tokens">The token provider, or <see langword="null"/> to create one from <paramref name="settings"/>.</param>
     /// <param name="handler">The HTTP handler, or <see langword="null"/> for a handler that bypasses the system proxy.</param>
-    public ServiceApiClient(ServiceConnectionSettings settings, ApiTokenProvider? tokens = null, HttpMessageHandler? handler = null)
+    public ServiceApiClient(ILocalizer localizer, ServiceConnectionSettings settings, ApiTokenProvider? tokens = null, HttpMessageHandler? handler = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentNullException.ThrowIfNull(settings);
-        var tokenHandler = new ApiTokenHandler(tokens ?? new ApiTokenProvider(settings), handler ?? new SocketsHttpHandler { UseProxy = false });
+        var tokenHandler = new ApiTokenHandler(_localizer, tokens ?? new ApiTokenProvider(settings), handler ?? new SocketsHttpHandler { UseProxy = false });
         _http = new HttpClient(tokenHandler)
         {
             BaseAddress = settings.ServiceUri,
@@ -148,6 +155,10 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     }
 
     /// <inheritdoc />
+    public Task<DataCleanupReport> CleanDataAsync(CancellationToken cancellationToken = default)
+        => PostAsync<DataCleanupReport>(ApiRoutes.DataCleanup, null, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
     public Task<NodeEnvironmentReport> ProbeExportAsync(CancellationToken cancellationToken = default)
         => GetAsync<NodeEnvironmentReport>(ApiRoutes.ConfigExportProbe, cancellationToken);
 
@@ -249,11 +260,11 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The body.</returns>
     /// <exception cref="ServiceApiException">The response is an error or empty.</exception>
-    private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken)
-            ?? throw new ServiceApiException(response.StatusCode, Texts.Get("Api.EmptyResponse"));
+            ?? throw new ServiceApiException(response.StatusCode, _localizer.Get("Api.EmptyResponse"));
     }
 
     /// <summary>
@@ -274,8 +285,13 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         var message = text;
         try
         {
+            // Only an object with a text "error" is the error body of the service. Anything else that happens to be JSON
+            // (a bare string, an array, the problem details of the framework) is shown as it came: asking a value that
+            // is no object for a property, or a property that is no string for its text, would throw here instead.
             using var document = JsonDocument.Parse(text);
-            if (document.RootElement.TryGetProperty("error", out var error))
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String)
             {
                 message = error.GetString() ?? text;
             }

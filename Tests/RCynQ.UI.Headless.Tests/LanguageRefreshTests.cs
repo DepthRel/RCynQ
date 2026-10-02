@@ -25,21 +25,6 @@ using RCynQ.UI.Views;
 namespace RCynQ.UI.Headless.Tests;
 
 /// <summary>
-/// Builds the application for the headless platform.
-/// </summary>
-public static class TestApp
-{
-    /// <summary>
-    /// Configures Avalonia without a screen.
-    /// </summary>
-    /// <returns>The application builder.</returns>
-    public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .WithInterFont()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
-}
-
-/// <summary>
 /// Opens the real main window and switches the language while every tab is shown: no text of the previous language may
 /// stay on the screen. A page, a row or a status line that does not refresh with the language fails here.
 /// </summary>
@@ -65,7 +50,7 @@ public sealed partial class LanguageRefreshTests
     public Task Every_Tab_Follows_The_Language() => Session.Value.Dispatch(
         async () =>
         {
-            var localizer = Texts.Localizer;
+            var localizer = AppLocalizer;
             var catalog = LanguageCatalog.LoadEmbedded();
             var english = TextsOf(catalog, "en");
             var russian = TextsOf(catalog, "ru");
@@ -109,7 +94,7 @@ public sealed partial class LanguageRefreshTests
     public Task Setup_Follows_The_Language() => Session.Value.Dispatch(
         async () =>
         {
-            var localizer = Texts.Localizer;
+            var localizer = AppLocalizer;
             var catalog = LanguageCatalog.LoadEmbedded();
             var english = TextsOf(catalog, "en");
             var russian = TextsOf(catalog, "ru");
@@ -139,6 +124,12 @@ public sealed partial class LanguageRefreshTests
             return 0;
         },
         CancellationToken.None);
+
+    /// <summary>
+    /// Gets the localizer of the running application: the one the views are bound to, so the view models of a test have
+    /// to be given the same one.
+    /// </summary>
+    private static ILocalizer AppLocalizer => ((App)Application.Current!).Localizer;
 
     /// <summary>
     /// Lets the pending bindings and layout passes run.
@@ -248,22 +239,23 @@ public sealed partial class LanguageRefreshTests
         controller.ConfigPath.Returns(configFile);
         controller.EnsureRunningAsync(Arg.Any<CancellationToken>()).Returns(new ServiceStartResult(ServiceStartOutcome.AlreadyRunning, "running"));
 
-        var language = new LanguageViewModel(new FakeLanguageService());
+        var language = new LanguageViewModel(AppLocalizer, new FakeLanguageService());
         var main = new MainViewModel(
+            AppLocalizer,
             api,
             events,
             new ImmediateUiDispatcher(),
             new RoleAdapter(),
             controller,
-            new SetupViewModel(configFile, dialogs, language),
-            new OverviewViewModel(api),
-            new RoleAndNodesViewModel(api, dialogs),
-            new SyncViewModel(api, dialogs),
-            new TunnelViewModel(api),
-            new DiagnosticsViewModel(api, dialogs),
-            new BranchViewModel(api),
-            new LogsViewModel(api, dialogs),
-            new SettingsViewModel(language, configFile));
+            new SetupViewModel(AppLocalizer, configFile, dialogs, language),
+            new OverviewViewModel(AppLocalizer, api),
+            new RoleAndNodesViewModel(AppLocalizer, api, dialogs),
+            new SyncViewModel(AppLocalizer, api, dialogs),
+            new TunnelViewModel(AppLocalizer, api),
+            new DiagnosticsViewModel(AppLocalizer, api, dialogs),
+            new BranchViewModel(AppLocalizer, api),
+            new LogsViewModel(AppLocalizer, api, dialogs),
+            new SettingsViewModel(AppLocalizer, language, api, dialogs, configFile));
         await main.InitializeAsync();
 
         // A finished check with a failed result fills the diagnostics tab and the problems of the overview.

@@ -52,7 +52,7 @@ public sealed class SetupViewModelTests : IDisposable
             }
             """);
 
-        var errors = await LocalConfigFile.SaveAsync(path, new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18500, "token-123"));
+        var errors = await LocalConfigFile.SaveAsync(path, new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18500, "token-123"), TestTexts.Russian);
 
         errors.Should().BeEmpty();
         var section = JsonNode.Parse(await File.ReadAllTextAsync(path))!["SyncBridge"]!.AsObject();
@@ -65,6 +65,26 @@ public sealed class SetupViewModelTests : IDisposable
         options.LinkToken.Should().Be("token-123");
         options.Ssh.IdentityFile.Should().Be("/keys/id");
         options.Chain.Select(link => link.Name).Should().Equal("relay", "laptop");
+        File.Exists(path + LocalConfigFile.UnreadableBackupSuffix).Should().BeFalse("a readable file needs no copy");
+    }
+
+    /// <summary>
+    /// Verifies that a configuration file that cannot be read is kept as a copy when the setup starts the file anew: the
+    /// links and settings in it, often behind one typing error, must not be gone for good.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Save_Keeps_A_Copy_Of_A_File_It_Could_Not_Read()
+    {
+        var path = Path.Combine(_root, "syncbridge.json");
+        const string Broken = "{ \"SyncBridge\": { \"NodeId\": \"old\", \"Chain\": [ { \"Name\": \"relay\" } ] ";
+        await File.WriteAllTextAsync(path, Broken);
+
+        var errors = await LocalConfigFile.SaveAsync(path, new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18500, "token-123"), TestTexts.Russian);
+
+        errors.Should().BeEmpty();
+        LocalConfigFile.TryLoad(path)!.NodeId.Should().Be("dest-1");
+        (await File.ReadAllTextAsync(path + LocalConfigFile.UnreadableBackupSuffix)).Should().Be(Broken);
     }
 
     /// <summary>
@@ -75,7 +95,7 @@ public sealed class SetupViewModelTests : IDisposable
     public async Task Endpoint_Mode_Is_Written_And_Loaded()
     {
         var path = Path.Combine(_root, "syncbridge.json");
-        var setup = new SetupViewModel(path, Substitute.For<IDialogService>());
+        var setup = new SetupViewModel(TestTexts.Russian, path, Substitute.For<IDialogService>());
         setup.Load(null, null);
 
         setup.SelectedEndpointMode.Value.Should().Be(EndpointMode.SshTunnel, "the tunnel stays the default");
@@ -83,7 +103,7 @@ public sealed class SetupViewModelTests : IDisposable
 
         setup.SelectedRole = NodeRole.Dest;
         setup.Path = "/srv/repo";
-        setup.SelectedEndpointMode = EndpointModeOption.For(EndpointMode.Direct);
+        setup.SelectedEndpointMode = setup.EndpointModes.Single(option => option.Value == EndpointMode.Direct);
         setup.IsEndpointPortVisible.Should().BeTrue();
         setup.EndpointPort = 18999;
         await setup.SaveCommand.ExecuteAsync(null);
@@ -94,7 +114,7 @@ public sealed class SetupViewModelTests : IDisposable
         written.Endpoint.Port.Should().Be(18999);
         written.Endpoint.BindAddress.Should().Be("0.0.0.0");
 
-        var reopened = new SetupViewModel(path, Substitute.For<IDialogService>());
+        var reopened = new SetupViewModel(TestTexts.Russian, path, Substitute.For<IDialogService>());
         reopened.Load(written, null);
         reopened.SelectedEndpointMode.Value.Should().Be(EndpointMode.Direct);
         reopened.EndpointPort.Should().Be(18999);
@@ -109,7 +129,7 @@ public sealed class SetupViewModelTests : IDisposable
 
         var mediatorDirect = await LocalConfigFile.SaveAsync(
             Path.Combine(_root, "mediator.json"),
-            new NodeSetupValues("mediator-1", "M", NodeRole.Mediator, string.Empty, 18443, string.Empty, EndpointMode.Direct, 18444));
+            new NodeSetupValues("mediator-1", "M", NodeRole.Mediator, string.Empty, 18443, string.Empty, EndpointMode.Direct, 18444), TestTexts.Russian);
         mediatorDirect.Should().Contain(error => error.Contains("SshTunnel"), "the configuration check refuses a Mediator without SSH");
     }
 
@@ -124,7 +144,7 @@ public sealed class SetupViewModelTests : IDisposable
 
         var errors = await LocalConfigFile.SaveAsync(
             path,
-            new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18443, "token", EndpointMode.Direct, 18443));
+            new NodeSetupValues("dest-1", "Dest", NodeRole.Dest, "/srv/repo", 18443, "token", EndpointMode.Direct, 18443), TestTexts.Russian);
 
         errors.Should().ContainSingle().Which.Should().Contain("Endpoint.Port");
         File.Exists(path).Should().BeFalse();
@@ -139,7 +159,7 @@ public sealed class SetupViewModelTests : IDisposable
     {
         var path = Path.Combine(_root, "syncbridge.json");
 
-        var errors = await LocalConfigFile.SaveAsync(path, new NodeSetupValues("bad id", "x", NodeRole.Mediator, string.Empty, 18443, string.Empty));
+        var errors = await LocalConfigFile.SaveAsync(path, new NodeSetupValues("bad id", "x", NodeRole.Mediator, string.Empty, 18443, string.Empty), TestTexts.Russian);
 
         errors.Should().NotBeEmpty();
         File.Exists(path).Should().BeFalse();
@@ -153,7 +173,7 @@ public sealed class SetupViewModelTests : IDisposable
     public async Task Save_Validates_Role_And_Completes()
     {
         var path = Path.Combine(_root, "nested", "syncbridge.json");
-        var setup = new SetupViewModel(path, Substitute.For<IDialogService>());
+        var setup = new SetupViewModel(TestTexts.Russian, path, Substitute.For<IDialogService>());
         var completed = 0;
         setup.Completed += (_, _) => completed++;
         setup.Load(null, null);
@@ -179,7 +199,7 @@ public sealed class SetupViewModelTests : IDisposable
     [Fact]
     public void Load_Prefills_Existing_Configuration()
     {
-        var setup = new SetupViewModel(Path.Combine(_root, "syncbridge.json"), Substitute.For<IDialogService>());
+        var setup = new SetupViewModel(TestTexts.Russian, Path.Combine(_root, "syncbridge.json"), Substitute.For<IDialogService>());
 
         setup.Load(new Core.Config.SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = "/srv/repo", ListenPort = 18600, LinkToken = "t" }, "Invalid configuration");
 

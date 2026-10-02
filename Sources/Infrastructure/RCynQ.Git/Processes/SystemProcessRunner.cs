@@ -17,6 +17,18 @@ namespace RCynQ.Git.Processes;
 /// </remarks>
 public sealed class SystemProcessRunner : IProcessRunner
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SystemProcessRunner"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public SystemProcessRunner(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <inheritdoc />
     public async Task<ProcessResult> RunAsync(ProcessSpec spec, CancellationToken cancellationToken = default)
     {
@@ -38,20 +50,34 @@ public sealed class SystemProcessRunner : IProcessRunner
         try
         {
             await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+
+            // The output ends only when every process that holds the pipes is gone. A child that outlives the command
+            // (an SSH connection kept open, a credential helper) would keep these reads waiting for ever, so they are
+            // bound by the same timeout and cancellation as the process itself.
+            var output = await stdout.WaitAsync(linked.Token).ConfigureAwait(false);
+            var error = await stderr.WaitAsync(linked.Token).ConfigureAwait(false);
+            return new ProcessResult(process.ExitCode, output, error);
         }
         catch (OperationCanceledException)
         {
             KillQuietly(process);
+            Forget(stdout);
+            Forget(stderr);
             if (!cancellationToken.IsCancellationRequested)
             {
-                throw new SyncBridgeException(Texts.Format("Process.TimedOut", spec.FileName, spec.Timeout));
+                throw new SyncBridgeException(_localizer.Format("Process.TimedOut", spec.FileName, spec.Timeout));
             }
 
             throw;
         }
-
-        return new ProcessResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
     }
+
+    /// <summary>
+    /// Observes the failure of an abandoned read, which ends with an error once the process and its streams are disposed.
+    /// </summary>
+    /// <param name="read">The abandoned read.</param>
+    private static void Forget(Task read)
+        => read.ContinueWith(static task => _ = task.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
 
     /// <inheritdoc />
     public IRunningProcess Start(ProcessSpec spec)
@@ -122,22 +148,22 @@ public sealed class SystemProcessRunner : IProcessRunner
     /// <param name="process">The process.</param>
     /// <param name="spec">The specification.</param>
     /// <exception cref="SyncBridgeException">The process could not be started.</exception>
-    private static void StartOrThrow(Process process, ProcessSpec spec)
+    private void StartOrThrow(Process process, ProcessSpec spec)
     {
         try
         {
             if (!process.Start())
             {
-                throw new SyncBridgeException(Texts.Format("Process.NotStarted", spec.FileName));
+                throw new SyncBridgeException(_localizer.Format("Process.NotStarted", spec.FileName));
             }
         }
         catch (Win32Exception ex)
         {
-            throw new SyncBridgeException(Texts.Format("Process.NotStartedBecause", spec.FileName, ex.Message), ex);
+            throw new SyncBridgeException(_localizer.Format("Process.NotStartedBecause", spec.FileName, _localizer.Describe(ex)), ex);
         }
         catch (InvalidOperationException ex)
         {
-            throw new SyncBridgeException(Texts.Format("Process.NotStartedBecause", spec.FileName, ex.Message), ex);
+            throw new SyncBridgeException(_localizer.Format("Process.NotStartedBecause", spec.FileName, _localizer.Describe(ex)), ex);
         }
     }
 

@@ -77,4 +77,16 @@ public sealed class SnapshotRepository : ISnapshotRepository
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await db.Snapshots.Where(snapshot => snapshot.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
     }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var snapshots = await db.Snapshots.AsNoTracking().Select(snapshot => new { snapshot.Id, snapshot.NodeId, snapshot.CreatedAtUtc }).ToListAsync(cancellationToken);
+
+        // The newest record of a node is what the node last built its base from; it stays whatever its age.
+        var newest = snapshots.GroupBy(snapshot => snapshot.NodeId).Select(group => group.MaxBy(snapshot => snapshot.CreatedAtUtc)!.Id).ToHashSet();
+        var outdated = snapshots.Where(snapshot => snapshot.CreatedAtUtc < createdBeforeUtc && !newest.Contains(snapshot.Id)).Select(snapshot => snapshot.Id).ToList();
+        return outdated.Count == 0 ? 0 : await db.Snapshots.Where(snapshot => outdated.Contains(snapshot.Id)).ExecuteDeleteAsync(cancellationToken);
+    }
 }

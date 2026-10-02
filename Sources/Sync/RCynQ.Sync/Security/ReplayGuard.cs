@@ -32,13 +32,20 @@ public sealed class ReplayGuard
     private readonly ReplayGuardOptions _options;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ReplayGuard"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="patches">The patch repository.</param>
     /// <param name="timeProvider">The clock.</param>
     /// <param name="options">The options.</param>
-    public ReplayGuard(IPatchRepository patches, TimeProvider timeProvider, ReplayGuardOptions options)
+    public ReplayGuard(ILocalizer localizer, IPatchRepository patches, TimeProvider timeProvider, ReplayGuardOptions options)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _patches = patches;
         _timeProvider = timeProvider;
         _options = options;
@@ -61,7 +68,7 @@ public sealed class ReplayGuard
         EnsureInWindow(envelope);
         if (await _patches.ExistsAsync(envelope.Id, cancellationToken))
         {
-            throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", envelope.Id));
+            throw new PatchRejectedException(PatchRejectionReason.Replay, _localizer.Format("Replay.Again", envelope.Id));
         }
     }
 
@@ -79,12 +86,12 @@ public sealed class ReplayGuard
         var now = _timeProvider.GetUtcNow();
         if (envelope.CreatedAtUtc > now + _options.MaxClockSkew)
         {
-            throw new PatchRejectedException(PatchRejectionReason.Expired, Texts.Format("Replay.Future", envelope.Id, envelope.CreatedAtUtc));
+            throw new PatchRejectedException(PatchRejectionReason.Expired, _localizer.Format("Replay.Future", envelope.Id, envelope.CreatedAtUtc));
         }
 
         if (envelope.CreatedAtUtc < now - _options.MaxAge)
         {
-            throw new PatchRejectedException(PatchRejectionReason.Expired, Texts.Format("Replay.Old", envelope.Id, _options.MaxAge));
+            throw new PatchRejectedException(PatchRejectionReason.Expired, _localizer.Format("Replay.Old", envelope.Id, _options.MaxAge));
         }
     }
 }

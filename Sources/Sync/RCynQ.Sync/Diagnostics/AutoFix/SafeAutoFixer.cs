@@ -28,12 +28,17 @@ public sealed class SafeAutoFixer : IAutoFixer
     /// <summary>The handlers by kind.</summary>
     private readonly IReadOnlyDictionary<DiagnosticFixKind, IAutoFixHandler> _handlers;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SafeAutoFixer"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="handlers">The handlers; handlers for kinds outside the allow-list are ignored.</param>
-    public SafeAutoFixer(IEnumerable<IAutoFixHandler> handlers)
+    public SafeAutoFixer(ILocalizer localizer, IEnumerable<IAutoFixHandler> handlers)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _handlers = handlers.Where(handler => AllowedKinds.Contains(handler.Kind)).ToDictionary(handler => handler.Kind);
     }
 
@@ -46,17 +51,17 @@ public sealed class SafeAutoFixer : IAutoFixer
         ArgumentNullException.ThrowIfNull(fix);
         if (!IsAllowed(fix.Kind))
         {
-            return new AutoFixResult(false, Texts.Format("Fix.NotAutomatic", fix.Kind));
+            return new AutoFixResult(false, _localizer.Format("Fix.NotAutomatic", fix.Kind));
         }
 
         if (!confirmed)
         {
-            return new AutoFixResult(false, Texts.Format("Fix.NeedsConfirmation", fix.Description));
+            return new AutoFixResult(false, _localizer.Format("Fix.NeedsConfirmation", fix.Description));
         }
 
         if (!_handlers.TryGetValue(fix.Kind, out var handler))
         {
-            return new AutoFixResult(false, Texts.Format("Fix.NoHandler", fix.Kind));
+            return new AutoFixResult(false, _localizer.Format("Fix.NoHandler", fix.Kind));
         }
 
         try
@@ -65,7 +70,7 @@ public sealed class SafeAutoFixer : IAutoFixer
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException or KeyNotFoundException or FormatException)
         {
-            return new AutoFixResult(false, Texts.Format("Fix.Failed", fix.Description, ex.Message));
+            return new AutoFixResult(false, _localizer.Format("Fix.Failed", fix.Description, _localizer.Describe(ex)));
         }
     }
 }

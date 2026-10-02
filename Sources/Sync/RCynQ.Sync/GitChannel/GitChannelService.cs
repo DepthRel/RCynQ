@@ -9,6 +9,7 @@ using RCynQ.Core.State;
 using RCynQ.Git.Repository;
 using RCynQ.Localization;
 using RCynQ.Ssh.Commands;
+using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
@@ -87,9 +88,16 @@ public sealed class GitChannelService
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
 
+    /// <summary>Holds SSH connections to the pinned host keys of the peers, or <see langword="null"/> when nothing is checked.</summary>
+    private readonly IPinnedHostKeyGuard? _hostKeys;
+
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitChannelService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="links">The link repository.</param>
     /// <param name="git">The repository service.</param>
@@ -100,7 +108,9 @@ public sealed class GitChannelService
     /// <param name="paths">The sync paths.</param>
     /// <param name="pathUtility">The path utility.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
+    /// <param name="hostKeys">Holds SSH connections to the pinned host keys of the peers, or <see langword="null"/> to check nothing.</param>
     public GitChannelService(
+        ILocalizer localizer,
         NodeConfig node,
         IChainLinkRepository links,
         IGitRepositoryService git,
@@ -110,8 +120,11 @@ public sealed class GitChannelService
         SyncBaseManager syncBase,
         SyncPaths paths,
         IPathUtility pathUtility,
-        WorkingTreeLock workingTreeLock)
+        WorkingTreeLock workingTreeLock,
+        IPinnedHostKeyGuard? hostKeys = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _hostKeys = hostKeys;
         _node = node;
         _links = links;
         _git = git;
@@ -149,9 +162,10 @@ public sealed class GitChannelService
                 : await FetchSshAsync(workdir, route, cancellationToken);
             return new GitOperationResult(true, output, await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
         }
-        catch (Exception ex) when (ex is SyncBridgeException or ArgumentException)
+        catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            return new GitOperationResult(false, ex.Message, null);
+            // "Failures are reported in the result" includes a working directory or a bundle file that cannot be written.
+            return new GitOperationResult(false, _localizer.Describe(ex), null);
         }
     }
 
@@ -186,11 +200,11 @@ public sealed class GitChannelService
         }
         catch (PullRefusedException ex)
         {
-            return new GitOperationResult(false, $"{fetch.Output}\n{ex.Message}".Trim(), await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
+            return new GitOperationResult(false, $"{fetch.Output}\n{_localizer.Describe(ex)}".Trim(), await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            return new GitOperationResult(false, ex.Message, fetch.Branch);
+            return new GitOperationResult(false, _localizer.Describe(ex), fetch.Branch);
         }
     }
 
@@ -208,33 +222,33 @@ public sealed class GitChannelService
         var info = await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken);
         if (info.Branch is null)
         {
-            throw new PullRefusedException(Texts.Get("Git.PullDetached"));
+            throw new PullRefusedException(_localizer.Get("Git.PullDetached"));
         }
 
         if (info.TrackingRef is null)
         {
-            throw new PullRefusedException(Texts.Format("Git.PullNoDestBranch", info.Branch));
+            throw new PullRefusedException(_localizer.Format("Git.PullNoDestBranch", info.Branch));
         }
 
         var head = await _git.GetHeadCommitAsync(workdir, cancellationToken);
         var target = await _git.ResolveCommitAsync(workdir, info.TrackingRef, cancellationToken)
-            ?? throw new PullRefusedException(Texts.Format("Git.PullNoDestBranch", info.Branch));
+            ?? throw new PullRefusedException(_localizer.Format("Git.PullNoDestBranch", info.Branch));
         var lines = new List<string>();
         if (head == target)
         {
-            lines.Add(Texts.Format("Git.PullUpToDate", info.Branch));
+            lines.Add(_localizer.Format("Git.PullUpToDate", info.Branch));
         }
         else
         {
             if (head is null || !await _git.IsAncestorAsync(workdir, head, target, cancellationToken))
             {
-                throw new PullRefusedException(Texts.Format("Git.PullDiverged", info.Branch, info.Ahead, info.Behind));
+                throw new PullRefusedException(_localizer.Format("Git.PullDiverged", info.Branch, info.Ahead, info.Behind));
             }
 
             var replaced = await ClearDeliveredChangesAsync(workdir, head, target, syncBase.IsReady, cancellationToken);
             if (replaced.Count > 0)
             {
-                lines.Add(Texts.Format("Git.PullReplacedDelivered", DescribeFiles(replaced)));
+                lines.Add(_localizer.Format("Git.PullReplacedDelivered", DescribeFiles(replaced)));
             }
 
             lines.Add(await _git.PullFastForwardAsync(workdir, RemoteName, cancellationToken));
@@ -243,7 +257,7 @@ public sealed class GitChannelService
         var after = await _syncBase.EnsureAsync(cancellationToken);
         if (after.Mode == SyncBaseMode.Git && after.Commit is not null)
         {
-            lines.Add(Texts.Format("Git.PullSyncBase", after.Commit[..Math.Min(12, after.Commit.Length)]));
+            lines.Add(_localizer.Format("Git.PullSyncBase", after.Commit[..Math.Min(12, after.Commit.Length)]));
         }
 
         return string.Join('\n', lines.Where(line => line.Length > 0));
@@ -282,7 +296,7 @@ public sealed class GitChannelService
 
         if (unsent.Count > 0)
         {
-            throw new PullRefusedException(Texts.Format("Git.PullLocalChanges", DescribeFiles(unsent)));
+            throw new PullRefusedException(_localizer.Format("Git.PullLocalChanges", DescribeFiles(unsent)));
         }
 
         if (safe.Count > 0)
@@ -319,11 +333,11 @@ public sealed class GitChannelService
     /// </summary>
     /// <param name="paths">The files.</param>
     /// <returns>The text.</returns>
-    private static string DescribeFiles(IReadOnlyCollection<string> paths)
+    private string DescribeFiles(IReadOnlyCollection<string> paths)
     {
         var shown = paths.Take(MaxListedFiles).Select(path => "  " + path);
         var text = string.Join('\n', shown);
-        return paths.Count > MaxListedFiles ? $"{text}\n  {Texts.Format("Git.PullMoreFiles", paths.Count - MaxListedFiles)}" : text;
+        return paths.Count > MaxListedFiles ? $"{text}\n  {_localizer.Format("Git.PullMoreFiles", paths.Count - MaxListedFiles)}" : text;
     }
 
     /// <summary>
@@ -337,11 +351,19 @@ public sealed class GitChannelService
     private async Task<string> FetchSshAsync(string workdir, ChainRoute route, CancellationToken cancellationToken)
     {
         var repoPath = route.Endpoint.Peer.GitRepoPath
-            ?? throw new SyncBridgeException(Texts.Format("Git.DestNoRepo", route.Endpoint.Peer.Id));
+            ?? throw new SyncBridgeException(_localizer.Format("Git.DestNoRepo", route.Endpoint.Peer.Id));
         var url = GitRepositoryService.BuildSshUrl(route.Target!, repoPath);
         var sshCommand = _ssh.BuildGitSshCommand(route.Jumps);
         var hadCommits = await _git.HasCommitsAsync(workdir, cancellationToken);
         string? destHead = null;
+
+        // Before Git connects: with the pinned keys as the only ones on record, the SSH client Git starts refuses any
+        // other key by itself.
+        if (_hostKeys is not null)
+        {
+            await _hostKeys.EnsurePinnedAsync(route.SshPeers, cancellationToken);
+        }
+
         if (!hadCommits)
         {
             Directory.CreateDirectory(workdir);
@@ -379,7 +401,7 @@ public sealed class GitChannelService
                 await _git.EnsureRemoteAsync(workdir, RemoteName, RemotePlaceholderUrl, cancellationToken);
             }
 
-            return Texts.Get("Git.BundleUpToDate");
+            return _localizer.Get("Git.BundleUpToDate");
         }
 
         try
@@ -412,7 +434,7 @@ public sealed class GitChannelService
     {
         if (branch is null)
         {
-            throw new SyncBridgeException(Texts.Get("Git.BundleNoHead"));
+            throw new SyncBridgeException(_localizer.Get("Git.BundleNoHead"));
         }
 
         var keepFiles = HasWorkingFiles(workdir);
@@ -421,7 +443,7 @@ public sealed class GitChannelService
             await _git.AdoptRemoteBranchAsync(workdir, RemoteName, branch, keepFiles, cancellationToken);
         }
 
-        return $"{output}\n{Texts.Format(keepFiles ? "Git.BundleAdoptedKeepingFiles" : "Git.BundleAdopted", branch)}".Trim();
+        return $"{output}\n{_localizer.Format(keepFiles ? "Git.BundleAdoptedKeepingFiles" : "Git.BundleAdopted", branch)}".Trim();
     }
 
     /// <summary>
@@ -459,7 +481,7 @@ public sealed class GitChannelService
     {
         if (_node.Role != NodeRole.Source)
         {
-            throw new SyncBridgeException(Texts.Format("Git.OnlySource", _node.Role));
+            throw new SyncBridgeException(_localizer.Format("Git.OnlySource", _node.Role));
         }
 
         var chain = await _links.GetAllAsync(cancellationToken);
@@ -469,7 +491,7 @@ public sealed class GitChannelService
         }
         catch (ArgumentException ex)
         {
-            throw new SyncBridgeException(ex.Message, ex);
+            throw new SyncBridgeException(_localizer.Describe(ex), ex);
         }
     }
 

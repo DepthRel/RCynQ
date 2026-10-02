@@ -14,13 +14,18 @@ public sealed class RepoValidCheck : DiagnosticCheckBase
     /// <summary>The git runner.</summary>
     private readonly IGitCommandRunner _git;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RepoValidCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="git">The git runner.</param>
-    public RepoValidCheck(IGitCommandRunner git)
+    public RepoValidCheck(ILocalizer localizer, IGitCommandRunner git)
         : base("RepoValid", new[] { NodeRole.Dest })
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _git = git;
     }
 
@@ -30,7 +35,7 @@ public sealed class RepoValidCheck : DiagnosticCheckBase
         var repo = context.Node.RepoPath;
         if (repo is null || !Directory.Exists(repo))
         {
-            return Fail(Texts.Format("Diag.Repo.Missing", repo), Texts.Get("Diag.Repo.MissingFix"));
+            return Fail(_localizer.Format("Diag.Repo.Missing", repo), _localizer.Get("Diag.Repo.MissingFix"));
         }
 
         try
@@ -38,18 +43,18 @@ public sealed class RepoValidCheck : DiagnosticCheckBase
             var inside = await _git.RunAsync(new[] { "rev-parse", "--is-inside-work-tree" }, repo, cancellationToken: cancellationToken);
             if (inside.ExitCode != 0 || inside.StandardOutput.Trim() != "true")
             {
-                return Fail(Texts.Format("Diag.Repo.NotWorkTree", repo), Texts.Get("Diag.Repo.NotWorkTreeFix"));
+                return Fail(_localizer.Format("Diag.Repo.NotWorkTree", repo), _localizer.Get("Diag.Repo.NotWorkTreeFix"));
             }
 
             var name = await _git.RunAsync(new[] { "config", "user.name" }, repo, cancellationToken: cancellationToken);
             var email = await _git.RunAsync(new[] { "config", "user.email" }, repo, cancellationToken: cancellationToken);
             return name.ExitCode == 0 && email.ExitCode == 0 && name.StandardOutput.Trim().Length > 0 && email.StandardOutput.Trim().Length > 0
-                ? Pass(Texts.Format("Diag.Repo.Ok", name.StandardOutput.Trim(), email.StandardOutput.Trim()))
-                : Fail(Texts.Get("Diag.Repo.NoIdentity"), Texts.Get("Diag.Repo.NoIdentityFix"));
+                ? Pass(_localizer.Format("Diag.Repo.Ok", name.StandardOutput.Trim(), email.StandardOutput.Trim()))
+                : Fail(_localizer.Get("Diag.Repo.NoIdentity"), _localizer.Get("Diag.Repo.NoIdentityFix"));
         }
         catch (SyncBridgeException ex)
         {
-            return Fail(ex.Message, Texts.Get("Diag.Repo.InstallGit"));
+            return Fail(_localizer.Describe(ex), _localizer.Get("Diag.Repo.InstallGit"));
         }
     }
 }
