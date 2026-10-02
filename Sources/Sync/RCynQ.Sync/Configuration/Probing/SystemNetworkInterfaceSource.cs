@@ -11,7 +11,7 @@ public sealed class SystemNetworkInterfaceSource : INetworkInterfaceSource
     /// <summary>
     /// Interface name or description fragments that identify VPN and tunnel adapters.
     /// </summary>
-    private static readonly string[] TunnelHints = { "amnezia", "awg", "wireguard", "wg0", "wg1", "tunnel", "utun", "tun0", "tun1", "tap-", "vpn", "tailscale", "zerotier" };
+    private static readonly string[] _tunnelHints = { "amnezia", "awg", "wireguard", "wg0", "wg1", "tunnel", "utun", "tun0", "tun1", "tap-", "vpn", "tailscale", "zerotier" };
 
     /// <inheritdoc />
     public IReadOnlyList<LocalNetworkAddress> GetAddresses()
@@ -67,6 +67,6 @@ public sealed class SystemNetworkInterfaceSource : INetworkInterfaceSource
         }
 
         var text = $"{name} {description}";
-        return TunnelHints.Any(hint => text.Contains(hint, StringComparison.OrdinalIgnoreCase));
+        return _tunnelHints.Any(hint => text.Contains(hint, StringComparison.OrdinalIgnoreCase));
     }
 }

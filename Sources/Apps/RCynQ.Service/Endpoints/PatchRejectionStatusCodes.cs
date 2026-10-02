@@ -24,6 +24,8 @@ public static class PatchRejectionStatusCodes
         PatchRejectionReason.Replay => StatusCodes.Status409Conflict,
         PatchRejectionReason.Expired => StatusCodes.Status409Conflict,
         PatchRejectionReason.RoleNotAllowed => StatusCodes.Status404NotFound,
+        PatchRejectionReason.RepositoryMismatch => StatusCodes.Status409Conflict,
+        PatchRejectionReason.UnknownRepository => StatusCodes.Status409Conflict,
         _ => StatusCodes.Status400BadRequest
     };
 }

@@ -6,6 +6,6 @@ namespace RCynQ.Core.Api;
 /// Body of <c>PUT /config/role</c>.
 /// </summary>
 /// <param name="Role">The new role.</param>
-/// <param name="RepoPath">The repository path (Dest), or <see langword="null"/> to keep the configured value.</param>
-/// <param name="WorkdirPath">The working directory (Source), or <see langword="null"/> to keep the configured value.</param>
+/// <param name="RepoPath">The repository path (Origin), or <see langword="null"/> to keep the configured value.</param>
+/// <param name="WorkdirPath">The working directory (Workstation), or <see langword="null"/> to keep the configured value.</param>
 public sealed record SetRoleRequest(NodeRole Role, string? RepoPath, string? WorkdirPath);

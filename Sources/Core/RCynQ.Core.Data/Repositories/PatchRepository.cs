@@ -3,6 +3,7 @@ using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Data.Context;
 using RCynQ.Core.Data.Entities;
 using RCynQ.Core.Data.Mapping;
+using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 
 namespace RCynQ.Core.Data.Repositories;
@@ -76,5 +77,30 @@ public sealed class PatchRepository : IPatchRepository
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await db.PatchEnvelopes.AsNoTracking().OrderByDescending(patch => patch.CreatedAtUtc).ToListAsync(cancellationToken);
         return entities.Select(EntityMapper.ToDomain).ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.PatchEnvelopes.CountAsync(patch => patch.Direction == (int)direction && patch.Status == (int)status, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Guid>> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, IReadOnlyCollection<PatchStatus> keepStatuses, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(keepStatuses);
+        var keep = keepStatuses.Select(status => (int)status).ToArray();
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var ids = await db.PatchEnvelopes.AsNoTracking()
+            .Where(patch => patch.CreatedAtUtc < createdBeforeUtc && !keep.Contains(patch.Status))
+            .Select(patch => patch.Id)
+            .ToListAsync(cancellationToken);
+        if (ids.Count > 0)
+        {
+            await db.PatchEnvelopes.Where(patch => ids.Contains(patch.Id)).ExecuteDeleteAsync(cancellationToken);
+        }
+
+        return ids;
     }
 }

@@ -3,7 +3,6 @@ using FluentAssertions;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
-using RCynQ.Sync.Content;
 using RCynQ.Sync.Tests.Fixtures;
 using RCynQ.Sync.Transfer;
 
@@ -76,10 +75,10 @@ public sealed class ContentAndTransferTests : IDisposable
     [Fact]
     public async Task Workdir_Content_Streams_Files_And_Reports_Missing_Ones()
     {
-        var content = _fixture.SourceContent;
+        var content = _fixture.WorkstationContent;
         var a = new FileChange(ChangeKind.Modified, "a.txt", null, null, false);
 
-        await using (var editor = new FileStream(Path.Combine(_fixture.SourceWork, "a.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+        await using (var editor = new FileStream(Path.Combine(_fixture.WorkstationWork, "a.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
         {
             await using var stream = await content.OpenReadAsync(a);
             using var reader = new StreamReader(stream);
@@ -99,29 +98,29 @@ public sealed class ContentAndTransferTests : IDisposable
     [Fact]
     public async Task Applier_Writes_Deletes_And_Refuses_Unsafe_Paths()
     {
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
-        SyncFixture.Write(_fixture.SourceWork, "deep/er/n.txt", "new\n");
-        File.Delete(Path.Combine(_fixture.SourceWork, "b.txt"));
-        SyncFixture.Write(_fixture.DestWork, "gone/x/old.txt", "old\n");
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v2\n");
+        SyncFixture.Write(_fixture.WorkstationWork, "deep/er/n.txt", "new\n");
+        File.Delete(Path.Combine(_fixture.WorkstationWork, "b.txt"));
+        SyncFixture.Write(_fixture.OriginWork, "gone/x/old.txt", "old\n");
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var manifest = envelope.Manifest.Append(new FileChange(ChangeKind.Deleted, "gone/x/old.txt", null, null, false)).ToArray();
         var withDeletion = new PatchEnvelope(envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, envelope.BaseStateHash, envelope.IncomingStateHash, manifest);
 
-        var result = await _fixture.Applier.ApplyAsync(withDeletion, _fixture.SourceContent, _fixture.DestWork);
+        var result = await _fixture.Applier.ApplyAsync(withDeletion, _fixture.WorkstationContent, _fixture.OriginWork);
 
         result.AppliedFileCount.Should().Be(4);
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v2\n");
-        SyncFixture.Read(_fixture.DestWork, "deep/er/n.txt").Should().Be("new\n");
-        SyncFixture.Read(_fixture.DestWork, "b.txt").Should().BeNull();
-        Directory.Exists(Path.Combine(_fixture.DestWork, "gone")).Should().BeFalse("empty parent folders of a deleted file are removed");
-        Directory.GetFiles(_fixture.DestWork, "*.tmp", SearchOption.AllDirectories).Should().BeEmpty("temporary files are removed");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v2\n");
+        SyncFixture.Read(_fixture.OriginWork, "deep/er/n.txt").Should().Be("new\n");
+        SyncFixture.Read(_fixture.OriginWork, "b.txt").Should().BeNull();
+        Directory.Exists(Path.Combine(_fixture.OriginWork, "gone")).Should().BeFalse("empty parent folders of a deleted file are removed");
+        Directory.GetFiles(_fixture.OriginWork, "*.tmp", SearchOption.AllDirectories).Should().BeEmpty("temporary files are removed");
 
         foreach (var unsafePath in new[] { "../escape.txt", ".git/hooks/post-commit", "sub/../../escape.txt" })
         {
             var hash = new string('a', 64);
             var hostile = new PatchEnvelope(envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, hash, hash,
                 new[] { new FileChange(ChangeKind.Added, unsafePath, hash, 1, false) });
-            var apply = () => _fixture.Applier.ApplyAsync(hostile, _fixture.SourceContent, _fixture.DestWork);
+            var apply = () => _fixture.Applier.ApplyAsync(hostile, _fixture.WorkstationContent, _fixture.OriginWork);
             await apply.Should().ThrowAsync<ArgumentException>(unsafePath);
         }
     }
@@ -133,21 +132,21 @@ public sealed class ContentAndTransferTests : IDisposable
     [Fact]
     public async Task Base_Update_Skips_Files_Edited_After_The_Manifest_Was_Built()
     {
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
-        SyncFixture.Write(_fixture.SourceWork, "new.txt", "new\n");
-        File.Delete(Path.Combine(_fixture.SourceWork, "b.txt"));
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v2\n");
+        SyncFixture.Write(_fixture.WorkstationWork, "new.txt", "new\n");
+        File.Delete(Path.Combine(_fixture.WorkstationWork, "b.txt"));
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v3, typed while sending\n");
-        var syncBase = _fixture.SourceBaseForBuild;
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v3, typed while sending\n");
+        var syncBase = _fixture.WorkstationBaseForBuild;
 
-        var accepted = await new Apply.SyncBaseUpdater(_fixture.Applier, _fixture.Paths).UpdateAsync(envelope, _fixture.SourceWork, syncBase);
+        var accepted = await new Apply.SyncBaseUpdater(TestTexts.English, _fixture.Applier, _fixture.Paths).UpdateAsync(envelope, _fixture.WorkstationWork, syncBase);
 
         accepted.Select(change => change.Path).Should().BeEquivalentTo("b.txt", "new.txt");
         SyncFixture.Read(syncBase, "a.txt").Should().Be("v1\n", "the peer received v2, not v3, so the base must not claim v3");
         SyncFixture.Read(syncBase, "new.txt").Should().Be("new\n");
         SyncFixture.Read(syncBase, "b.txt").Should().BeNull("deletions are applied");
 
-        var next = await _fixture.CreateBuilder().BuildAsync(envelope.SourceNode, envelope.TargetNode, syncBase, _fixture.SourceWork);
+        var next = await _fixture.CreateBuilder().BuildAsync(envelope.SourceNode, envelope.TargetNode, syncBase, _fixture.WorkstationWork);
         next.Manifest.Should().ContainSingle().Which.Path.Should().Be("a.txt", "the next patch carries the edit");
     }
 

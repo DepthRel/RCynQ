@@ -5,32 +5,45 @@ using CliFx.Infrastructure;
 using RCynQ.Cli.Services;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration;
 
 namespace RCynQ.Cli.Commands.Config;
 
 /// <summary>
-/// <c>rcynq role set source|mediator|dest</c>: writes the role into the configuration file.
+/// <c>rcynq role set workstation|relay|origin</c>: writes the role into the configuration file.
 /// </summary>
-[Command("role set", Description = "Sets the node role (source, mediator or dest) in syncbridge.json.")]
+[Command("role set", Description = "Sets the node role (workstation, relay or origin) in syncbridge.json.")]
 public sealed class RoleSetCommand : ICommand
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoleSetCommand"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public RoleSetCommand(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <summary>
     /// Gets or sets the role.
     /// </summary>
-    [CommandParameter(0, Name = "role", Description = "source, mediator or dest.")]
+    [CommandParameter(0, Name = "role", Description = "workstation, relay or origin.")]
     public NodeRole Role { get; set; }
 
     /// <summary>
     /// Gets or sets the repository path.
     /// </summary>
-    [CommandOption("repo", Description = "Repository path (required for dest).")]
+    [CommandOption("repo", Description = "Repository path (required for origin).")]
     public string? RepoPath { get; set; }
 
     /// <summary>
     /// Gets or sets the working directory.
     /// </summary>
-    [CommandOption("workdir", Description = "Working directory (required for source).")]
+    [CommandOption("workdir", Description = "Working directory (required for workstation).")]
     public string? WorkdirPath { get; set; }
 
     /// <summary>
@@ -51,15 +64,15 @@ public sealed class RoleSetCommand : ICommand
         try
         {
             var path = ConfigurationFileEditor.ResolvePath(ConfigPath);
-            await console.Output.WriteAsync(await new ConfigCommandService().SetRoleAsync(path, Role, RepoPath, WorkdirPath, NodeId, console.RegisterCancellationHandler()));
+            await console.Output.WriteAsync(await new ConfigCommandService(_localizer).SetRoleAsync(path, Role, RepoPath, WorkdirPath, NodeId, console.RegisterCancellationHandler()));
         }
         catch (ArgumentException ex)
         {
-            throw new CommandException(ex.Message, 2);
+            throw new CommandException(_localizer.Describe(ex), 2);
         }
         catch (SyncBridgeException ex)
         {
-            throw new CommandException(ex.Message, 1);
+            throw new CommandException(_localizer.Describe(ex), 1);
         }
     }
 }

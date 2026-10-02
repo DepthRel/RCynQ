@@ -51,9 +51,12 @@ public class ServiceStartupOrderTests
             };
 
             var status = await PollHealthAsync(client, TimeSpan.FromSeconds(15), cancellationToken);
-
-            pipeline.WasEntered.Should().BeTrue("the role pipeline start must have been triggered");
             status.Should().Be(HttpStatusCode.OK, "the listener must be up before the role pipeline finishes");
+
+            // The listener is bound a moment before the host reaches the pipeline, so the start is awaited, not sampled.
+            var entered = async () => await pipeline.Entered.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+            await entered.Should().NotThrowAsync("the role pipeline start must have been triggered");
+            starting.IsCompleted.Should().BeFalse("the pipeline is still blocked, so the health answer came while it was starting");
 
             pipeline.Release();
             await starting;
@@ -69,7 +72,7 @@ public class ServiceStartupOrderTests
     }
 
     /// <summary>
-    /// Builds a Source service whose role pipeline blocks, with a temporary data root.
+    /// Builds a Workstation service whose role pipeline blocks, with a temporary data root.
     /// </summary>
     /// <param name="root">The temporary root directory.</param>
     /// <param name="port">The loopback port.</param>
@@ -81,16 +84,16 @@ public class ServiceStartupOrderTests
         var dataRoot = Path.Combine(root, "data");
         var settings = new Dictionary<string, string?>
         {
-            ["SyncBridge:NodeId"] = "source-1",
-            ["SyncBridge:Role"] = nameof(NodeRole.Source),
-            ["SyncBridge:WorkdirPath"] = work,
+            ["SyncBridge:NodeId"] = "workstation-1",
+            ["SyncBridge:Role"] = nameof(NodeRole.Workstation),
+            ["SyncBridge:Repositories:0:Path"] = work,
             ["SyncBridge:DataRoot"] = dataRoot,
-            ["SyncBridge:LinkToken"] = ServiceTestHost.LinkToken,
+            ["SyncBridge:LinkToken"] = ServiceTestHost.LINK_TOKEN,
             ["SyncBridge:ListenPort"] = port.ToString(CultureInfo.InvariantCulture)
         };
 
         return ServiceHostBuilder.Build(
-            new[] { "--config", Path.Combine(root, SyncBridgeOptions.DefaultFileName) },
+            new[] { "--config", Path.Combine(root, SyncBridgeOptions.DEFAULT_FILE_NAME) },
             new ServiceHostOptions
             {
                 RunBackgroundServices = true,
@@ -113,7 +116,7 @@ public class ServiceStartupOrderTests
         {
             try
             {
-                using var response = await client.GetAsync(ApiRoutes.Health, cancellationToken);
+                using var response = await client.GetAsync(ApiRoutes.HEALTH, cancellationToken);
                 return response.StatusCode;
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
@@ -159,14 +162,17 @@ public class ServiceStartupOrderTests
         /// <summary>Signals that the start may finish.</summary>
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <summary>Gets a value indicating whether <see cref="StartAsync"/> was entered.</summary>
-        public bool WasEntered { get; private set; }
+        /// <summary>Signals that <see cref="StartAsync"/> was entered.</summary>
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Gets a task that completes once <see cref="StartAsync"/> was entered.</summary>
+        public Task Entered => _entered.Task;
 
         /// <inheritdoc />
-        public NodeRole Role => NodeRole.Source;
+        public NodeRole Role => NodeRole.Workstation;
 
         /// <inheritdoc />
-        public RoleCapabilities Capabilities => RoleCapabilities.For(NodeRole.Source);
+        public RoleCapabilities Capabilities => RoleCapabilities.For(NodeRole.Workstation);
 
         /// <summary>
         /// Lets the blocked start finish.
@@ -176,7 +182,7 @@ public class ServiceStartupOrderTests
         /// <inheritdoc />
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            WasEntered = true;
+            _entered.TrySetResult();
             await _release.Task.WaitAsync(cancellationToken);
         }
 

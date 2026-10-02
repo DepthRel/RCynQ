@@ -1,7 +1,7 @@
 namespace RCynQ.Core.State;
 
 /// <summary>
-/// The branch state of a working tree relative to the branches fetched from Dest.
+/// The branch state of a working tree relative to the branches fetched from Origin.
 /// </summary>
 /// <param name="IsRepository">Whether the directory is a Git working tree.</param>
 /// <param name="Branch">The current branch name, or <see langword="null"/> for a detached HEAD or non-repository.</param>

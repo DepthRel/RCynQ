@@ -27,6 +27,9 @@ public static class DataServiceCollectionExtensions
     public static IServiceCollection AddRCynQData(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IAppDataFactory>(provider => new AppDataFactory(provider.GetRequiredService<SyncBridgeOptions>()));
         services.AddDbContextFactory<RCynQDbContext>((provider, options) =>

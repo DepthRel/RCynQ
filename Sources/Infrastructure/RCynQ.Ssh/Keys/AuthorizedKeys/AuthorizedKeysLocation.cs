@@ -13,7 +13,7 @@ namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 public static class AuthorizedKeysLocation
 {
     /// <summary>The Windows file for members of the Administrators group.</summary>
-    public const string AdministratorsFileName = "administrators_authorized_keys";
+    public const string ADMINISTRATORS_FILE_NAME = "administrators_authorized_keys";
 
     /// <summary>
     /// Detects the file for the current user.
@@ -44,12 +44,12 @@ public static class AuthorizedKeysLocation
         if (!string.IsNullOrWhiteSpace(options.AuthorizedKeysPath))
         {
             var path = Path.GetFullPath(options.AuthorizedKeysPath);
-            return new AuthorizedKeysTarget(path, isWindows && Path.GetFileName(path).Equals(AdministratorsFileName, StringComparison.OrdinalIgnoreCase));
+            return new AuthorizedKeysTarget(path, isWindows && Path.GetFileName(path).Equals(ADMINISTRATORS_FILE_NAME, StringComparison.OrdinalIgnoreCase));
         }
 
         if (isWindows && isAdministratorsMember())
         {
-            return new AuthorizedKeysTarget(Path.Combine(programData, "ssh", AdministratorsFileName), true);
+            return new AuthorizedKeysTarget(Path.Combine(programData, "ssh", ADMINISTRATORS_FILE_NAME), true);
         }
 
         return new AuthorizedKeysTarget(Path.Combine(userProfile, ".ssh", "authorized_keys"), false);

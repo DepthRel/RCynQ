@@ -19,7 +19,7 @@ public class SignatureAndReplayTests
     /// <summary>
     /// A valid digest.
     /// </summary>
-    private static readonly string Hash = new('a', 64);
+    private static readonly string _hash = new('a', 64);
 
     /// <summary>
     /// Verifies sign/verify round-trip, key persistence and rejection of tampered data or foreign keys.
@@ -29,7 +29,7 @@ public class SignatureAndReplayTests
     public async Task Ecdsa_Signs_And_Verifies()
     {
         var secrets = new InMemorySecretStore();
-        using var signer = new EcdsaSignatureService(secrets);
+        using var signer = new EcdsaSignatureService(TestTexts.English, secrets);
         var payload = "payload"u8.ToArray();
 
         var signature = await signer.SignAsync(payload);
@@ -37,11 +37,11 @@ public class SignatureAndReplayTests
 
         signer.Verify(payload, signature, publicKey).Should().BeTrue();
         signer.Verify("tampered"u8.ToArray(), signature, publicKey).Should().BeFalse();
-        signer.Verify(payload, signature, await new EcdsaSignatureService(new InMemorySecretStore()).ExportPublicKeyAsync()).Should().BeFalse();
+        signer.Verify(payload, signature, await new EcdsaSignatureService(TestTexts.English, new InMemorySecretStore()).ExportPublicKeyAsync()).Should().BeFalse();
         signer.Verify(payload, signature, new byte[] { 1, 2, 3 }).Should().BeFalse();
 
-        (await secrets.GetAsync(EcdsaSignatureService.SecretName)).Should().NotBeNullOrEmpty();
-        using var reloaded = new EcdsaSignatureService(secrets);
+        (await secrets.GetAsync(EcdsaSignatureService.SECRET_NAME)).Should().NotBeNullOrEmpty();
+        using var reloaded = new EcdsaSignatureService(TestTexts.English, secrets);
         (await reloaded.ExportPublicKeyAsync()).Should().Equal(publicKey);
     }
 
@@ -53,9 +53,9 @@ public class SignatureAndReplayTests
     {
         var created = new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero);
         var id = Guid.NewGuid();
-        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, long size = 1, string target = "dest", string? baseHash = null)
-            => new(id, new NodeId("source"), new NodeId(target), at ?? created, Hash, Hash,
-                new[] { new FileChange(ChangeKind.Modified, path, Hash, size, false, baseHash) });
+        PatchEnvelope Envelope(string path = "a.txt", DateTimeOffset? at = null, long size = 1, string target = "origin", string? baseHash = null)
+            => new(id, new NodeId("workstation"), new NodeId(target), at ?? created, _hash, _hash,
+                new[] { new FileChange(ChangeKind.Modified, path, _hash, size, false, baseHash) });
 
         var baseline = PayloadCanonicalizer.Build(Envelope());
         PayloadCanonicalizer.Build(Envelope()).Should().Equal(baseline);
@@ -78,8 +78,8 @@ public class SignatureAndReplayTests
         var clock = Substitute.For<TimeProvider>();
         clock.GetUtcNow().Returns(now);
         var repository = new InMemoryPatchRepository();
-        var guard = new ReplayGuard(repository, clock, new ReplayGuardOptions { MaxAge = TimeSpan.FromHours(1), MaxClockSkew = TimeSpan.FromMinutes(5) });
-        PatchEnvelope At(DateTimeOffset createdAt) => new(Guid.NewGuid(), new NodeId("s"), new NodeId("d"), createdAt, Hash, Hash, Array.Empty<FileChange>());
+        var guard = new ReplayGuard(TestTexts.English, repository, clock, new ReplayGuardOptions { MaxAge = TimeSpan.FromHours(1), MaxClockSkew = TimeSpan.FromMinutes(5) });
+        PatchEnvelope At(DateTimeOffset createdAt) => new(Guid.NewGuid(), new NodeId("s"), new NodeId("d"), createdAt, _hash, _hash, Array.Empty<FileChange>());
 
         var fresh = At(now.AddMinutes(-10));
         await guard.EnsureFreshAsync(fresh);
@@ -109,7 +109,7 @@ public class SignatureAndReplayTests
         LinkTokenProvider.Matches("", "").Should().BeFalse();
 
         var secrets = new InMemorySecretStore();
-        await secrets.SetAsync(LinkTokenProvider.SecretName, "from-secret-store");
+        await secrets.SetAsync(LinkTokenProvider.SECRET_NAME, "from-secret-store");
         (await new LinkTokenProvider(new SyncBridgeOptions(), secrets).GetTokenAsync()).Should().Be("from-secret-store");
         (await new LinkTokenProvider(new SyncBridgeOptions { LinkToken = " configured " }, secrets).GetTokenAsync()).Should().Be("configured");
     }

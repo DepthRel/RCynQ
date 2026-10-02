@@ -21,13 +21,18 @@ public sealed class PublicEndpointMiddleware
     /// <summary>The port of the direct endpoint.</summary>
     private readonly int _port;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PublicEndpointMiddleware"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="next">The next middleware.</param>
     /// <param name="options">The direct endpoint settings.</param>
-    public PublicEndpointMiddleware(RequestDelegate next, PublicEndpointOptions options)
+    public PublicEndpointMiddleware(ILocalizer localizer, RequestDelegate next, PublicEndpointOptions options)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentNullException.ThrowIfNull(options);
         _next = next;
         _port = options.Port;
@@ -48,14 +53,16 @@ public sealed class PublicEndpointMiddleware
         }
 
         var path = context.Request.Path;
-        var allowed = ((HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method))
-                && path.StartsWithSegments(ApiRoutes.PatchSessionPrefix, StringComparison.OrdinalIgnoreCase))
-            || (HttpMethods.IsPost(context.Request.Method) && path.Equals(ApiRoutes.GitBundle, StringComparison.OrdinalIgnoreCase))
-            || (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.Health, StringComparison.OrdinalIgnoreCase));
+        var allowed = ((HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method)) &&
+                path.StartsWithSegments(ApiRoutes.PATCH_SESSION_PREFIX, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsPost(context.Request.Method) && path.Equals(ApiRoutes.GIT_BUNDLE, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.HEALTH, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.PEER_PING, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsGet(context.Request.Method) && path.Equals(ApiRoutes.PEER_REPOSITORIES, StringComparison.OrdinalIgnoreCase));
         if (!allowed)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
-            await context.Response.WriteAsJsonAsync(new ErrorResponse(Texts.Get("Api.RouteNotPublic")));
+            await context.Response.WriteAsJsonAsync(new ErrorResponse(_localizer.Get("Api.RouteNotPublic")));
             return;
         }
 

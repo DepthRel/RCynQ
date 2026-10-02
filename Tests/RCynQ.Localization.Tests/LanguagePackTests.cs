@@ -15,11 +15,14 @@ public sealed partial class LanguagePackTests
     private static partial Regex Placeholder();
 
     /// <summary>
-    /// The pattern of a key asked for from code: <c>Texts.Get("Key")</c> and <c>Texts.Format("Key", …)</c>. A prefix
-    /// that ends with a dot (<c>"Session.Reject." + reason</c>) is a family of keys chosen by an enumeration; the
-    /// tests of the projects that own the enumerations check that every value has its text.
+    /// The pattern of a key asked for from code: a localizer (<c>_localizer.Get("Key")</c>,
+    /// <c>Localizer.Format("Key", …)</c>), a message stored as a key (<c>LocalizedText.Encode("Key", …)</c>) and an
+    /// exception that carries its key (<c>LocalizedError.Format("Key")</c>, <c>LocalizedError.Argument(name, "Key")</c>,
+    /// <c>LocalizedError.Create(message => …, "Key")</c>). A prefix that ends with a dot
+    /// (<c>"Session.Reject." + reason</c>) is a family of keys chosen by an enumeration; the tests of the projects that
+    /// own the enumerations check that every value has its text.
     /// </summary>
-    [GeneratedRegex(@"Texts\.(?:Get|Format)\(\s*""(?<key>[^""]*[^"".])""")]
+    [GeneratedRegex(@"(?:ocalizer\.(?:Get|Format)\(|LocalizedText\.Encode\(|LocalizedError\.Format\(|LocalizedError\.Argument\([^,""]+,|LocalizedError\.Create\([^""\n]*\),)\s*""(?<key>[^""]*[^"".])""")]
     private static partial Regex CodeKey();
 
     /// <summary>
@@ -52,8 +55,8 @@ public sealed partial class LanguagePackTests
     /// <returns>The paths.</returns>
     private static IEnumerable<string> SourceFiles(string extension)
         => Directory.EnumerateFiles(Path.Combine(RepositoryRoot(), "Sources"), "*" + extension, SearchOption.AllDirectories)
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+                !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 
     /// <summary>
     /// Returns the texts of a pack by key.
@@ -187,10 +190,10 @@ public sealed partial class LanguagePackTests
     private static bool IsComment(string line)
     {
         var trimmed = line.TrimStart();
-        return trimmed.StartsWith("//", StringComparison.Ordinal)
-            || trimmed.StartsWith("<!--", StringComparison.Ordinal)
-            || trimmed.StartsWith("-->", StringComparison.Ordinal)
-            || trimmed.StartsWith("*", StringComparison.Ordinal)
-            || !trimmed.Contains('<') && !trimmed.Contains('"') && !trimmed.Contains('=') && !trimmed.Contains(';');
+        return trimmed.StartsWith("//", StringComparison.Ordinal) ||
+            trimmed.StartsWith("<!--", StringComparison.Ordinal) ||
+            trimmed.StartsWith("-->", StringComparison.Ordinal) ||
+            trimmed.StartsWith("*", StringComparison.Ordinal) ||
+            !trimmed.Contains('<') && !trimmed.Contains('"') && !trimmed.Contains('=') && !trimmed.Contains(';');
     }
 }

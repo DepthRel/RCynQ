@@ -2,11 +2,8 @@ using System.Text;
 using FluentAssertions;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Ids;
 using RCynQ.Git.Commands;
-using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
-using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Processes;
@@ -47,8 +44,8 @@ public class GitIntegrationTests
         File.WriteAllBytes(work["latin1.txt"], new byte[] { 0xE9, (byte)'t', 0xE9, (byte)'\n' });
         File.WriteAllBytes(work["bin.dat"], new byte[] { 0, 1, 2, 255 });
 
-        var paths = new PathUtility();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var paths = new PathUtility(TestTexts.English);
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         var manifest = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(baseDir.Path, work.Path);
         var diff = await new PatchDiffBuilder(new GitDiffBuilder(git), paths).BuildAsync(manifest, baseDir.Path, new DirectoryContent(work.Path), PatchDiffLimits.Full);
         var diffFile = Path.Combine(target.Path, "..", Guid.NewGuid().ToString("N") + ".diff");
@@ -82,7 +79,7 @@ public class GitIntegrationTests
             return;
         }
 
-        var runner = new SystemProcessRunner();
+        var runner = new SystemProcessRunner(TestTexts.English);
         var version = await runner.RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
         version.ExitCode.Should().Be(0);
         version.StandardOutput.Should().StartWith("git version");
@@ -113,25 +110,25 @@ public class GitIntegrationTests
             return;
         }
 
-        using var dest = new TempDirectory();
-        using var source = new TempDirectory();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
-        await RunGit(git, dest.Path, "init", "-b", "main");
-        dest.Write("readme.md", "v1");
-        await Commit(git, dest.Path, "v1");
-        await RunGit(git, source.Path, "clone", dest.Path, ".");
+        using var origin = new TempDirectory();
+        using var workstation = new TempDirectory();
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
+        await RunGit(git, origin.Path, "init", "-b", "main");
+        origin.Write("readme.md", "v1");
+        await Commit(git, origin.Path, "v1");
+        await RunGit(git, workstation.Path, "clone", origin.Path, ".");
 
-        dest.Write("readme.md", "v2");
-        await Commit(git, dest.Path, "v2");
+        origin.Write("readme.md", "v2");
+        await Commit(git, origin.Path, "v2");
 
-        var service = new GitRepositoryService(git);
-        await service.FetchAsync(source.Path, Path.GetFullPath(dest.Path), "dest", null);
-        var info = await service.GetBranchInfoAsync(source.Path, "dest");
-        info.Should().Be(new Core.State.GitBranchInfo(true, "main", "refs/remotes/dest/main", 0, 1));
+        var service = new GitRepositoryService(TestTexts.English, git);
+        await service.FetchAsync(workstation.Path, Path.GetFullPath(origin.Path), "rcynq", null);
+        var info = await service.GetBranchInfoAsync(workstation.Path, "rcynq");
+        info.Should().Be(new Core.State.GitBranchInfo(true, "main", "refs/remotes/rcynq/main", 0, 1));
 
-        await service.PullFastForwardAsync(source.Path, "dest");
-        File.ReadAllText(source["readme.md"]).Should().Be("v2");
-        (await service.GetBranchInfoAsync(source.Path, "dest")).Behind.Should().Be(0);
+        await service.PullFastForwardAsync(workstation.Path, "rcynq");
+        File.ReadAllText(workstation["readme.md"]).Should().Be("v2");
+        (await service.GetBranchInfoAsync(workstation.Path, "rcynq")).Behind.Should().Be(0);
     }
 
     /// <summary>
@@ -142,7 +139,7 @@ public class GitIntegrationTests
     {
         try
         {
-            var result = await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
+            var result = await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)));
             return result.ExitCode == 0;
         }
         catch (SyncBridgeException)

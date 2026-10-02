@@ -1,14 +1,15 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
-using RCynQ.UI.ViewModels.Navigation;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
@@ -25,6 +26,9 @@ public sealed partial class OverviewViewModel : PageViewModelBase
 
     /// <summary>The last synchronization status.</summary>
     private NodeSyncStatus? _status;
+
+    /// <summary>The node configuration, or <see langword="null"/> until it is known.</summary>
+    private NodeConfigurationDto? _configuration;
 
     /// <summary>The node role.</summary>
     [ObservableProperty]
@@ -44,15 +48,17 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="OverviewViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public OverviewViewModel(IServiceApiClient api)
+    public OverviewViewModel(ILocalizer localizer, IServiceApiClient api)
+        : base(localizer)
     {
         _api = api;
         Links.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoLinks));
     }
 
     /// <summary>Gets the last synchronization time in the language of the user.</summary>
-    public string LastSyncText => DisplayText.Time(_lastSync);
+    public string LastSyncText => DisplayText.Time(Localizer, _lastSync);
 
     /// <summary>Gets a value indicating whether no links are configured.</summary>
     public bool HasNoLinks => Links.Count == 0;
@@ -68,26 +74,42 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     /// <summary>Gets the problems.</summary>
     public ObservableCollection<ProblemItemViewModel> Problems { get; } = new();
 
-    /// <inheritdoc />
-    public override Task RefreshAsync() => RunSafeAsync(async () =>
+    /// <summary>
+    /// Takes the node configuration the main window has already read, so the page does not ask for it again.
+    /// </summary>
+    /// <param name="configuration">The node configuration.</param>
+    public void Configure(NodeConfigurationDto configuration)
     {
-        var config = await _api.GetConfigAsync();
-        RoleText = config.Role.ToString();
-        NodeName = $"{config.Name} ({config.NodeId})";
+        ArgumentNullException.ThrowIfNull(configuration);
+        _configuration = configuration;
+        RoleText = configuration.Role.ToString();
+        NodeName = $"{configuration.Name} ({configuration.NodeId})";
+    }
 
-        _status = await _api.GetStateAsync();
+    /// <inheritdoc />
+    protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
+    {
+        // The requests do not depend on each other; the status is the light one, without a walk over the working tree.
+        var configuration = _configuration is null ? _api.GetConfigAsync() : Task.FromResult(_configuration);
+        var summary = _api.GetStateSummaryAsync();
+        var configured = _api.GetLinksAsync();
+        var states = _api.GetLinkStatusAsync();
+        await Task.WhenAll(configuration, summary, configured, states);
+
+        Configure(await configuration);
+        _status = await summary;
         var last = new[] { _status.State.LastSentAtUtc, _status.State.LastReceivedAtUtc }.Max();
         _lastSync = last;
         OnPropertyChanged(nameof(LastSyncText));
 
-        var links = await _api.GetLinksAsync();
+        var links = await configured;
         Links.Clear();
         foreach (var link in links)
         {
-            Links.Add(new TunnelLinkItemViewModel(link));
+            Links.Add(new TunnelLinkItemViewModel(Localizer, link));
         }
 
-        foreach (var state in await _api.GetLinkStatusAsync())
+        foreach (var state in await states)
         {
             ApplyLinkState(state);
         }
@@ -136,30 +158,35 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     private void RebuildProblems()
     {
         Problems.Clear();
-        if (_status is { Role: not NodeRole.Mediator })
+        if (_status is { Role: not NodeRole.Relay })
         {
             if (!_status.SyncBase.IsReady)
             {
                 var problem = _status.SyncBase.Problem is { Length: > 0 } reason
-                    ? Texts.Format("Overview.Problem.NoSyncBase", reason)
-                    : Texts.Get("Overview.Problem.NoBaseline");
-                Problems.Add(new ProblemItemViewModel(problem, _status.Role == NodeRole.Source && !_status.SyncBase.CanCreateManual ? TabKey.Branches : TabKey.Sync));
+                    ? Localizer.Format("Overview.Problem.NoSyncBase", reason)
+                    : Localizer.Get("Overview.Problem.NoBaseline");
+                Problems.Add(new ProblemItemViewModel(problem, _status.Role == NodeRole.Workstation && !_status.SyncBase.CanCreateManual ? TabKey.Branches : TabKey.Sync));
             }
 
             if (_status.ConflictPendingCount > 0)
             {
-                Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Conflicts", _status.ConflictPendingCount), TabKey.Sync));
+                Problems.Add(new ProblemItemViewModel(Localizer.Format("Overview.Problem.Conflicts", _status.ConflictPendingCount), TabKey.Sync));
             }
         }
 
         foreach (var link in Links.Where(link => link.IsOffline))
         {
-            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.LinkOffline", link.Name), TabKey.Tunnel));
+            // The reason is what the user needs: "unavailable" alone does not say whether the path, the service of the
+            // other node or its answer is the trouble.
+            var text = string.IsNullOrWhiteSpace(link.Message)
+                ? Localizer.Format("Overview.Problem.LinkOffline", link.Name)
+                : Localizer.Format("Overview.Problem.LinkOfflineReason", link.Name, link.Message);
+            Problems.Add(new ProblemItemViewModel(text, TabKey.Tunnel));
         }
 
         if (_diagnosticFailures.Count > 0)
         {
-            Problems.Add(new ProblemItemViewModel(Texts.Format("Overview.Problem.Diagnostics", string.Join(", ", _diagnosticFailures)), TabKey.Diagnostics));
+            Problems.Add(new ProblemItemViewModel(Localizer.Format("Overview.Problem.Diagnostics", string.Join(", ", _diagnosticFailures)), TabKey.Diagnostics));
         }
 
         HasProblems = Problems.Count > 0;

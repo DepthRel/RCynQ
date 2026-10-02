@@ -23,9 +23,9 @@ public sealed class RolePipelineFactory : IRolePipelineFactory
     /// <inheritdoc />
     public IRolePipeline Create(NodeRole role) => role switch
     {
-        NodeRole.Source => _services.GetRequiredService<SourcePipeline>(),
-        NodeRole.Mediator => _services.GetRequiredService<MediatorPipeline>(),
-        NodeRole.Dest => _services.GetRequiredService<DestPipeline>(),
+        NodeRole.Workstation => _services.GetRequiredService<WorkstationPipeline>(),
+        NodeRole.Relay => _services.GetRequiredService<RelayPipeline>(),
+        NodeRole.Origin => _services.GetRequiredService<OriginPipeline>(),
         _ => throw new ArgumentException($"Node role '{role}' is not defined.", nameof(role))
     };
 }

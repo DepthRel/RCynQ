@@ -4,9 +4,9 @@ using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Ssh;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Network;
-using RCynQ.Localization;
 
 namespace RCynQ.Ssh.Forwarding;
 
@@ -50,15 +50,29 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
     private readonly ConcurrentDictionary<int, IRunningProcess> _forwards = new();
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// The source of the current time for the startup deadline.
+    /// </summary>
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProcessLocalForwardManager"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processRunner">The process runner.</param>
     /// <param name="probe">The TCP probe.</param>
     /// <param name="ports">The port allocator.</param>
     /// <param name="commands">The command builder.</param>
     /// <param name="options">The SSH options; the startup timeout is the connect timeout plus 20 seconds for jump hosts.</param>
-    public ProcessLocalForwardManager(IProcessRunner processRunner, ITcpProbe probe, IPortAllocator ports, SshCommandBuilder commands, SshClientOptions options)
+    /// <param name="timeProvider">The source of the current time, or <see langword="null"/> for the system clock.</param>
+    public ProcessLocalForwardManager(ILocalizer localizer, IProcessRunner processRunner, ITcpProbe probe, IPortAllocator ports, SshCommandBuilder commands, SshClientOptions options, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processRunner = processRunner;
         _probe = probe;
         _ports = ports;
@@ -83,9 +97,22 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
             throw new ArgumentException($"A forward is already running on local port {port}.", nameof(localPort));
         }
 
+        // A forward that ended by itself (the connection dropped) is still on record; release it before the port is reused.
+        if (_forwards.TryRemove(port, out var ended))
+        {
+            ended.Dispose();
+        }
+
+        // The forward counts as ready as soon as something answers on the port. If another program already listens there,
+        // it would be that program, answering while ssh is still connecting: the requests meant for the peer would go to it.
+        if (await _probe.CanConnectAsync("127.0.0.1", port, TimeSpan.FromMilliseconds(500), cancellationToken))
+        {
+            throw new SshExecutionException(_localizer.Format("Forward.PortInUse", port, target));
+        }
+
         var args = _commands.BuildLocalForward(target, jumps, port, remoteHost, remotePort);
-        var process = _processRunner.Start(new Core.Abstractions.Processes.ProcessSpec(_commands.Executable, args, null, null, null));
-        var deadline = DateTime.UtcNow + _startupTimeout;
+        var process = _processRunner.Start(new Core.Abstractions.Processes.ProcessSpec(_commands.Executable, args, _commands.WorkingDirectory, null, null));
+        var deadline = _timeProvider.GetUtcNow() + _startupTimeout;
         try
         {
             while (true)
@@ -94,7 +121,7 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
                 if (process.HasExited)
                 {
                     throw new SshExecutionException(
-                        Texts.Format("Forward.Exited", port, target, remoteHost, remotePort, process.StandardError.Trim()),
+                        _localizer.Format("Forward.Exited", port, target, remoteHost, remotePort, process.StandardError.Trim()),
                         process.ExitCode ?? -1);
                 }
 
@@ -104,9 +131,9 @@ public sealed class ProcessLocalForwardManager : ILocalForwardManager, IDisposab
                     return port;
                 }
 
-                if (DateTime.UtcNow >= deadline)
+                if (_timeProvider.GetUtcNow() >= deadline)
                 {
-                    throw new SshExecutionException(Texts.Format("Forward.NotReady", port, target, _startupTimeout.TotalSeconds));
+                    throw new SshExecutionException(_localizer.Format("Forward.NotReady", port, target, _startupTimeout.TotalSeconds));
                 }
 
                 await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);

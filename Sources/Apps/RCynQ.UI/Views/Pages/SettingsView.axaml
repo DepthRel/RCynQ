@@ -23,6 +23,42 @@
         </Border>
       </StackPanel>
 
+      <StackPanel>
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Data.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10">
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Data.Hint}" />
+            <Button Classes="outline" HorizontalAlignment="Left" IsEnabled="{Binding !IsBusy}"
+                    Content="{loc:Loc Settings.Data.Clean}" Command="{Binding CleanDataCommand}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- About the application: the brand and the version at a glance, the full window and a letter about a problem. -->
+      <StackPanel>
+        <TextBlock Classes="section" Text="{loc:Loc Settings.About.Title}" />
+        <Border Classes="card">
+          <DockPanel Margin="16,14">
+            <Image DockPanel.Dock="Left" Source="avares://RCynQ.UI/Assets/rcynq-256.png" Width="44" Height="44"
+                   VerticalAlignment="Top" Margin="0,0,14,0" />
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock FontSize="18" FontWeight="Bold" VerticalAlignment="Center">
+                  <Run Text="RC" Foreground="{StaticResource BrandBlueBrush}" /><Run Text="yn" /><Run Text="Q" Foreground="{StaticResource BrandVioletBrush}" />
+                </TextBlock>
+                <TextBlock Classes="muted mono" FontSize="12" VerticalAlignment="Center" Text="{Binding VersionText}" />
+              </StackPanel>
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.About.Hint}" />
+              <WrapPanel>
+                <Button Classes="outline" Margin="0,0,8,0" Content="{loc:Loc Settings.About.Open}" Command="{Binding OpenAboutCommand}" />
+                <Button Classes="outline" Content="{loc:Loc Problem.Report}" ToolTip.Tip="{loc:Loc Problem.ReportTip}"
+                        Command="{Binding ReportProblemCommand}" />
+              </WrapPanel>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+      </StackPanel>
+
     </StackPanel>
   </ScrollViewer>
 </UserControl>

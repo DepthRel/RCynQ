@@ -24,22 +24,22 @@ public sealed class PatchFileStorage : IPatchFileStorage
     /// <summary>
     /// The diff file name.
     /// </summary>
-    public const string DiffFileName = "patch.diff";
+    public const string DIFF_FILE_NAME = "patch.diff";
 
     /// <summary>
     /// The name of the directory with the staged content of a patch.
     /// </summary>
-    public const string ContentDirectoryName = "content";
+    public const string CONTENT_DIRECTORY_NAME = "content";
 
     /// <summary>
     /// The name of the node-wide directory with uploaded content.
     /// </summary>
-    public const string UploadsDirectoryName = "uploads";
+    public const string UPLOADS_DIRECTORY_NAME = "uploads";
 
     /// <summary>
     /// The buffer size of content copies.
     /// </summary>
-    private const int BufferSize = 81920;
+    private const int BUFFER_SIZE = 81920;
 
     /// <summary>
     /// The application data factory.
@@ -47,11 +47,18 @@ public sealed class PatchFileStorage : IPatchFileStorage
     private readonly IAppDataFactory _appDataFactory;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="PatchFileStorage"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="appDataFactory">The application data factory.</param>
-    public PatchFileStorage(IAppDataFactory appDataFactory)
+    public PatchFileStorage(ILocalizer localizer, IAppDataFactory appDataFactory)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _appDataFactory = appDataFactory;
     }
 
@@ -61,16 +68,16 @@ public sealed class PatchFileStorage : IPatchFileStorage
         ArgumentNullException.ThrowIfNull(diff);
         var directory = GetPatchDirectory(patchId);
         Directory.CreateDirectory(directory);
-        await FilePermissions.WriteAtomicallyAsync(Path.Combine(directory, DiffFileName), diff, ownerOnly: true, cancellationToken);
+        await FilePermissions.WriteAtomicallyAsync(Path.Combine(directory, DIFF_FILE_NAME), diff, ownerOnly: true, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<byte[]> ReadDiffAsync(Guid patchId, CancellationToken cancellationToken = default)
     {
-        var path = Path.Combine(GetPatchDirectory(patchId), DiffFileName);
+        var path = Path.Combine(GetPatchDirectory(patchId), DIFF_FILE_NAME);
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("Patch.PayloadMissing", DiffFileName, patchId));
+            throw new SyncBridgeException(_localizer.Format("Patch.PayloadMissing", DIFF_FILE_NAME, patchId));
         }
 
         return await File.ReadAllBytesAsync(path, cancellationToken);
@@ -78,7 +85,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
 
     /// <inheritdoc />
     public Task<bool> ExistsAsync(Guid patchId, CancellationToken cancellationToken = default)
-        => Task.FromResult(File.Exists(Path.Combine(GetPatchDirectory(patchId), DiffFileName)));
+        => Task.FromResult(File.Exists(Path.Combine(GetPatchDirectory(patchId), DIFF_FILE_NAME)));
 
     /// <inheritdoc />
     public Task<bool> HasContentAsync(Guid patchId, string sha256, CancellationToken cancellationToken = default)
@@ -99,16 +106,16 @@ public sealed class PatchFileStorage : IPatchFileStorage
         {
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             long total = 0;
-            await using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, useAsync: true))
+            await using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, BUFFER_SIZE, useAsync: true))
             {
-                var buffer = new byte[BufferSize];
+                var buffer = new byte[BUFFER_SIZE];
                 int read;
                 while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
                 {
                     total += read;
                     if (total > expectedSize)
                     {
-                        throw new FormatException(Texts.Format("Upload.TooLarge", hash, expectedSize));
+                        throw new FormatException(_localizer.Format("Upload.TooLarge", hash, expectedSize));
                     }
 
                     hasher.AppendData(buffer, 0, read);
@@ -118,7 +125,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
 
             if (!string.Equals(Convert.ToHexString(hasher.GetHashAndReset()), hash, StringComparison.OrdinalIgnoreCase))
             {
-                throw new FormatException(Texts.Format("Upload.HashMismatch", hash));
+                throw new FormatException(_localizer.Format("Upload.HashMismatch", hash));
             }
 
             FilePermissions.RestrictFileToOwner(temp);
@@ -152,7 +159,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
             var upload = UploadPath(hash);
             if (!File.Exists(upload))
             {
-                throw new SyncBridgeException(Texts.Format("Patch.ContentMissing", hash, patchId));
+                throw new SyncBridgeException(_localizer.Format("Patch.ContentMissing", hash, patchId));
             }
 
             File.Move(upload, target, overwrite: true);
@@ -167,10 +174,10 @@ public sealed class PatchFileStorage : IPatchFileStorage
         var path = StagedPath(patchId, ValidateHash(sha256));
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("Patch.ContentMissing", sha256, patchId));
+            throw new SyncBridgeException(_localizer.Format("Patch.ContentMissing", sha256, patchId));
         }
 
-        return Task.FromResult<Stream>(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true));
+        return Task.FromResult<Stream>(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BUFFER_SIZE, useAsync: true));
     }
 
     /// <inheritdoc />
@@ -213,6 +220,42 @@ public sealed class PatchFileStorage : IPatchFileStorage
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task<long> DeletePatchAsync(Guid patchId, CancellationToken cancellationToken = default)
+    {
+        var directory = new DirectoryInfo(GetPatchDirectory(patchId));
+        if (!directory.Exists)
+        {
+            return Task.FromResult(0L);
+        }
+
+        var freed = directory.EnumerateFiles("*", SearchOption.AllDirectories).Sum(file => file.Length);
+        directory.Delete(recursive: true);
+        return Task.FromResult(freed);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ListStoredPatchesAsync(CancellationToken cancellationToken = default)
+    {
+        var root = _appDataFactory.Create().PatchesDirectory;
+        if (!Directory.Exists(root))
+        {
+            return Task.FromResult<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+        }
+
+        // Patch directories are named by the identifier without dashes; anything else (the uploads) is not a patch.
+        var ids = new List<Guid>();
+        foreach (var directory in Directory.EnumerateDirectories(root))
+        {
+            if (Guid.TryParseExact(Path.GetFileName(directory), "N", out var id))
+            {
+                ids.Add(id);
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<Guid>>(ids);
+    }
+
     /// <summary>
     /// Gets the directory of a patch.
     /// </summary>
@@ -226,7 +269,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
     /// <returns>The directory path.</returns>
-    private string ContentDirectory(Guid patchId) => Path.Combine(GetPatchDirectory(patchId), ContentDirectoryName);
+    private string ContentDirectory(Guid patchId) => Path.Combine(GetPatchDirectory(patchId), CONTENT_DIRECTORY_NAME);
 
     /// <summary>
     /// Gets the path of staged content.
@@ -240,7 +283,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
     /// Gets the node-wide directory with uploaded content.
     /// </summary>
     /// <returns>The directory path.</returns>
-    private string UploadsDirectory() => Path.Combine(_appDataFactory.Create().PatchesDirectory, UploadsDirectoryName);
+    private string UploadsDirectory() => Path.Combine(_appDataFactory.Create().PatchesDirectory, UPLOADS_DIRECTORY_NAME);
 
     /// <summary>
     /// Gets the path of uploaded content.

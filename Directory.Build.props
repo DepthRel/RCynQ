@@ -3,7 +3,8 @@
   <!--
     Shared build settings for every RCynQ project.
     GenerateDocumentationFile together with CS1591 in WarningsAsErrors makes a missing XML documentation comment
-    a build error, which enforces the documentation rule from AGENTS.md.
+    a build error, which enforces the documentation rule from AGENTS.md. EnforceCodeStyleInBuild runs the code style
+    rules of .editorconfig (braces, namespaces, naming, unused usings) in every build, not only in the editor.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -11,6 +12,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591;nullable</WarningsAsErrors>
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
@@ -19,7 +21,13 @@
   <PropertyGroup>
     <Product>RCynQ</Product>
     <Authors>DepthRel</Authors>
+    <Copyright>Copyright © RCynQ contributors. Licensed under GPL-3.0-or-later.</Copyright>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Version>0.1.0</Version>
+    <!-- The page of the project; the installer shows it as the link of the program in the list of installed apps. -->
+    <PackageProjectUrl>https://depthrel.github.io/RCynQ/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DepthRel/RCynQ</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <!--
@@ -39,6 +47,15 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="FluentAssertions" />
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    The localizers the tests hand to the code under test; a test names the language of its expectations. The
+    convention tests reference no project of the product, so they go without them.
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'RCynQ.Conventions.Tests'">
+    <Compile Include="$(MSBuildThisFileDirectory)Tests\Shared\TestTexts.cs" Link="Shared\TestTexts.cs" />
+    <Using Include="RCynQ.Tests" />
   </ItemGroup>
 
 </Project>

@@ -30,6 +30,9 @@ public static class GitServiceCollectionExtensions
     public static IServiceCollection AddRCynQGit(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
         services.TryAddSingleton<IPathUtility, PathUtility>();
@@ -37,8 +40,15 @@ public static class GitServiceCollectionExtensions
         services.TryAddSingleton(provider =>
         {
             var options = provider.GetRequiredService<SyncBridgeOptions>();
-            return new SnapshotFilter(options.ExcludedDirectories, options.RespectGitIgnore);
+
+            // The configured names add to the built-in ones here, not only where the options are loaded: the service binds
+            // them (appending to the defaults) while the CLI deserializes the file (replacing them), and both must scan
+            // the same working tree with the same filter. The filter trims and deduplicates the names itself.
+            return new SnapshotFilter(
+                SyncBridgeOptions.DefaultExcludedDirectories.Concat(options.ExcludedDirectories ?? Enumerable.Empty<string>()),
+                options.RespectGitIgnore);
         });
+        services.TryAddSingleton<FileHashCache>();
         services.TryAddSingleton<IFileManifestBuilder, DefaultFileManifestBuilder>();
         services.TryAddSingleton(provider => new GitOptions { GitExecutable = provider.GetRequiredService<SyncBridgeOptions>().Ssh.GitExecutable });
         services.TryAddSingleton<IGitCommandRunner, GitCommandRunner>();

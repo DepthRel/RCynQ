@@ -23,7 +23,7 @@ public sealed class GitIgnoreRules
     /// <summary>
     /// The maximum time a single pattern may take to match, so a hostile pattern cannot stall a scan.
     /// </summary>
-    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan _matchTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// The parsed lines in file order.
@@ -134,7 +134,7 @@ public sealed class GitIgnoreRules
         }
 
         var options = RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
-        return new Rule(new Regex(Translate(text), options, MatchTimeout), negated, directoryOnly, matchesFullPath);
+        return new Rule(new Regex(Translate(text), options, _matchTimeout), negated, directoryOnly, matchesFullPath);
     }
 
     /// <summary>

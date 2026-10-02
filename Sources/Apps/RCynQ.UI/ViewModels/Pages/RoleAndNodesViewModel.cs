@@ -4,9 +4,11 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
+using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
@@ -24,7 +26,7 @@ namespace RCynQ.UI.ViewModels.Pages;
 public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 {
     /// <summary>JSON options of exported files.</summary>
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     /// <summary>The API client.</summary>
     private readonly IServiceApiClient _api;
@@ -45,7 +47,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [ObservableProperty]
     private string _nodeId = string.Empty;
 
-    /// <summary>The shared token of Source and Dest.</summary>
+    /// <summary>The shared token of Workstation and Origin.</summary>
     [ObservableProperty]
     private string _linkToken = string.Empty;
 
@@ -57,7 +59,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>How neighbours reach this node.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEndpointPortVisible), nameof(EndpointHint))]
-    private EndpointModeOption _selectedEndpointMode = EndpointModeOption.All[0];
+    private EndpointModeOption _selectedEndpointMode = null!;
 
     /// <summary>The TCP port of the direct endpoint.</summary>
     [ObservableProperty]
@@ -70,7 +72,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>The selected role.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PathLabel), nameof(IsPathVisible))]
-    private NodeRole _selectedRole = NodeRole.Source;
+    private NodeRole _selectedRole = NodeRole.Workstation;
 
     /// <summary>The working path.</summary>
     [ObservableProperty]
@@ -83,16 +85,23 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="RoleAndNodesViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="elevation">Runs the SSH access update with administrator rights, or <see langword="null"/> when unavailable.</param>
     /// <param name="settings">The settings kept in the configuration file (link token, endpoint mode), or <see langword="null"/> when the page must not edit them.</param>
     public RoleAndNodesViewModel(
+        ILocalizer localizer,
         IServiceApiClient api,
         IDialogService dialogs,
         IPeerAccessElevation? elevation = null,
         ILocalNodeSettings? settings = null)
+        : base(localizer)
     {
+        // The choice made here is the state the page starts with, not an edit of the user.
+        EndpointModes = EndpointModeOption.CreateAll(localizer);
+        SelectedEndpointMode = EndpointModes[0];
+        AreSettingsDirty = false;
         _api = api;
         _dialogs = dialogs;
         _elevation = elevation;
@@ -106,7 +115,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     public event EventHandler? RestartRequested;
 
     /// <summary>Gets the selectable roles.</summary>
-    public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
+    public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Workstation, NodeRole.Relay, NodeRole.Origin };
 
     /// <summary>Gets the chain nodes.</summary>
     public ObservableCollection<ChainNodeItemViewModel> Nodes { get; } = new();
@@ -115,22 +124,22 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     public bool HasNoNodes => Nodes.Count == 0;
 
     /// <summary>Gets the label of the path field.</summary>
-    public string PathLabel => DisplayText.PathLabel(SelectedRole);
+    public string PathLabel => DisplayText.PathLabel(Localizer, SelectedRole);
 
     /// <summary>Gets a value indicating whether the path field applies.</summary>
-    public bool IsPathVisible => SelectedRole != NodeRole.Mediator;
+    public bool IsPathVisible => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets a value indicating whether the node settings card is shown.</summary>
     public bool AreSettingsVisible => _settings is not null;
 
-    /// <summary>Gets a value indicating whether this node uses a shared token: a Mediator never does.</summary>
-    public bool HasLinkToken => SelectedRole != NodeRole.Mediator;
+    /// <summary>Gets a value indicating whether this node uses a shared token: a Relay never does.</summary>
+    public bool HasLinkToken => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets the connection modes offered.</summary>
-    public IReadOnlyList<EndpointModeOption> EndpointModes { get; } = EndpointModeOption.All;
+    public IReadOnlyList<EndpointModeOption> EndpointModes { get; }
 
-    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Mediator always uses its SSH server.</summary>
-    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Mediator;
+    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Relay always uses its SSH server.</summary>
+    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets a value indicating whether the port of the direct endpoint is shown.</summary>
     public bool IsEndpointPortVisible => IsEndpointModeVisible && SelectedEndpointMode.Value == EndpointMode.Direct;
@@ -142,25 +151,22 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     public char TokenMaskChar => IsTokenRevealed ? '\0' : '•';
 
     /// <summary>Gets the caption of the reveal button.</summary>
-    public string RevealTokenText => Texts.Get(IsTokenRevealed ? "Common.Hide" : "Common.Show");
+    public string RevealTokenText => Localizer.Get(IsTokenRevealed ? "Common.Hide" : "Common.Show");
 
     /// <summary>Gets the path of the configuration file, shown under the settings.</summary>
     public string ConfigPath => _settings?.ConfigPath ?? string.Empty;
 
     /// <inheritdoc />
-    public override Task RefreshAsync() => RunSafeAsync(async () =>
+    protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
         _loaded = await _api.GetConfigAsync();
         SelectedRole = _loaded.Role;
-        Path = (_loaded.Role == NodeRole.Dest ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
+        Path = (_loaded.Role == NodeRole.Origin ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
         IsDirty = false;
         LoadSettings();
 
-        Nodes.Clear();
-        foreach (var link in await _api.GetLinksAsync())
-        {
-            Nodes.Add(new ChainNodeItemViewModel(link));
-        }
+        // Fetched first, then replaced in one go, so two overlapping refreshes cannot both add their rows.
+        await RefreshNodesAsync();
 
         foreach (var state in await _api.GetLinkStatusAsync())
         {
@@ -200,10 +206,22 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         OnPropertyChanged(nameof(IsEndpointPortVisible));
     }
 
+    /// <summary>
+    /// Marks the settings as changed when the shared link token is edited.
+    /// </summary>
+    /// <param name="value">The new token.</param>
     partial void OnLinkTokenChanged(string value) => AreSettingsDirty = true;
 
+    /// <summary>
+    /// Marks the settings as changed when another way of accepting connections is chosen.
+    /// </summary>
+    /// <param name="value">The chosen mode.</param>
     partial void OnSelectedEndpointModeChanged(EndpointModeOption value) => AreSettingsDirty = true;
 
+    /// <summary>
+    /// Marks the settings as changed when the own TLS port is edited.
+    /// </summary>
+    /// <param name="value">The new port.</param>
     partial void OnEndpointPortChanged(decimal value) => AreSettingsDirty = true;
 
     /// <summary>
@@ -218,7 +236,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 
         NodeId = options.NodeId;
         LinkToken = options.LinkToken ?? string.Empty;
-        SelectedEndpointMode = EndpointModeOption.For(options.Endpoint.Mode);
+        SelectedEndpointMode = EndpointModes.First(option => option.Value == options.Endpoint.Mode);
         EndpointPort = options.Endpoint.Port is >= 1 and <= 65535 ? options.Endpoint.Port : 18444;
         IsTokenRevealed = false;
         AreSettingsDirty = false;
@@ -237,8 +255,8 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task CopyTokenAsync()
         => InfoMessage = await _dialogs.CopyToClipboardAsync(LinkToken)
-            ? Texts.Get("Roles.TokenCopied")
-            : Texts.Get("Roles.TokenCopyFailed");
+            ? Localizer.Get("Roles.TokenCopied")
+            : Localizer.Get("Roles.TokenCopyFailed");
 
     /// <summary>
     /// Replaces the shared token with a new one after confirmation.
@@ -248,13 +266,13 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     private async Task NewTokenAsync()
     {
         var confirmed = await _dialogs.ConfirmAsync(
-            Texts.Get("Roles.NewTokenTitle"),
-            Texts.Get("Roles.NewTokenConfirm"));
+            Localizer.Get("Roles.NewTokenTitle"),
+            Localizer.Get("Roles.NewTokenConfirm"));
         if (confirmed)
         {
             LinkToken = SetupViewModel.CreateToken();
             IsTokenRevealed = true;
-            InfoMessage = Texts.Get("Roles.NewTokenCreated");
+            InfoMessage = Localizer.Get("Roles.NewTokenCreated");
         }
     }
 
@@ -267,7 +285,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     {
         if (_settings?.Read() is not { } options)
         {
-            ErrorMessage = Texts.Get("Roles.ConfigUnavailable");
+            ErrorMessage = Localizer.Get("Roles.ConfigUnavailable");
             return;
         }
 
@@ -277,10 +295,10 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
                 options.NodeId,
                 options.Name,
                 options.Role,
-                (options.Role == NodeRole.Dest ? options.RepoPath : options.WorkdirPath) ?? string.Empty,
+                RepositoryConfigurationEditor.ActivePath(options) ?? string.Empty,
                 options.ListenPort,
                 LinkToken,
-                options.Role == NodeRole.Mediator ? EndpointMode.SshTunnel : SelectedEndpointMode.Value,
+                options.Role == NodeRole.Relay ? EndpointMode.SshTunnel : SelectedEndpointMode.Value,
                 (int)EndpointPort,
                 options.Endpoint.BindAddress);
             var errors = await _settings.SaveAsync(values);
@@ -291,7 +309,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
             }
 
             AreSettingsDirty = false;
-            InfoMessage = Texts.Get("Roles.SettingsSaved");
+            InfoMessage = Localizer.Get("Roles.SettingsSaved");
             RestartRequested?.Invoke(this, EventArgs.Empty);
         });
     }
@@ -312,7 +330,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
             return;
         }
 
-        var loadedPath = (_loaded.Role == NodeRole.Dest ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
+        var loadedPath = (_loaded.Role == NodeRole.Origin ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
         IsDirty = SelectedRole != _loaded.Role || (IsPathVisible && !string.Equals(Path, loadedPath, StringComparison.Ordinal));
     }
 
@@ -340,12 +358,12 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         var path = string.IsNullOrWhiteSpace(Path) ? null : Path.Trim();
         var result = await _api.SetRoleAsync(new SetRoleRequest(
             SelectedRole,
-            SelectedRole == NodeRole.Dest ? path : null,
-            SelectedRole == NodeRole.Source ? path : null));
+            SelectedRole == NodeRole.Origin ? path : null,
+            SelectedRole == NodeRole.Workstation ? path : null));
         IsDirty = false;
         if (result.RestartRequired)
         {
-            InfoMessage = Texts.Get("Roles.RoleSavedRestarting");
+            InfoMessage = Localizer.Get("Roles.RoleSavedRestarting");
             RestartRequested?.Invoke(this, EventArgs.Empty);
         }
         else
@@ -361,14 +379,14 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ExportAsync()
     {
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(Localizer, _api);
         _ = dialog.ProbeCommand.ExecuteAsync(null);
         if (!await _dialogs.ShowExportDialogAsync(dialog))
         {
             return;
         }
 
-        var file = await _dialogs.PickSaveFileAsync(Texts.Get("Export.Title"), $"{_loaded?.NodeId.Value ?? "node"}.rcynq.json");
+        var file = await _dialogs.PickSaveFileAsync(Localizer.Get("Export.Title"), $"{_loaded?.NodeId.Value ?? "node"}.rcynq.json");
         if (file is null)
         {
             return;
@@ -382,8 +400,8 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
                 (int)dialog.SshPort,
                 dialog.ExportedSshPublicKey,
                 dialog.ExportedHostKeyFingerprint);
-            await File.WriteAllTextAsync(file, JsonSerializer.Serialize(exported, Json));
-            InfoMessage = Texts.Format("Roles.Exported", file);
+            await File.WriteAllTextAsync(file, JsonSerializer.Serialize(exported, _json));
+            InfoMessage = Localizer.Format("Roles.Exported", file);
         });
     }
 
@@ -394,36 +412,126 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ImportAsync()
     {
-        var file = await _dialogs.PickOpenFileAsync(Texts.Get("Roles.ImportTitle"));
+        var file = await _dialogs.PickOpenFileAsync(Localizer.Get("Roles.ImportTitle"));
         if (file is null)
         {
             return;
         }
 
-        string? importedPeer = null;
-        if (await RunSafeAsync(async () =>
+        ExportedNodeConfiguration? configuration = null;
+        ImportResult? result = null;
+        if (!await RunSafeAsync(async () =>
         {
-            var configuration = JsonSerializer.Deserialize<ExportedNodeConfiguration>(await File.ReadAllTextAsync(file), Json)
-                ?? throw new FormatException(Texts.Get("Roles.ImportEmpty"));
-            importedPeer = (await _api.ImportConfigAsync(configuration)).PeerId.Value;
+            configuration = JsonSerializer.Deserialize<ExportedNodeConfiguration>(await File.ReadAllTextAsync(file), _json)
+                ?? throw new FormatException(Localizer.Get("Roles.ImportEmpty"));
+            result = await _api.ImportConfigAsync(configuration);
         }))
         {
-            await RefreshNodesAsync();
-            await AllowAccessCoreAsync(Texts.Format("Roles.Imported", importedPeer));
+            return;
         }
+
+        if (result!.Decision is not null)
+        {
+            // A node of this role is known already; nothing was imported until the user says what the file is.
+            var dialog = new ImportDecisionDialogViewModel(Localizer, result);
+            if (!await _dialogs.ShowImportDecisionDialogAsync(dialog) ||
+                !await RunSafeAsync(async () => result = await _api.ImportConfigAsync(configuration!, dialog.Decision, dialog.LinkId)))
+            {
+                return;
+            }
+        }
+
+        NotifyDataChanged();
+        await RunQuietAsync(RefreshNodesAsync);
+        await AllowAccessCoreAsync(Localizer.Format("Roles.Imported", result.PeerId.Value));
     }
+
+    /// <summary>
+    /// Shows the routes of a link as the service reported them.
+    /// </summary>
+    /// <param name="routes">The routes of one link.</param>
+    public void ApplyRoutes(LinkRoutesDto routes)
+    {
+        ArgumentNullException.ThrowIfNull(routes);
+        Nodes.FirstOrDefault(node => node.LinkId == routes.LinkId)?.ApplyRoutes(routes.Routes.Count == 0 ? null : routes);
+    }
+
+    /// <summary>
+    /// Pins a route by hand: the node is reached this way whether the route answers or not.
+    /// </summary>
+    /// <param name="route">The route.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private Task SelectRouteAsync(LinkRouteItemViewModel? route)
+        => route is null
+            ? Task.CompletedTask
+            : RunSafeAsync(async () => ApplyRoutes(await _api.SelectLinkRouteAsync(route.LinkId, route.RouteId)));
+
+    /// <summary>
+    /// Hands the choice of the route back to the node.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private Task AutoRouteAsync(ChainNodeItemViewModel? node)
+        => node is null
+            ? Task.CompletedTask
+            : RunSafeAsync(async () => ApplyRoutes(await _api.SelectLinkRouteAsync(node.LinkId, null)));
+
+    /// <summary>
+    /// Makes a route more preferred.
+    /// </summary>
+    /// <param name="route">The route.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private Task RaiseRouteAsync(LinkRouteItemViewModel? route) => MoveRouteAsync(route, -1);
+
+    /// <summary>
+    /// Makes a route less preferred.
+    /// </summary>
+    /// <param name="route">The route.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private Task LowerRouteAsync(LinkRouteItemViewModel? route) => MoveRouteAsync(route, 1);
+
+    /// <summary>
+    /// Removes a route after confirmation.
+    /// </summary>
+    /// <param name="route">The route.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task RemoveRouteAsync(LinkRouteItemViewModel? route)
+    {
+        if (route is null || !await _dialogs.ConfirmAsync(Localizer.Get("Routes.Remove"), Localizer.Format("Routes.RemoveConfirm", route.Address)))
+        {
+            return;
+        }
+
+        await RunSafeAsync(async () => ApplyRoutes(await _api.RemoveLinkRouteAsync(route.LinkId, route.RouteId)));
+    }
+
+    /// <summary>
+    /// Changes the preference of a route by a step; the most preferred value is zero.
+    /// </summary>
+    /// <param name="route">The route.</param>
+    /// <param name="step">The change of the preference.</param>
+    /// <returns>A task representing the operation.</returns>
+    private Task MoveRouteAsync(LinkRouteItemViewModel? route, int step)
+        => route is null || route.Priority + step < 0
+            ? Task.CompletedTask
+            : RunSafeAsync(async () => ApplyRoutes(await _api.SetLinkRoutePriorityAsync(route.LinkId, route.RouteId, route.Priority + step)));
 
     /// <summary>
     /// Describes a neighbour access result for the user.
     /// </summary>
     /// <param name="result">The result.</param>
     /// <returns>The text.</returns>
-    public static string DescribeAccess(PeerAccessResult result)
+    public string DescribeAccess(PeerAccessResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
         var text = result.EntryCount == 0
-            ? Texts.Get("Roles.Access.None")
-            : result.Applied ? Texts.Format("Roles.Access.Allowed", result.EntryCount) : string.Empty;
+            ? Localizer.Get("Roles.Access.None")
+            : result.Applied ? Localizer.Format("Roles.Access.Allowed", result.EntryCount) : string.Empty;
         return (text + AccessNotes(result)).Trim();
     }
 
@@ -432,17 +540,17 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// </summary>
     /// <param name="result">The result.</param>
     /// <returns>The text, starting with a space, or an empty string.</returns>
-    private static string AccessNotes(PeerAccessResult result)
+    private string AccessNotes(PeerAccessResult result)
     {
         var notes = new StringBuilder();
         if (result.PeersWithoutKey.Count > 0)
         {
-            notes.Append(Texts.Format("Roles.Access.NoKey", string.Join(", ", result.PeersWithoutKey)));
+            notes.Append(Localizer.Format("Roles.Access.NoKey", string.Join(", ", result.PeersWithoutKey)));
         }
 
         if (result.PeersWaitingForCounterpart.Count > 0)
         {
-            notes.Append(Texts.Format("Roles.Access.NeedCounterpart", string.Join(", ", result.PeersWaitingForCounterpart)));
+            notes.Append(Localizer.Format("Roles.Access.NeedCounterpart", string.Join(", ", result.PeersWaitingForCounterpart)));
         }
 
         return notes.ToString();
@@ -477,16 +585,16 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 
         if (_elevation is not { IsAvailable: true })
         {
-            InfoMessage = lead + Texts.Format("Roles.Access.RunManually", result.FilePath);
+            InfoMessage = lead + Localizer.Format("Roles.Access.RunManually", result.FilePath);
             return;
         }
 
         var confirmed = await _dialogs.ConfirmAsync(
-            Texts.Get("Roles.AllowAccess"),
-            Texts.Format("Roles.Access.Confirm", result.EntryCount, result.FilePath));
+            Localizer.Get("Roles.AllowAccess"),
+            Localizer.Format("Roles.Access.Confirm", result.EntryCount, result.FilePath));
         if (!confirmed)
         {
-            InfoMessage = lead + Texts.Get("Roles.Access.Declined");
+            InfoMessage = lead + Localizer.Get("Roles.Access.Declined");
             return;
         }
 
@@ -512,7 +620,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task AddNodeAsync()
     {
-        var dialog = new AddNodeDialogViewModel();
+        var dialog = new AddNodeDialogViewModel(Localizer);
         if (!await _dialogs.ShowAddNodeDialogAsync(dialog))
         {
             return;
@@ -520,6 +628,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 
         if (await RunSafeAsync(() => _api.SaveLinkAsync(dialog.ToOptions())))
         {
+            NotifyDataChanged();
             await RefreshNodesAsync();
         }
     }
@@ -532,7 +641,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task RemoveNodeAsync(ChainNodeItemViewModel? node)
     {
-        if (node is null || !await _dialogs.ConfirmAsync(Texts.Get("Roles.RemoveNode"), Texts.Format("Roles.RemoveNodeConfirm", node.Name)))
+        if (node is null || !await _dialogs.ConfirmAsync(Localizer.Get("Roles.RemoveNode"), Localizer.Format("Roles.RemoveNodeConfirm", node.Name)))
         {
             return;
         }
@@ -540,6 +649,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         if (await RunSafeAsync(() => _api.DeleteLinkAsync(node.LinkId)))
         {
             Nodes.Remove(node);
+            NotifyDataChanged();
         }
     }
 
@@ -550,10 +660,13 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     private async Task RefreshNodesAsync()
     {
         var links = await _api.GetLinksAsync();
+        var routes = await _api.GetLinkRoutesAsync() ?? Array.Empty<LinkRoutesDto>();
         Nodes.Clear();
         foreach (var link in links)
         {
-            Nodes.Add(new ChainNodeItemViewModel(link));
+            var node = new ChainNodeItemViewModel(Localizer, link);
+            node.ApplyRoutes(routes.FirstOrDefault(candidate => candidate.LinkId == link.Id));
+            Nodes.Add(node);
         }
     }
 

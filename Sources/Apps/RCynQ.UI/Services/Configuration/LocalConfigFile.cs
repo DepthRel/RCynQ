@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using RCynQ.Core.Config;
+using RCynQ.Core.Config.Legacy;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.UI.Services.Configuration;
 
@@ -15,7 +17,7 @@ namespace RCynQ.UI.Services.Configuration;
 public static class LocalConfigFile
 {
     /// <summary>JSON options of the configuration file.</summary>
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
     {
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
@@ -23,7 +25,12 @@ public static class LocalConfigFile
     };
 
     /// <summary>JSON document options of the configuration file.</summary>
-    private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+    private static readonly JsonDocumentOptions _documentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+
+    /// <summary>
+    /// The suffix of the copy that is kept of a configuration file that could not be read, before the setup replaces it.
+    /// </summary>
+    public const string UNREADABLE_BACKUP_SUFFIX = ".unreadable";
 
     /// <summary>
     /// Loads the node options, ignoring a missing or malformed file.
@@ -39,8 +46,10 @@ public static class LocalConfigFile
                 return null;
             }
 
-            var root = JsonNode.Parse(File.ReadAllText(path), documentOptions: DocumentOptions);
-            return FindSection(root as JsonObject)?.Deserialize<SyncBridgeOptions>(Json);
+            ConfigurationFileMigrator.Migrate(path);
+
+            var root = JsonNode.Parse(File.ReadAllText(path), documentOptions: _documentOptions);
+            return FindSection(root as JsonObject)?.Deserialize<SyncBridgeOptions>(_json);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -53,48 +62,54 @@ public static class LocalConfigFile
     /// </summary>
     /// <param name="path">The file path; the file and its directory are created when missing.</param>
     /// <param name="values">The values.</param>
+    /// <param name="localizer">The localizer that words the validation problems.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The validation problems; empty when the file was written.</returns>
     /// <exception cref="IOException">The file could not be written.</exception>
-    public static async Task<IReadOnlyList<string>> SaveAsync(string path, NodeSetupValues values, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<string>> SaveAsync(string path, NodeSetupValues values, ILocalizer localizer, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(localizer);
 
         JsonObject root;
+        var unreadable = false;
         try
         {
             root = File.Exists(path)
-                ? JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: DocumentOptions) as JsonObject ?? new JsonObject()
+                ? JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: _documentOptions) as JsonObject ?? new JsonObject()
                 : new JsonObject();
         }
         catch (JsonException)
         {
+            // The setup starts the file anew, which is how a broken file gets repaired from the application.
             root = new JsonObject();
+            unreadable = true;
         }
 
+        // A file of an earlier version is brought to the current format before it is edited.
+        ConfigurationFileMigrator.Migrate(root);
         var section = FindSection(root);
         if (section is null)
         {
             section = new JsonObject();
-            root[SyncBridgeOptions.SectionName] = section;
+            root[SyncBridgeOptions.SECTION_NAME] = section;
         }
 
         Set(section, nameof(SyncBridgeOptions.NodeId), values.NodeId.Trim());
         Set(section, nameof(SyncBridgeOptions.Name), values.Name.Trim());
         Set(section, nameof(SyncBridgeOptions.Role), values.Role.ToString());
         Set(section, nameof(SyncBridgeOptions.ListenPort), values.ListenPort);
-        Set(section, nameof(SyncBridgeOptions.RepoPath), values.Role == NodeRole.Dest ? values.Path.Trim() : null);
-        Set(section, nameof(SyncBridgeOptions.WorkdirPath), values.Role == NodeRole.Source ? values.Path.Trim() : null);
-        Set(section, nameof(SyncBridgeOptions.LinkToken), values.Role == NodeRole.Mediator || string.IsNullOrWhiteSpace(values.LinkToken) ? null : values.LinkToken.Trim());
+        RepositoryConfigurationEditor.Apply(section, values.Role, values.Path);
+        Set(section, nameof(SyncBridgeOptions.LinkToken), values.Role == NodeRole.Relay || string.IsNullOrWhiteSpace(values.LinkToken) ? null : values.LinkToken.Trim());
 
         var endpoint = Nested(section, nameof(SyncBridgeOptions.Endpoint));
         Set(endpoint, nameof(EndpointOptions.Mode), values.EndpointMode.ToString());
         Set(endpoint, nameof(EndpointOptions.BindAddress), values.EndpointBindAddress.Trim());
         Set(endpoint, nameof(EndpointOptions.Port), values.EndpointPort);
 
-        var options = section.Deserialize<SyncBridgeOptions>(Json) ?? new SyncBridgeOptions();
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var options = section.Deserialize<SyncBridgeOptions>(_json) ?? new SyncBridgeOptions();
+        var errors = SyncBridgeOptionsValidator.Validate(options, localizer);
         if (errors.Count > 0)
         {
             return errors;
@@ -105,7 +120,15 @@ public static class LocalConfigFile
         var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await File.WriteAllTextAsync(temp, root.ToJsonString(Json), cancellationToken);
+            await File.WriteAllTextAsync(temp, root.ToJsonString(_json), cancellationToken);
+            if (unreadable)
+            {
+                // The new file carries only what the setup asks for. Everything else the user had written (the links, the
+                // SSH settings) is in the file that could not be read, often behind a single typing error: it is kept next
+                // to the new one instead of being overwritten for good.
+                File.Copy(path, path + UNREADABLE_BACKUP_SUFFIX, overwrite: true);
+            }
+
             File.Move(temp, path, overwrite: true);
         }
         finally
@@ -126,7 +149,7 @@ public static class LocalConfigFile
     /// <returns>The section, or <see langword="null"/>.</returns>
     private static JsonObject? FindSection(JsonObject? root)
     {
-        var key = root?.Select(pair => pair.Key).FirstOrDefault(name => name.Equals(SyncBridgeOptions.SectionName, StringComparison.OrdinalIgnoreCase));
+        var key = root?.Select(pair => pair.Key).FirstOrDefault(name => name.Equals(SyncBridgeOptions.SECTION_NAME, StringComparison.OrdinalIgnoreCase));
         return key is null ? null : root![key] as JsonObject;
     }
 

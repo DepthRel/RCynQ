@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Nothing inline runs and nothing is loaded from another server: the page pins what it may load. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>RCynQ: Remote Code Synchronization, Quick</title>
+  <meta name="description" content="RCynQ delivers uncommitted code to a remote machine and brings its branches back, without commits or pushes: directly or through Relay nodes that only pass encrypted traffic.">
+  <meta property="og:title" content="RCynQ: Remote Code Synchronization, Quick">
+  <meta property="og:description" content="Ship your code to a remote machine without a commit. Through any Relay, with nothing to trust in the middle.">
+  <link rel="icon" href="assets/rcynq.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/rcynq.svg" alt=""><span><b class="r">RC</b>yn<b class="q">Q</b></span></a>
+      <nav>
+        <a class="hide-small" href="#how" data-t="nav.how">How it works</a>
+        <a class="hide-small" href="#relay" data-t="nav.relay">Relays</a>
+        <a class="hide-small" href="#why" data-t="nav.why">Why RCynQ</a>
+        <a href="#download" data-t="nav.download">Download</a>
+        <!-- The language picker: languages.js fills it in; without scripts the page simply stays in English. -->
+        <div class="lang" data-root="" aria-label="Language"></div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="wrap">
+        <!-- The name spelled out: the letters of RCynQ light up in turn. -->
+        <p class="acronym" aria-label="Remote Code sYNchronization, Quick">
+          <span class="letter"><b>R</b>emote</span>
+          <span class="letter"><b>C</b>ode</span>
+          <span class="letter">s<b>yn</b>chronization</span>
+          <span class="letter"><b>Q</b>uick</span>
+        </p>
+        <h1 data-t="hero.title">Ship your code to a remote machine.<br><em>Without a commit.</em></h1>
+        <p class="lead" data-t="hero.lead">RCynQ delivers your uncommitted changes to the computer that holds the repository, and brings its branches back, even when the two cannot see each other. Directly, or through a Relay that passes only encrypted traffic.</p>
+        <div class="actions">
+          <a class="btn accent" id="hero-download" href="#download"><span data-t="hero.download">Download RCynQ</span></a>
+          <a class="btn" href="#how" data-t="hero.how">How it works</a>
+        </div>
+        <div class="version"><span data-t="hero.platforms">Free and open source · Windows · Linux · macOS · desktop app and command line</span></div>
+
+        <!-- The chain: a patch leaves the Workstation, passes the Relay sealed and lands on the Origin; a bundle comes back. -->
+        <div class="chain" aria-hidden="true">
+          <div class="node workstation">
+            <span class="node-icon">⌨</span>
+            <span class="node-name">Workstation</span>
+            <span class="node-role" data-t="chain.workstation">you edit here</span>
+          </div>
+          <div class="wire">
+            <i class="packet out"></i>
+            <i class="packet back"></i>
+          </div>
+          <div class="node relay">
+            <span class="node-icon">🔒</span>
+            <span class="node-name">Relay</span>
+            <span class="node-role" data-t="chain.relay">sees nothing</span>
+          </div>
+          <div class="wire">
+            <i class="packet out late"></i>
+            <i class="packet back late"></i>
+          </div>
+          <div class="node origin">
+            <span class="node-icon">⎇</span>
+            <span class="node-name">Origin</span>
+            <span class="node-role" data-t="chain.origin">the repositories</span>
+          </div>
+        </div>
+        <div class="legend" aria-hidden="true">
+          <span><i class="dot out"></i><span data-t="chain.patch">your changes, as a signed patch</span></span>
+          <span><i class="dot back"></i><span data-t="chain.bundle">branches, as a Git bundle</span></span>
+        </div>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="wrap">
+        <p class="eyebrow" data-t="how.eyebrow">How it works</p>
+        <h2 data-t="how.title">Two buttons instead of a commit and a push</h2>
+        <p class="sub" data-t="how.sub">One program takes one of three roles on each computer. You keep working where you are; RCynQ moves the code.</p>
+        <ol class="steps">
+          <li>
+            <h3 data-t="how.1.title">Edit where you are</h3>
+            <p data-t="how.1.text">Work in your usual editor on the Workstation. No WIP commits, no branches to clean up later.</p>
+          </li>
+          <li>
+            <h3 data-t="how.2.title">Send changes</h3>
+            <p data-t="how.2.text">The edits leave as a patch: a signed manifest, then every file by its SHA-256.</p>
+          </li>
+          <li>
+            <h3 data-t="how.3.title">Applied as a whole</h3>
+            <p data-t="how.3.text">The Origin applies everything or nothing. A conflict is shown file by file: keep, take or merge with Git.</p>
+          </li>
+          <li>
+            <h3 data-t="how.4.title">Pull it back</h3>
+            <p data-t="how.4.text">One button brings the current branch as an incremental Git bundle, even into an empty folder.</p>
+          </li>
+        </ol>
+        <div class="roles">
+          <div class="role"><h3>Workstation</h3><p data-t="role.workstation">The computer you work on. Keeps the working copies, sends changes, pulls branches.</p></div>
+          <div class="role"><h3>Relay</h3><p data-t="role.relay">Any computer both ends can reach. Forwards SSH, has no repository and sees no content.</p></div>
+          <div class="role"><h3>Origin</h3><p data-t="role.origin">The computer with the private repositories. RCynQ only reads them; only your patches change files there.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="relay" class="alt">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow" data-t="relay.eyebrow">Relay services</p>
+          <h2 data-t="relay.title">Your code goes where you cannot</h2>
+          <p class="sub" data-t="relay.sub">The repository sits in a closed network, your laptop is somewhere else. Put a Relay between them: a cloud VM, a bastion host, an office gateway, a teammate's machine.</p>
+          <ul class="checks">
+            <li data-t="relay.1">A chain passes as many Relays as the road needs: <code>Workstation → Relay 1 → Relay 2 → Origin</code>.</li>
+            <li data-t="relay.2">A Relay stays passive. Its key in <code>authorized_keys</code> may forward one port and run no command.</li>
+            <li data-t="relay.3">Traffic is encrypted end to end; the Relay never sees a file, a branch or a repository path.</li>
+            <li data-t="relay.4">A node can have spare routes, for example two tunnels. RCynQ checks them every 15 seconds and moves to the one that answers.</li>
+          </ul>
+        </div>
+        <div class="hops" aria-hidden="true">
+          <div class="hop"><span>Workstation</span><small data-t="hops.workstation">your laptop</small></div>
+          <div class="hop-line"><i></i></div>
+          <div class="hop relay"><span>Relay 1</span><small data-t="hops.relay1">a cloud VM</small></div>
+          <div class="hop-line"><i></i></div>
+          <div class="hop relay"><span>Relay 2</span><small data-t="hops.relay2">the office bastion</small></div>
+          <div class="hop-line"><i></i></div>
+          <div class="hop origin"><span>Origin</span><small data-t="hops.origin">the closed network</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="why">
+      <div class="wrap">
+        <p class="eyebrow" data-t="why.eyebrow">Why RCynQ</p>
+        <h2 data-t="why.title">Quick to set up, careful with your code</h2>
+        <p class="sub" data-t="why.sub">Built for closed networks, where the code must arrive and nothing else may leak.</p>
+        <div class="cards">
+          <div class="card"><div class="icon" aria-hidden="true">⚡</div><h3 data-t="why.1.title">No commits, no pushes</h3><p data-t="why.1.text">Work in progress travels as a patch. The history stays yours: nothing to squash, nothing to force-push.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🛰️</div><h3 data-t="why.2.title">Through any Relay</h3><p data-t="why.2.text">One hop or several. Any machine with an SSH server both sides reach is enough.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🔏</div><h3 data-t="why.3.title">Nothing to trust in the middle</h3><p data-t="why.3.text">Patches are signed with ECDSA P-256, accepted once and checked to stay inside the working tree.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🧊</div><h3 data-t="why.4.title">The Origin stays clean</h3><p data-t="why.4.text">No remotes, refs, settings or commits are written into its repository. Only your files change.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🔀</div><h3 data-t="why.5.title">Routes that heal</h3><p data-t="why.5.text">Several addresses for one node, the fastest one that answers is used, and it comes back when the better one returns.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🚪</div><h3 data-t="why.6.title">No SSH server? Fine</h3><p data-t="why.6.text">An end node can accept connections on its own TLS port, verified by a pinned certificate.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">📚</div><h3 data-t="why.7.title">Many repositories</h3><p data-t="why.7.text">Register as many as you need on the Origin and switch between them from either side, without a restart.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🎒</div><h3 data-t="why.8.title">Portable</h3><p data-t="why.8.text">Settings, keys and data stay in the program folder. Nothing is scattered over the system.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">⌘</div><h3 data-t="why.9.title">Window or terminal</h3><p data-t="why.9.text">A desktop application for every day and the <code>rcynq</code> command line for scripts.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" class="alt">
+      <div class="wrap">
+        <p class="eyebrow" data-t="start.eyebrow">Getting started</p>
+        <h2 data-t="start.title">From three bare computers to the first Pull</h2>
+        <p class="sub" data-t="start.sub">No server to rent from us, no account, no cloud in the middle: only your machines.</p>
+        <ol class="steps three">
+          <li>
+            <h3 data-t="start.1.title">Install</h3>
+            <p data-t="start.1.text">Put RCynQ on the Workstation, the Origin and the Relay, and pick the role of each one.</p>
+          </li>
+          <li>
+            <h3 data-t="start.2.title">Introduce the nodes</h3>
+            <p data-t="start.2.text">Export a node file on each computer and import it on its neighbours. RCynQ allows the keys itself.</p>
+          </li>
+          <li>
+            <h3 data-t="start.3.title">Pull and send</h3>
+            <p data-t="start.3.text">Run the diagnostics, press Pull, edit a file, press Send changes. Done.</p>
+          </li>
+        </ol>
+        <p class="note" data-t="start.note"><b>Step by step:</b> the setup guide walks through every command, for Windows, Linux and macOS.</p>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <p class="eyebrow" data-t="dl.eyebrow">Download</p>
+        <h2 data-t="dl.title">Get RCynQ</h2>
+        <p class="sub" data-t="dl.sub">The same version on every node of a chain.<br>Git is needed on the Workstation and the Origin.</p>
+        <div class="downloads">
+          <div class="download" data-os="windows">
+            <h3>Windows</h3>
+            <div class="meta"></div>
+            <p class="hint" data-t="dl.windows">An installer for the current user, no administrator rights. Settings and data stay inside the installation.</p>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="zip" data-t="dl.windows.other">or the portable .zip archive</a>
+          </div>
+          <div class="download" data-os="linux">
+            <h3>Linux</h3>
+            <div class="meta"></div>
+            <p class="hint" data-t="dl.linux">A package for Ubuntu, Debian and their relatives: Git and the SSH client come with it.</p>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="deb" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.linux.other">or the portable .tar.gz archive</a>
+          </div>
+          <div class="download" data-os="macos">
+            <h3>macOS</h3>
+            <div class="meta"></div>
+            <p class="hint" data-t="dl.macos">A portable archive for Macs with Apple silicon.</p>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="intel" data-t="dl.macos.other">or for Macs with an Intel processor</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span data-t="foot.name">RCynQ is free software under the GPL-3.0-or-later license.</span>
+      <span>
+        <a href="https://github.com/DepthRel/RCynQ" data-t="foot.source">Source code</a> ·
+        <a id="guide-link" href="https://github.com/DepthRel/RCynQ/blob/main/Docs/En/SetupGuide.md" data-t="foot.guide">Setup guide</a> ·
+        <a id="architecture-link" href="https://github.com/DepthRel/RCynQ/blob/main/Docs/En/Architecture.md" data-t="foot.architecture">Architecture</a> ·
+        <a href="https://github.com/DepthRel/RCynQ/blob/main/LICENSE.txt" data-t="foot.license">License</a> ·
+        <a href="https://github.com/DepthRel/RCynQ/releases" data-t="foot.releases">All releases</a> ·
+        <a href="mailto:project.rcynq@gmail.com" data-t="foot.mail">Write to us</a>
+      </span>
+    </div>
+  </footer>
+
+  <script src="assets/languages.js"></script>
+  <script src="assets/site.js"></script>
+</body>
+</html>

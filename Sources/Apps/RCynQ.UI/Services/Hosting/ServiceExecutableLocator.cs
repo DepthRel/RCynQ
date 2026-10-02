@@ -11,13 +11,13 @@ namespace RCynQ.UI.Services.Hosting;
 public static class ServiceExecutableLocator
 {
     /// <summary>The command-line option with an explicit service executable or assembly.</summary>
-    public const string Argument = "--service-exe";
+    public const string ARGUMENT = "--service-exe";
 
     /// <summary>The environment variable with an explicit service executable or assembly.</summary>
-    public const string EnvironmentVariable = "RCYNQ_SERVICE_EXE";
+    public const string ENVIRONMENT_VARIABLE = "RCYNQ_SERVICE_EXE";
 
     /// <summary>The service assembly name.</summary>
-    public const string AssemblyName = "RCynQ.Service";
+    public const string ASSEMBLY_NAME = "RCynQ.Service";
 
     /// <summary>
     /// Locates the service.
@@ -33,14 +33,14 @@ public static class ServiceExecutableLocator
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(environment);
 
-        var explicitPath = ArgumentValue(args) ?? environment(EnvironmentVariable);
+        var explicitPath = ArgumentValue(args) ?? environment(ENVIRONMENT_VARIABLE);
         return !string.IsNullOrWhiteSpace(explicitPath)
             ? ExecutableLocator.FromFile(Path.GetFullPath(explicitPath), environment)
-            : ExecutableLocator.Locate(baseDirectory, AssemblyName, "service", AssemblyName, isWindows, environment);
+            : ExecutableLocator.Locate(baseDirectory, ASSEMBLY_NAME, "service", ASSEMBLY_NAME, isWindows, environment);
     }
 
     /// <summary>
-    /// Reads the value of <see cref="Argument"/>.
+    /// Reads the value of <see cref="ARGUMENT"/>.
     /// </summary>
     /// <param name="args">The arguments.</param>
     /// <returns>The value, or <see langword="null"/>.</returns>
@@ -48,7 +48,7 @@ public static class ServiceExecutableLocator
     {
         for (var i = 0; i < args.Count - 1; i++)
         {
-            if (args[i] == Argument)
+            if (args[i] == ARGUMENT)
             {
                 return args[i + 1];
             }

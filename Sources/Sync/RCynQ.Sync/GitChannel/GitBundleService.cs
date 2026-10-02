@@ -12,15 +12,15 @@ using RCynQ.Sync.Security;
 namespace RCynQ.Sync.GitChannel;
 
 /// <summary>
-/// Serves the branches of the Dest repository to a Source that asks for them, as an incremental git bundle.
+/// Serves the branches of the Origin repository to a Workstation that asks for them, as an incremental git bundle.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the "pull" of a Dest that runs no SSH server: the Source names the commits it already has, and the bundle carries
-/// only what is new, delta-compressed by Git. It reaches the Source through the same endpoint and the same chain as patches.
+/// This is the "pull" of an Origin that runs no SSH server: the Workstation names the commits it already has, and the bundle carries
+/// only what is new, delta-compressed by Git. It reaches the Workstation through the same endpoint and the same chain as patches.
 /// </para>
 /// <para>
-/// The request is authorized like a patch: the link token and a known Source peer. It gives read access to the repository, nothing else.
+/// The request is authorized like a patch: the link token and a known Workstation peer. It gives read access to the repository, nothing else.
 /// The bundle is written to a temporary file of the node and deleted when the response is done. Only one bundle is built at a time.
 /// </para>
 /// </remarks>
@@ -31,6 +31,9 @@ public sealed class GitBundleService
 
     /// <summary>The peer repository.</summary>
     private readonly IPeerRepository _peers;
+
+    /// <summary>The repositories of the node.</summary>
+    private readonly IActiveRepository _repositories;
 
     /// <summary>The link token provider.</summary>
     private readonly LinkTokenProvider _tokens;
@@ -44,16 +47,23 @@ public sealed class GitBundleService
     /// <summary>Serializes the creation of bundles.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitBundleService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="peers">The peer repository.</param>
     /// <param name="tokens">The link token provider.</param>
     /// <param name="git">The repository service.</param>
     /// <param name="appData">The node data directories.</param>
-    public GitBundleService(NodeConfig node, IPeerRepository peers, LinkTokenProvider tokens, IGitRepositoryService git, IAppDataFactory appData)
+    /// <param name="repositories">The repositories of the node; <see langword="null"/> for the one the node started with.</param>
+    public GitBundleService(ILocalizer localizer, NodeConfig node, IPeerRepository peers, LinkTokenProvider tokens, IGitRepositoryService git, IAppDataFactory appData, IActiveRepository? repositories = null)
     {
+        _repositories = repositories ?? FixedRepository.FromNode(node);
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _peers = peers;
         _tokens = tokens;
@@ -66,21 +76,29 @@ public sealed class GitBundleService
     /// </summary>
     /// <param name="have">The commits the peer claims to have; the ones this repository does not know are ignored.</param>
     /// <param name="context">The transport-level request facts.</param>
+    /// <param name="repositoryName">
+    /// The name of the repository asked for: any repository the node registered, not only the one it works with now, since
+    /// a bundle only reads. <see langword="null"/> asks for the repository the node works with.
+    /// </param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The bundle, or <see langword="null"/> when the peer has everything.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="PatchRejectedException">The request is not allowed.</exception>
     /// <exception cref="SyncBridgeException">The node has no repository to serve.</exception>
-    public async Task<GitBundleFile?> CreateAsync(IReadOnlyList<string> have, PatchReceiveContext context, CancellationToken cancellationToken = default)
+    public async Task<GitBundleFile?> CreateAsync(IReadOnlyList<string> have, PatchReceiveContext context, string? repositoryName = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(have);
         ArgumentNullException.ThrowIfNull(context);
         await AuthorizeAsync(context, cancellationToken);
 
-        var repository = _node.RepoPath;
+        var entry = string.IsNullOrWhiteSpace(repositoryName)
+            ? _repositories.Current
+            : _repositories.Entries.FirstOrDefault(candidate => candidate.IsNamed(repositoryName.Trim()))
+                ?? throw new PatchRejectedException(PatchRejectionReason.UnknownRepository, _localizer.Format("Repository.UnknownHere", repositoryName.Trim(), _node.Name));
+        var repository = entry?.Path;
         if (repository is null || !await _git.IsWorkTreeAsync(repository, cancellationToken))
         {
-            throw new SyncBridgeException(Texts.Format("Git.BundleNoRepo", repository ?? string.Empty));
+            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", repository ?? string.Empty));
         }
 
         await _gate.WaitAsync(cancellationToken);
@@ -120,20 +138,20 @@ public sealed class GitBundleService
     /// <exception cref="PatchRejectedException">The request is refused.</exception>
     private async Task AuthorizeAsync(PatchReceiveContext context, CancellationToken cancellationToken)
     {
-        if (_node.Role != NodeRole.Dest)
+        if (_node.Role != NodeRole.Origin)
         {
-            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, Texts.Format("Git.BundleOnlyDest", _node.Role));
+            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, _localizer.Format("Git.BundleOnlyOrigin", _node.Role));
         }
 
         if (!LinkTokenProvider.Matches(await _tokens.GetTokenAsync(cancellationToken), context.LinkToken))
         {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, Texts.Get("Receive.InvalidToken"));
+            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, _localizer.Get("Receive.InvalidToken"));
         }
 
-        if (!NodeId.TryParse(context.SenderNodeId, out var sender)
-            || await _peers.GetAsync(sender, cancellationToken) is not { Role: NodeRole.Source })
+        if (!NodeId.TryParse(context.SenderNodeId, out var sender) ||
+            await _peers.GetAsync(sender, cancellationToken) is not { Role: NodeRole.Workstation })
         {
-            throw new PatchRejectedException(PatchRejectionReason.UnknownSender, Texts.Format("Git.BundleUnknownPeer", context.SenderNodeId ?? string.Empty));
+            throw new PatchRejectedException(PatchRejectionReason.UnknownSender, _localizer.Format("Git.BundleUnknownPeer", context.SenderNodeId ?? string.Empty));
         }
     }
 
@@ -151,47 +169,5 @@ public sealed class GitBundleService
         {
             // Temporary data of the node; the next cleanup removes it.
         }
-    }
-}
-
-/// <summary>
-/// A bundle file that is deleted when it is no longer needed.
-/// </summary>
-public sealed class GitBundleFile : IAsyncDisposable
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GitBundleFile"/> class.
-    /// </summary>
-    /// <param name="path">The bundle file.</param>
-    /// <param name="head">The branch the served repository has checked out, or <see langword="null"/> for a detached HEAD.</param>
-    public GitBundleFile(string path, string? head)
-    {
-        Path = path;
-        Head = head;
-    }
-
-    /// <summary>
-    /// Gets the bundle file.
-    /// </summary>
-    public string Path { get; }
-
-    /// <summary>
-    /// Gets the branch the served repository has checked out, or <see langword="null"/> for a detached HEAD.
-    /// </summary>
-    public string? Head { get; }
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync()
-    {
-        try
-        {
-            File.Delete(Path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Temporary data of the node; the next cleanup removes it.
-        }
-
-        return ValueTask.CompletedTask;
     }
 }

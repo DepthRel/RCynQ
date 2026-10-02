@@ -10,18 +10,18 @@ namespace RCynQ.Ssh.Routing;
 /// <remarks>
 /// <para>
 /// A peer in <see cref="EndpointMode.SshTunnel"/> is reached by opening an SSH session to the peer itself and
-/// forwarding to its loopback endpoint; the mediators are jump hosts.
+/// forwarding to its loopback endpoint; the relays are jump hosts.
 /// </para>
 /// <para>
 /// A peer in <see cref="EndpointMode.Direct"/> runs no SSH server. Its endpoint listens on the network with TLS, so
-/// the SSH session stops at the last mediator and forwards to <see cref="RemoteHost"/>:<see cref="RemotePort"/> from
-/// there; TLS is established with the peer itself, so the mediator only relays bytes it cannot read. When there is no
-/// mediator at all, no SSH is used: the connection goes straight to the peer.
+/// the SSH session stops at the last relay and forwards to <see cref="RemoteHost"/>:<see cref="RemotePort"/> from
+/// there; TLS is established with the peer itself, so the relay only relays bytes it cannot read. When there is no
+/// relay at all, no SSH is used: the connection goes straight to the peer.
 /// </para>
 /// </remarks>
 /// <param name="Endpoint">The endpoint link (last link of the chain).</param>
 /// <param name="Target">The SSH endpoint that opens the forward, or <see langword="null"/> when no SSH is used.</param>
-/// <param name="Jumps">The SSH endpoints of the mediators before the target, in order.</param>
+/// <param name="Jumps">The SSH endpoints of the relays before the target, in order.</param>
 /// <param name="RemoteHost">The host the forward connects to, as seen from <paramref name="Target"/>.</param>
 /// <param name="RemotePort">The port the forward connects to.</param>
 /// <param name="TlsFingerprint">The pinned certificate fingerprint, or <see langword="null"/> when the endpoint is plain HTTP on loopback.</param>
@@ -44,12 +44,18 @@ public sealed record ChainRoute(
     public bool UsesTls => TlsFingerprint is not null;
 
     /// <summary>
+    /// Gets the peers whose SSH servers the route passes through, in order: the relays and, when it runs an SSH
+    /// server, the endpoint. These are the hosts whose pinned host keys a connection along the route is checked against.
+    /// </summary>
+    public IReadOnlyList<PeerDescriptor> SshPeers { get; init; } = Array.Empty<PeerDescriptor>();
+
+    /// <summary>
     /// Resolves the route from the chain links.
     /// </summary>
-    /// <param name="chain">The chain links; mediators first, the counterpart endpoint last.</param>
+    /// <param name="chain">The chain links; relays first, the counterpart endpoint last.</param>
     /// <returns>The route.</returns>
     /// <exception cref="ArgumentException">
-    /// The chain is empty, or the endpoint runs no SSH server and the mediator that should relay to it runs none either.
+    /// The chain is empty, or the endpoint runs no SSH server and the relay that should relay to it runs none either.
     /// </exception>
     public static ChainRoute Resolve(IReadOnlyList<ChainLinkConfig> chain)
     {
@@ -61,32 +67,36 @@ public sealed record ChainRoute(
 
         var ordered = chain.OrderBy(link => link.Priority).ThenBy(link => link.Name, StringComparer.Ordinal).ToArray();
         var endpoint = ordered[^1];
-        var mediators = ordered[..^1];
+        var relays = ordered[..^1];
         if (endpoint.Peer.EndpointMode != EndpointMode.Direct)
         {
-            return new ChainRoute(endpoint, endpoint.Peer.Ssh, mediators.Select(link => link.Peer.Ssh).ToArray(), "127.0.0.1", endpoint.RemotePort, null);
+            return new ChainRoute(endpoint, endpoint.Peer.Ssh, relays.Select(link => link.Peer.Ssh).ToArray(), "127.0.0.1", endpoint.RemotePort, null)
+            {
+                SshPeers = ordered.Select(link => link.Peer).ToArray()
+            };
         }
 
         // The endpoint has no SSH server: its own TLS port is the destination.
-        if (mediators.Length == 0)
+        if (relays.Length == 0)
         {
             return new ChainRoute(endpoint, null, Array.Empty<SshEndpoint>(), endpoint.Peer.Host, endpoint.RemotePort, endpoint.Peer.TlsFingerprint);
         }
 
-        var relay = mediators[^1];
+        var relay = relays[^1];
         if (relay.Peer.EndpointMode == EndpointMode.Direct)
         {
-            throw new ArgumentException(
-                Texts.Format("Route.MediatorNeedsSsh", endpoint.Peer.Id, relay.Peer.Id),
-                nameof(chain));
+            throw LocalizedError.Argument(nameof(chain), "Route.RelayNeedsSsh", endpoint.Peer.Id, relay.Peer.Id);
         }
 
         return new ChainRoute(
             endpoint,
             relay.Peer.Ssh,
-            mediators[..^1].Select(link => link.Peer.Ssh).ToArray(),
+            relays[..^1].Select(link => link.Peer.Ssh).ToArray(),
             endpoint.Peer.Host,
             endpoint.RemotePort,
-            endpoint.Peer.TlsFingerprint);
+            endpoint.Peer.TlsFingerprint)
+        {
+            SshPeers = relays.Select(link => link.Peer).ToArray()
+        };
     }
 }

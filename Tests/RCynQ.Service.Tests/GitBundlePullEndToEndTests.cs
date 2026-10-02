@@ -15,7 +15,6 @@ using RCynQ.Git.Paths;
 using RCynQ.Git.Processes;
 using RCynQ.Git.Repository;
 using RCynQ.Service.Tests.Support;
-using RCynQ.Ssh.Commands;
 using RCynQ.Sync.Endpoint;
 using RCynQ.Sync.GitChannel;
 using RCynQ.Sync.Locking;
@@ -27,41 +26,41 @@ using RCynQ.Sync.Transfer;
 namespace RCynQ.Service.Tests;
 
 /// <summary>
-/// End-to-end tests of the pull of a Dest without an SSH server: a real Dest service with a real Git repository and its own TLS port,
-/// asked for a bundle by the real client of a Source, through a mediator that is replaced by a direct connection. They return early
+/// End-to-end tests of the pull of an Origin without an SSH server: a real Origin service with a real Git repository and its own TLS port,
+/// asked for a bundle by the real client of a Workstation, through a relay that is replaced by a direct connection. They return early
 /// when <c>git</c> is not installed.
 /// </summary>
 public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 {
-    /// <summary>The Dest service.</summary>
+    /// <summary>The Origin service.</summary>
     private ServiceTestHost? _host;
 
-    /// <summary>The Git repository of Dest.</summary>
-    private string _destRepo = null!;
+    /// <summary>The Git repository of Origin.</summary>
+    private string _originRepo = null!;
 
-    /// <summary>The temporary root of the simulated Source.</summary>
-    private string _sourceRoot = null!;
+    /// <summary>The temporary root of the simulated Workstation.</summary>
+    private string _workstationRoot = null!;
 
-    /// <summary>The working tree of Source.</summary>
-    private string _sourceWork = null!;
+    /// <summary>The working tree of Workstation.</summary>
+    private string _workstationWork = null!;
 
-    /// <summary>The TLS port of the Dest endpoint.</summary>
+    /// <summary>The TLS port of the Origin endpoint.</summary>
     private int _tlsPort;
 
     /// <summary>The Git command runner.</summary>
-    private readonly GitCommandRunner _git = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _git = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>The forward manager, replaced by a direct connection.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
 
-    /// <summary>The working tree lock of the simulated Source.</summary>
-    private readonly WorkingTreeLock _sourceLock = new();
+    /// <summary>The working tree lock of the simulated Workstation.</summary>
+    private readonly WorkingTreeLock _workstationLock = new();
 
-    /// <summary>The sync base manager of the simulated Source, created on first use.</summary>
-    private SyncBaseManager? _sourceSyncBase;
+    /// <summary>The sync base manager of the simulated Workstation, created on first use.</summary>
+    private SyncBaseManager? _workstationSyncBase;
 
     /// <summary>
-    /// Starts Dest with a repository and registers Source as its peer.
+    /// Starts Origin with a repository and registers Workstation as its peer.
     /// </summary>
     /// <returns>A task representing the setup.</returns>
     public async Task InitializeAsync()
@@ -73,25 +72,25 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         _tlsPort = ServiceTestHost.FreePort();
         _host = await ServiceTestHost.StartAsync(
-            NodeRole.Dest,
+            NodeRole.Origin,
             extraSettings: new Dictionary<string, string?>
             {
                 ["SyncBridge:Endpoint:Mode"] = "Direct",
                 ["SyncBridge:Endpoint:BindAddress"] = "127.0.0.1",
                 ["SyncBridge:Endpoint:Port"] = _tlsPort.ToString(System.Globalization.CultureInfo.InvariantCulture)
             });
-        _destRepo = Path.Combine(_host.Root, "work");
-        _sourceRoot = Path.Combine(Path.GetTempPath(), "rcynq-bundle-e2e", Guid.NewGuid().ToString("N"));
-        _sourceWork = Directory.CreateDirectory(Path.Combine(_sourceRoot, "work")).FullName;
+        _originRepo = Path.Combine(_host.Root, "work");
+        _workstationRoot = Path.Combine(Path.GetTempPath(), "rcynq-bundle-e2e", Guid.NewGuid().ToString("N"));
+        _workstationWork = Directory.CreateDirectory(Path.Combine(_workstationRoot, "work")).FullName;
 
-        await RunGitAsync(_destRepo, "init", "--quiet", "--initial-branch=main");
-        Write(_destRepo, "readme.txt", "first\n");
-        Write(_destRepo, "src/app.cs", "class App {}\n");
+        await RunGitAsync(_originRepo, "init", "--quiet", "--initial-branch=main");
+        Write(_originRepo, "readme.txt", "first\n");
+        Write(_originRepo, "src/app.cs", "class App {}\n");
         await CommitAsync("first commit");
 
         using var scope = _host.Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<IPeerRepository>()
-            .UpsertAsync(new PeerDescriptor(new NodeId("source-1"), "Source", NodeRole.Source, "source.local", 22, "rcynq"));
+            .UpsertAsync(new PeerDescriptor(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, "workstation.local", 22, "rcynq"));
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_tlsPort);
     }
@@ -109,9 +108,9 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         try
         {
-            if (_sourceRoot is not null)
+            if (_workstationRoot is not null)
             {
-                Directory.Delete(_sourceRoot, recursive: true);
+                Directory.Delete(_workstationRoot, recursive: true);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -121,7 +120,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Verifies that an empty folder becomes a clone of Dest, and that a later pull brings only the new commit.
+    /// Verifies that an empty folder becomes a clone of Origin, and that a later pull brings only the new commit.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -137,19 +136,19 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
         var first = await channel.PullAsync();
 
         first.Succeeded.Should().BeTrue(first.Output);
-        Read(_sourceWork, "readme.txt").Should().Be("first\n");
-        Read(_sourceWork, "src/app.cs").Should().Be("class App {}\n");
-        (await CountCommitsAsync(_sourceWork)).Should().Be(1);
+        Read(_workstationWork, "readme.txt").Should().Be("first\n");
+        Read(_workstationWork, "src/app.cs").Should().Be("class App {}\n");
+        (await CountCommitsAsync(_workstationWork)).Should().Be(1);
 
-        Write(_destRepo, "readme.txt", "second\n");
-        Write(_destRepo, "docs/new.md", "new file\n");
+        Write(_originRepo, "readme.txt", "second\n");
+        Write(_originRepo, "docs/new.md", "new file\n");
         await CommitAsync("second commit");
         var second = await channel.PullAsync();
 
         second.Succeeded.Should().BeTrue(second.Output);
-        Read(_sourceWork, "readme.txt").Should().Be("second\n");
-        Read(_sourceWork, "docs/new.md").Should().Be("new file\n");
-        (await CountCommitsAsync(_sourceWork)).Should().Be(2);
+        Read(_workstationWork, "readme.txt").Should().Be("second\n");
+        Read(_workstationWork, "docs/new.md").Should().Be("new file\n");
+        (await CountCommitsAsync(_workstationWork)).Should().Be(2);
         (await channel.GetBranchAsync()).Should().Match<RCynQ.Core.State.GitBranchInfo>(info => info.Branch == "main" && info.Ahead == 0 && info.Behind == 0);
 
         var third = await channel.FetchAsync();
@@ -159,11 +158,11 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Verifies that the <c>dest</c> remote is (re-)registered even when a Pull finds nothing new to fetch — for example a node
+    /// Verifies that the <c>rcynq</c> remote is (re-)registered even when a Pull finds nothing new to fetch — for example a node
     /// set up before remote registration existed, so its very first Pull under the new code lands directly in the "nothing new"
     /// case. Regression test for a bug where the "nothing new" early return skipped remote registration, so <c>git checkout
-    /// &lt;branch&gt;</c> and IDEs such as VS Code (<c>git checkout --track dest/&lt;branch&gt;</c>) could never create a local
-    /// branch from another branch of Dest, however many times Pull was run afterwards.
+    /// &lt;branch&gt;</c> and IDEs such as VS Code (<c>git checkout --track rcynq/&lt;branch&gt;</c>) could never create a local
+    /// branch from another branch of Origin, however many times Pull was run afterwards.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -174,28 +173,28 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
             return;
         }
 
-        await RunGitAsync(_destRepo, "branch", "other", "main");
+        await RunGitAsync(_originRepo, "branch", "other", "main");
         var channel = CreateChannel();
 
-        // A first pull the ordinary way: brings everything, including refs/remotes/dest/other.
+        // A first pull the ordinary way: brings everything, including refs/remotes/rcynq/other.
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
 
         // Simulate the remote config being absent going into a pull that finds nothing new, leaving the already-fetched
-        // refs/remotes/dest/* untouched — the exact situation reported against RCynQ: an installation whose earlier pulls ran
-        // before this fix, so "dest" was never registered, and every later pull (with nothing new on Dest) kept finding nothing
+        // refs/remotes/rcynq/* untouched — the exact situation reported against RCynQ: an installation whose earlier pulls ran
+        // before this fix, so "rcynq" was never registered, and every later pull (with nothing new on Origin) kept finding nothing
         // to do and kept skipping registration. ("git remote remove" would also delete the tracking refs, unlike the real bug.)
-        (await _git.RunAsync(new[] { "config", "--remove-section", "remote.dest" }, _sourceWork)).ExitCode.Should().Be(0);
+        (await _git.RunAsync(new[] { "config", "--remove-section", "remote.rcynq" }, _workstationWork)).ExitCode.Should().Be(0);
 
         var second = await channel.PullAsync();
 
         second.Succeeded.Should().BeTrue(second.Output);
-        second.Output.Should().Contain("up to date", "nothing changed on Dest since the first pull");
-        (await RunGitAsync(_sourceWork, "remote", "get-url", "dest")).Trim().Should().NotBeEmpty("the remote must be registered even though nothing was fetched this time");
-        (await _git.RunAsync(new[] { "checkout", "-q", "--track", "dest/other" }, _sourceWork)).ExitCode.Should().Be(0, "Git can only do this once the remote is registered");
+        second.Output.Should().Contain("up to date", "nothing changed on Origin since the first pull");
+        (await RunGitAsync(_workstationWork, "remote", "get-url", "rcynq")).Trim().Should().NotBeEmpty("the remote must be registered even though nothing was fetched this time");
+        (await _git.RunAsync(new[] { "checkout", "-q", "--track", "rcynq/other" }, _workstationWork)).ExitCode.Should().Be(0, "Git can only do this once the remote is registered");
     }
 
     /// <summary>
-    /// Verifies that a folder that already has the files but no repository keeps them: the differences to Dest show up as local changes.
+    /// Verifies that a folder that already has the files but no repository keeps them: the differences to Origin show up as local changes.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -206,21 +205,21 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
             return;
         }
 
-        Write(_sourceWork, "readme.txt", "first\n");
-        Write(_sourceWork, "src/app.cs", "class App { /* edited on the Source */ }\n");
-        Write(_sourceWork, "local-only.txt", "never in Dest\n");
+        Write(_workstationWork, "readme.txt", "first\n");
+        Write(_workstationWork, "src/app.cs", "class App { /* edited on the Workstation */ }\n");
+        Write(_workstationWork, "local-only.txt", "never in Origin\n");
 
         var result = await CreateChannel().PullAsync();
 
         result.Succeeded.Should().BeTrue(result.Output);
-        Read(_sourceWork, "src/app.cs").Should().Be("class App { /* edited on the Source */ }\n", "the edit must not be lost");
-        Read(_sourceWork, "local-only.txt").Should().Be("never in Dest\n");
-        var status = await RunGitAsync(_sourceWork, "status", "--porcelain");
+        Read(_workstationWork, "src/app.cs").Should().Be("class App { /* edited on the Workstation */ }\n", "the edit must not be lost");
+        Read(_workstationWork, "local-only.txt").Should().Be("never in Origin\n");
+        var status = await RunGitAsync(_workstationWork, "status", "--porcelain");
         status.Should().Contain("src/app.cs").And.Contain("local-only.txt").And.NotContain("readme.txt");
     }
 
     /// <summary>
-    /// Verifies that a repository that lags behind Dest gets only what is missing and that local commits do not confuse the request.
+    /// Verifies that a repository that lags behind Origin gets only what is missing and that local commits do not confuse the request.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -233,17 +232,17 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        Write(_sourceWork, "mine.txt", "a commit only the Source has\n");
-        await RunGitAsync(_sourceWork, "add", "-A");
-        await RunGitAsync(_sourceWork, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "local commit");
-        Write(_destRepo, "src/app.cs", "class App { int Version; }\n");
-        await CommitAsync("dest moves on");
+        Write(_workstationWork, "mine.txt", "a commit only the Workstation has\n");
+        await RunGitAsync(_workstationWork, "add", "-A");
+        await RunGitAsync(_workstationWork, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "local commit");
+        Write(_originRepo, "src/app.cs", "class App { int Version; }\n");
+        await CommitAsync("origin moves on");
 
         var fetch = await channel.FetchAsync();
 
         fetch.Succeeded.Should().BeTrue(fetch.Output);
         fetch.Branch.Should().Match<RCynQ.Core.State.GitBranchInfo>(info => info.Ahead == 1 && info.Behind == 1, "the histories diverged, which is reported instead of being merged");
-        (await RunGitAsync(_sourceWork, "show", "refs/remotes/dest/main:src/app.cs")).Should().Be("class App { int Version; }\n");
+        (await RunGitAsync(_workstationWork, "show", "refs/remotes/rcynq/main:src/app.cs")).Should().Be("class App { int Version; }\n");
     }
 
     /// <summary>
@@ -262,7 +261,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         result.Succeeded.Should().BeFalse();
         result.Output.Should().Contain("InvalidToken");
-        Directory.Exists(Path.Combine(_sourceWork, ".git")).Should().BeFalse();
+        Directory.Exists(Path.Combine(_workstationWork, ".git")).Should().BeFalse();
     }
 
     /// <summary>
@@ -279,14 +278,14 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        var syncBase = SourcePaths().SyncBase;
+        var syncBase = WorkstationPaths().SyncBase;
         Read(syncBase, "readme.txt").Should().Be("first\n", "the first Pull builds the sync base from the cloned commit");
 
-        Write(_sourceWork, "my-notes.txt", "typed on the Source\n");
-        Write(_destRepo, "readme.txt", "second\n");
-        Write(_destRepo, "docs/new.md", "new file\n");
-        File.Delete(Path.Combine(_destRepo, "src", "app.cs"));
-        await CommitAsync("dest moves on");
+        Write(_workstationWork, "my-notes.txt", "typed on the Workstation\n");
+        Write(_originRepo, "readme.txt", "second\n");
+        Write(_originRepo, "docs/new.md", "new file\n");
+        File.Delete(Path.Combine(_originRepo, "src", "app.cs"));
+        await CommitAsync("origin moves on");
 
         var pull = await channel.PullAsync();
 
@@ -299,11 +298,11 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Verifies that a local edit Dest already has in its new commit does not block the Pull: it is replaced by Dest's version.
+    /// Verifies that a local edit Origin already has in its new commit does not block the Pull: it is replaced by Origin's version.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Pull_Replaces_A_Local_Edit_That_Dest_Already_Committed()
+    public async Task Pull_Replaces_A_Local_Edit_That_Origin_Already_Committed()
     {
         if (_host is null)
         {
@@ -312,22 +311,22 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        Write(_sourceWork, "readme.txt", "second\n");
-        Write(_destRepo, "readme.txt", "second\n");
-        await CommitAsync("the same edit on Dest");
+        Write(_workstationWork, "readme.txt", "second\n");
+        Write(_originRepo, "readme.txt", "second\n");
+        await CommitAsync("the same edit on Origin");
 
         var pull = await channel.PullAsync();
 
         pull.Succeeded.Should().BeTrue(pull.Output);
         pull.Branch!.Behind.Should().Be(0);
-        Read(_sourceWork, "readme.txt").Should().Be("second\n");
+        Read(_workstationWork, "readme.txt").Should().Be("second\n");
         // As the user's own git status sees it: with the line-ending settings of the repository.
-        (await _git.RunInWorkingTreeAsync(new[] { "status", "--porcelain" }, _sourceWork)).StandardOutput.Trim().Should().BeEmpty();
+        (await _git.RunInWorkingTreeAsync(new[] { "status", "--porcelain" }, _workstationWork)).StandardOutput.Trim().Should().BeEmpty();
         (await PendingAsync()).Should().BeEmpty();
     }
 
     /// <summary>
-    /// Verifies that a Pull that would overwrite a local edit not yet sent to Dest is refused, lists the file and changes nothing.
+    /// Verifies that a Pull that would overwrite a local edit not yet sent to Origin is refused, lists the file and changes nothing.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -340,26 +339,26 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        var before = (await RunGitAsync(_sourceWork, "rev-parse", "HEAD")).Trim();
-        Write(_sourceWork, "readme.txt", "mine, not sent yet\n");
-        Write(_destRepo, "readme.txt", "second\n");
-        await CommitAsync("dest edits the same file");
+        var before = (await RunGitAsync(_workstationWork, "rev-parse", "HEAD")).Trim();
+        Write(_workstationWork, "readme.txt", "mine, not sent yet\n");
+        Write(_originRepo, "readme.txt", "second\n");
+        await CommitAsync("origin edits the same file");
 
         var pull = await channel.PullAsync();
 
         pull.Succeeded.Should().BeFalse();
         pull.Output.Should().Contain("readme.txt").And.Contain("not been sent");
-        Read(_sourceWork, "readme.txt").Should().Be("mine, not sent yet\n");
-        (await RunGitAsync(_sourceWork, "rev-parse", "HEAD")).Trim().Should().Be(before);
+        Read(_workstationWork, "readme.txt").Should().Be("mine, not sent yet\n");
+        (await RunGitAsync(_workstationWork, "rev-parse", "HEAD")).Trim().Should().Be(before);
         pull.Branch!.Behind.Should().Be(1, "the fetch still brought the new commit in");
     }
 
     /// <summary>
-    /// Verifies that a Fetch alone does not move the sync base, so Dest's new commit is not offered back as a revert.
+    /// Verifies that a Fetch alone does not move the sync base, so Origin's new commit is not offered back as a revert.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Fetch_Alone_Does_Not_Offer_Dest_Commits_Back()
+    public async Task Fetch_Alone_Does_Not_Offer_Origin_Commits_Back()
     {
         if (_host is null)
         {
@@ -368,8 +367,8 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
 
         var channel = CreateChannel();
         (await channel.PullAsync()).Succeeded.Should().BeTrue();
-        Write(_destRepo, "readme.txt", "second\n");
-        await CommitAsync("dest moves on");
+        Write(_originRepo, "readme.txt", "second\n");
+        await CommitAsync("origin moves on");
 
         (await channel.FetchAsync()).Succeeded.Should().BeTrue();
 
@@ -377,114 +376,120 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Brings the sync base of the simulated Source up to date and lists the files it would send.
+    /// Brings the sync base of the simulated Workstation up to date and lists the files it would send.
     /// </summary>
     /// <returns>The pending paths.</returns>
     private async Task<IReadOnlyList<string>> PendingAsync()
     {
-        using (await _sourceLock.AcquireAsync())
+        using (await _workstationLock.AcquireAsync())
         {
-            var status = await SourceSyncBase().EnsureAsync();
+            var status = await WorkstationSyncBase().EnsureAsync();
             status.IsReady.Should().BeTrue(status.Problem);
-            var pending = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(SourcePaths().SyncBase, _sourceWork);
+            var pending = await new DefaultFileManifestBuilder(new SnapshotFilter()).BuildAsync(WorkstationPaths().SyncBase, _workstationWork);
             return pending.Select(change => change.Path).ToArray();
         }
     }
 
     /// <summary>
-    /// Gets the node of the simulated Source.
+    /// Gets the node of the simulated Workstation.
     /// </summary>
     /// <returns>The node.</returns>
-    private NodeConfig SourceNode() => new(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork);
+    private NodeConfig WorkstationNode() => new(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, _workstationWork);
 
     /// <summary>
-    /// Gets the sync paths of the simulated Source.
+    /// Gets the sync paths of the simulated Workstation.
     /// </summary>
     /// <returns>The paths.</returns>
-    private SyncPaths SourcePaths() => new(SourceAppData(), SourceNode());
+    private SyncPaths WorkstationPaths() => new(
+        TestTexts.English,
+        WorkstationAppData(),
+        WorkstationNode(),
+        new FixedRepository(new RepositoryEntry(RepositoryEntry.DefaultId, ServiceTestHost.REPOSITORY_NAME, _workstationWork)));
 
     /// <summary>
-    /// Gets the sync base manager of the simulated Source, shared by every channel of a test.
+    /// Gets the sync base manager of the simulated Workstation, shared by every channel of a test.
     /// </summary>
     /// <returns>The manager.</returns>
-    private SyncBaseManager SourceSyncBase()
+    private SyncBaseManager WorkstationSyncBase()
     {
-        var git = new GitRepositoryService(_git);
-        return _sourceSyncBase ??= new SyncBaseManager(
-            SourceNode(),
-            SourcePaths(),
-            new GitSyncBaseLocator(SourceNode(), git),
+        var git = new GitRepositoryService(TestTexts.English, _git);
+        return _workstationSyncBase ??= new SyncBaseManager(
+            TestTexts.English,
+            WorkstationNode(),
+            WorkstationPaths(),
+            new GitSyncBaseLocator(TestTexts.English, WorkstationNode(), git),
             git,
-            new SyncBaseMetadataStore(SourceAppData()),
+            new SyncBaseMetadataStore(WorkstationAppData()),
             new DefaultFileManifestBuilder(new SnapshotFilter()),
             new RCynQ.Git.Hashing.DefaultStateHasher(),
             Substitute.For<ISnapshotRepository>(),
-            new PathUtility(),
-            _sourceLock,
+            new PathUtility(TestTexts.English),
+            _workstationLock,
             TimeProvider.System);
     }
 
     /// <summary>
-    /// Creates the data directories of the simulated Source.
+    /// Creates the data directories of the simulated Workstation.
     /// </summary>
     /// <returns>The factory.</returns>
-    private AppDataFactory SourceAppData() => new(AppDataPaths.FromRoot(Path.Combine(_sourceRoot, "data")));
+    private AppDataFactory WorkstationAppData() => new(AppDataPaths.FromRoot(Path.Combine(_workstationRoot, "data")));
 
     /// <summary>
-    /// Creates the Git channel of the simulated Source.
+    /// Creates the Git channel of the simulated Workstation.
     /// </summary>
     /// <param name="token">The link token to present.</param>
     /// <returns>The channel.</returns>
-    private GitChannelService CreateChannel(string token = ServiceTestHost.LinkToken)
+    private GitChannelService CreateChannel(string token = ServiceTestHost.LINK_TOKEN)
     {
-        var node = SourceNode();
-        var fingerprint = FingerprintOfDest();
+        var node = WorkstationNode();
+        var fingerprint = FingerprintOfOrigin();
         var chain = new[]
         {
-            new ChainLinkConfig(Guid.NewGuid(), "relay", TransportKind.Direct, new PeerDescriptor(new NodeId("mediator-1"), "Relay", NodeRole.Mediator, "relay.example", 22, "jump"), 0, 22, 10),
+            new ChainLinkConfig(Guid.NewGuid(), "relay", TransportKind.Direct, new PeerDescriptor(new NodeId("relay-1"), "Relay", NodeRole.Relay, "relay.example", 22, "jump"), 0, 22, 10),
             new ChainLinkConfig(
-                Guid.NewGuid(), "dest", TransportKind.Direct,
-                new PeerDescriptor(new NodeId("dest-1"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq", endpointMode: EndpointMode.Direct, tlsFingerprint: fingerprint, endpointPort: _tlsPort),
+                Guid.NewGuid(), "origin", TransportKind.Direct,
+                new PeerDescriptor(new NodeId("origin-1"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq", endpointMode: EndpointMode.Direct, tlsFingerprint: fingerprint, endpointPort: _tlsPort),
                 0, _tlsPort, 1000)
         };
         var links = Substitute.For<IChainLinkRepository>();
         links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(chain);
         var bundles = new GitBundleClient(
+            TestTexts.English,
             new PeerLinkFactory(new SocketsHttpHandler { UseProxy = false }, _forwards),
             node,
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = token }, new InMemorySecretStore()));
         return new GitChannelService(
+            TestTexts.English,
             node,
             links,
-            new GitRepositoryService(_git),
-            new SshCommandBuilder(new SshClientOptions()),
+            new GitRepositoryService(TestTexts.English, _git),
             bundles,
-            SourceAppData(),
-            SourceSyncBase(),
-            SourcePaths(),
-            new PathUtility(),
-            _sourceLock);
+            WorkstationAppData(),
+            WorkstationSyncBase(),
+            WorkstationPaths(),
+            new PathUtility(TestTexts.English),
+            _workstationLock);
     }
 
     /// <summary>
-    /// Reads the certificate fingerprint that Dest published in its export file.
+    /// Reads the certificate fingerprint that Origin published in its export file.
     /// </summary>
     /// <returns>The fingerprint.</returns>
-    private string FingerprintOfDest()
+    private string FingerprintOfOrigin()
     {
-        using var certificate = NodeCertificateStore.GetOrCreate(_host!.Services.GetRequiredService<IAppDataFactory>().Create(), "dest-1");
+        using var certificate = NodeCertificateStore.GetOrCreate(_host!.Services.GetRequiredService<IAppDataFactory>().Create(), "origin-1");
         return NodeCertificateStore.Fingerprint(certificate);
     }
 
     /// <summary>
-    /// Commits everything in the Dest repository.
+    /// Commits everything in the Origin repository.
     /// </summary>
     /// <param name="message">The commit message.</param>
     /// <returns>A task representing the commit.</returns>
     private async Task CommitAsync(string message)
     {
-        await RunGitAsync(_destRepo, "add", "-A");
-        await RunGitAsync(_destRepo, "-c", "user.name=tester", "-c", "user.email=tester@example.com", "commit", "--quiet", "-m", message);
+        await RunGitAsync(_originRepo, "add", "-A");
+        await RunGitAsync(_originRepo, "-c", "user.name=tester", "-c", "user.email=tester@example.com", "commit", "--quiet", "-m", message);
     }
 
     /// <summary>
@@ -516,7 +521,7 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     {
         try
         {
-            return (await new SystemProcessRunner().RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
+            return (await new SystemProcessRunner(TestTexts.English).RunAsync(new ProcessSpec("git", new[] { "--version" }, null, null, TimeSpan.FromSeconds(30)))).ExitCode == 0;
         }
         catch (RCynQ.Core.Exceptions.SyncBridgeException)
         {

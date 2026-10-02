@@ -3,6 +3,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Ids;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration;
 
 namespace RCynQ.Cli.Services;
@@ -12,6 +13,18 @@ namespace RCynQ.Cli.Services;
 /// </summary>
 public sealed class ConfigCommandService
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ConfigCommandService"/> class.
+    /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
+    public ConfigCommandService(ILocalizer localizer)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
     /// <summary>
     /// Validates a configuration file.
     /// </summary>
@@ -22,11 +35,11 @@ public sealed class ConfigCommandService
     {
         try
         {
-            return SyncBridgeOptionsValidator.Validate(await ConfigurationFileEditor.LoadAsync(path, cancellationToken));
+            return SyncBridgeOptionsValidator.Validate(await ConfigurationFileEditor.LoadAsync(path, cancellationToken), _localizer);
         }
         catch (SyncBridgeException ex)
         {
-            return new[] { ex.Message };
+            return new[] { _localizer.Describe(ex) };
         }
     }
 
@@ -55,11 +68,12 @@ public sealed class ConfigCommandService
         }
 
         var effectiveId = nodeId ?? (string.IsNullOrWhiteSpace(existing?.NodeId) ? DeriveNodeId(role) : existing.NodeId);
-        var repo = role == NodeRole.Mediator ? null : repoPath ?? existing?.RepoPath;
-        var workdir = role == NodeRole.Mediator ? null : workdirPath ?? existing?.WorkdirPath;
+        var existingPath = RepositoryConfigurationEditor.ActivePath(existing);
+        var repo = role == NodeRole.Origin ? repoPath ?? existingPath : null;
+        var workdir = role == NodeRole.Workstation ? workdirPath ?? existingPath : null;
         _ = new NodeConfig(NodeId.Parse(effectiveId), effectiveId, role, repo, workdir);
 
-        await ConfigurationFileEditor.UpdateAsync(path, section => section[nameof(SyncBridgeOptions.NodeId)] = effectiveId, cancellationToken);
+        await ConfigurationFileEditor.UpdateAsync(path, section => ConfigurationFileEditor.SetProperty(section, nameof(SyncBridgeOptions.NodeId), effectiveId), cancellationToken);
         await ConfigurationFileEditor.SetRoleAsync(path, role, repoPath, workdirPath, cancellationToken);
 
         var text = new StringBuilder();

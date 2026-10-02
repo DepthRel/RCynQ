@@ -1,0 +1,42 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     x:Class="RCynQ.UI.Views.Dialogs.ImportDecisionDialog"
+                     x:DataType="vm:ImportDecisionDialogViewModel"
+                     Title="{loc:Loc ImportDecision.Title}"
+                     Width="520" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <TextBlock Classes="page-title" Text="{loc:Loc ImportDecision.Title}" />
+    <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />
+
+    <ListBox ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}" SelectionMode="AlwaysSelected">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ImportDecisionOption">
+          <StackPanel Spacing="2" Margin="0,4">
+            <TextBlock Text="{Binding Title}" FontWeight="Medium" />
+            <TextBlock Classes="muted" Text="{Binding Hint}" TextWrapping="Wrap" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <StackPanel IsVisible="{Binding IsCandidateVisible}">
+      <TextBlock Classes="field-label" Text="{loc:Loc ImportDecision.ReplaceWhich}" />
+      <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Candidates}" SelectedItem="{Binding SelectedCandidate}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ImportCandidateOption">
+            <TextBlock Text="{Binding Title}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="{loc:Loc Common.Confirm}" IsDefault="True" Command="{Binding ConfirmCommand}" />
+    </StackPanel>
+  </StackPanel>
+</dialogs:DialogWindow>

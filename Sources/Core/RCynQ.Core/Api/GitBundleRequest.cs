@@ -8,4 +8,8 @@ namespace RCynQ.Core.Api;
 /// repository, or without any common history, sends an empty list and gets the whole repository.
 /// </remarks>
 /// <param name="Have">The full object names (40 or 64 hexadecimal characters) of commits the peer already has.</param>
-public sealed record GitBundleRequest(IReadOnlyList<string> Have);
+/// <param name="Repository">
+/// The name of the repository asked for, one of those the answering node registered; <see langword="null"/> asks for the
+/// repository that node works with.
+/// </param>
+public sealed record GitBundleRequest(IReadOnlyList<string> Have, string? Repository = null);

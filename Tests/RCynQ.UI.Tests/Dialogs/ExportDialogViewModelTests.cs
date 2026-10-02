@@ -13,7 +13,7 @@ namespace RCynQ.UI.Tests.Dialogs;
 public sealed class ExportDialogViewModelTests
 {
     /// <summary>A host key fingerprint.</summary>
-    private const string Fingerprint = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU";
+    private const string FINGERPRINT = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU";
 
     /// <summary>The API substitute.</summary>
     private readonly IServiceApiClient _api = Substitute.For<IServiceApiClient>();
@@ -26,7 +26,7 @@ public sealed class ExportDialogViewModelTests
     public async Task Probe_Prefills_Form()
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         await dialog.ProbeCommand.ExecuteAsync(null);
 
@@ -38,7 +38,7 @@ public sealed class ExportDialogViewModelTests
         dialog.SshdOk.Should().BeTrue();
         dialog.ServicePortOk.Should().BeFalse();
         dialog.ExportedSshPublicKey.Should().StartWith("ssh-ed25519 ");
-        dialog.ExportedHostKeyFingerprint.Should().Be(Fingerprint);
+        dialog.ExportedHostKeyFingerprint.Should().Be(FINGERPRINT);
         dialog.Warnings.Should().ContainSingle().Which.Should().Contain("Порт сервиса");
         dialog.CanGenerateKey.Should().BeFalse();
 
@@ -57,7 +57,7 @@ public sealed class ExportDialogViewModelTests
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: null));
         _api.GenerateSshKeyAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
-        var dialog = new ExportDialogViewModel(_api) { User = "rcynq" };
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api) { User = "rcynq" };
 
         await dialog.ProbeCommand.ExecuteAsync(null);
         dialog.CanGenerateKey.Should().BeTrue();
@@ -78,7 +78,7 @@ public sealed class ExportDialogViewModelTests
     public async Task Probe_Failure_Is_Shown()
     {
         _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns<NodeEnvironmentReport>(_ => throw new HttpRequestException("refused"));
-        var dialog = new ExportDialogViewModel(_api);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         await dialog.ProbeCommand.ExecuteAsync(null);
         dialog.ConfirmCommand.Execute(null);
@@ -95,8 +95,8 @@ public sealed class ExportDialogViewModelTests
     [Fact]
     public void Node_Without_Ssh_Server_Shows_Tls_Details()
     {
-        const string Tls = "SHA256:59CE0A214994CBC386DF73DA0F07AF6B19138641408A65ED2330C7FEA1BBFDF4";
-        var dialog = new ExportDialogViewModel(_api);
+        const string TLS = "SHA256:59CE0A214994CBC386DF73DA0F07AF6B19138641408A65ED2330C7FEA1BBFDF4";
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         dialog.Apply(Report(sshKey: null) with
         {
@@ -104,12 +104,12 @@ public sealed class ExportDialogViewModelTests
             HostKeyFingerprints = Array.Empty<string>(),
             EndpointMode = EndpointMode.Direct,
             EndpointPort = 18444,
-            TlsFingerprint = Tls
+            TlsFingerprint = TLS
         });
 
         dialog.IsDirectEndpoint.Should().BeTrue();
         dialog.IsSshEndpoint.Should().BeFalse("the sshd host key section is hidden");
-        dialog.TlsFingerprint.Should().Be(Tls);
+        dialog.TlsFingerprint.Should().Be(TLS);
         dialog.SshdOk.Should().BeTrue("the TLS port answers on 10.8.0.3");
         dialog.SshdStatus.Should().Contain("18444").And.Contain("без SSH-сервера");
         dialog.Addresses[0].StatusText.Should().Be("порт RCynQ отвечает");
@@ -137,7 +137,7 @@ public sealed class ExportDialogViewModelTests
             sshKey,
             sshKey is null ? null : "/home/dev/.ssh/rcynq_ed25519.pub",
             sshKey is null ? null : "SHA256:key",
-            new[] { Fingerprint },
+            new[] { FINGERPRINT },
             new[] { EnvironmentWarning.ServicePortNotListening },
             DateTimeOffset.UtcNow);
 }

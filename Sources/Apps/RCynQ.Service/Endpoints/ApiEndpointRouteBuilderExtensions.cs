@@ -23,6 +23,9 @@ public static class ApiEndpointRouteBuilderExtensions
             .MapGitEndpoints()
             .MapDiagnosticsEndpoints()
             .MapConfigEndpoints()
-            .MapLogEndpoints();
+            .MapLogEndpoints()
+            .MapDataEndpoints()
+            .MapPeerEndpoints()
+            .MapRepositoryEndpoints();
     }
 }

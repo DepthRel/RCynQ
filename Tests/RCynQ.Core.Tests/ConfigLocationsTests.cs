@@ -17,8 +17,8 @@ public sealed class ConfigLocationsTests : IDisposable
     [Fact]
     public void Resolves_In_Order()
     {
-        var local = Path.Combine(_root, SyncBridgeOptions.DefaultFileName);
-        var user = Path.Combine(_root, "user", SyncBridgeOptions.DefaultFileName);
+        var local = Path.Combine(_root, SyncBridgeOptions.DEFAULT_FILE_NAME);
+        var user = Path.Combine(_root, "user", SyncBridgeOptions.DEFAULT_FILE_NAME);
         var fromEnvironment = Path.Combine(_root, "env.json");
         Func<string, string?> noEnvironment = _ => null;
         Func<string?> notPortable = () => null;
@@ -27,7 +27,7 @@ public sealed class ConfigLocationsTests : IDisposable
 
         File.WriteAllText(local, "{}");
         ConfigLocations.Resolve(null, noEnvironment, _root, user, notPortable).Should().Be(local);
-        ConfigLocations.Resolve(null, name => name == ConfigLocations.EnvironmentVariable ? fromEnvironment : null, _root, user, notPortable).Should().Be(fromEnvironment);
+        ConfigLocations.Resolve(null, name => name == ConfigLocations.ENVIRONMENT_VARIABLE ? fromEnvironment : null, _root, user, notPortable).Should().Be(fromEnvironment);
         ConfigLocations.Resolve("explicit.json", _ => fromEnvironment, _root, user, notPortable).Should().Be(Path.GetFullPath("explicit.json"));
     }
 
@@ -39,15 +39,15 @@ public sealed class ConfigLocationsTests : IDisposable
     {
         var install = Directory.CreateDirectory(Path.Combine(_root, "RCynQ")).FullName;
         var ui = Directory.CreateDirectory(Path.Combine(install, "ui")).FullName;
-        File.WriteAllText(Path.Combine(install, ConfigLocations.PortableMarkerFileName), "portable");
-        File.WriteAllText(Path.Combine(ui, SyncBridgeOptions.DefaultFileName), "{}");
+        File.WriteAllText(Path.Combine(install, ConfigLocations.PORTABLE_MARKER_FILE_NAME), "portable");
+        File.WriteAllText(Path.Combine(ui, SyncBridgeOptions.DEFAULT_FILE_NAME), "{}");
 
         ConfigLocations.FindPortableRoot(ui + Path.DirectorySeparatorChar).Should().Be(install);
         ConfigLocations.FindPortableRoot(install).Should().Be(install);
         ConfigLocations.FindPortableRoot(_root).Should().BeNull();
 
         var config = ConfigLocations.Resolve(null, _ => null, ui, Path.Combine(_root, "user.json"), () => install);
-        config.Should().Be(Path.Combine(install, "config", SyncBridgeOptions.DefaultFileName), "the portable configuration wins over ./syncbridge.json and the user profile");
+        config.Should().Be(Path.Combine(install, "config", SyncBridgeOptions.DEFAULT_FILE_NAME), "the portable configuration wins over ./syncbridge.json and the user profile");
 
         var options = new SyncBridgeOptions { NodeId = "node-1" };
         ConfigLocations.ApplyStorageDefaults(options, config, install);
@@ -61,7 +61,7 @@ public sealed class ConfigLocationsTests : IDisposable
     [Fact]
     public void Data_Root_Is_Resolved_Against_Config()
     {
-        var config = Path.Combine(_root, "node", SyncBridgeOptions.DefaultFileName);
+        var config = Path.Combine(_root, "node", SyncBridgeOptions.DEFAULT_FILE_NAME);
 
         ConfigLocations.ResolveDataRoot(new SyncBridgeOptions { DataRoot = "data" }, config, null).Should().Be(Path.Combine(_root, "node", "data"));
         ConfigLocations.ResolveDataRoot(new SyncBridgeOptions { DataRoot = _root }, config, "/portable").Should().Be(_root);
@@ -78,7 +78,7 @@ public sealed class ConfigLocationsTests : IDisposable
     [Fact]
     public void User_Config_Is_In_RCynQ_Folder()
     {
-        ConfigLocations.UserConfigPath.Should().EndWith(Path.Combine("RCynQ", SyncBridgeOptions.DefaultFileName));
+        ConfigLocations.UserConfigPath.Should().EndWith(Path.Combine("RCynQ", SyncBridgeOptions.DEFAULT_FILE_NAME));
     }
 
     /// <inheritdoc />

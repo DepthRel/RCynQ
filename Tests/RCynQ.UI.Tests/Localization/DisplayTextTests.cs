@@ -1,10 +1,8 @@
 using FluentAssertions;
 using RCynQ.Core.Enums;
 using RCynQ.Localization;
-using RCynQ.UI.Services.Hosting;
+using RCynQ.UI.Enums;
 using RCynQ.UI.ViewModels.Formatting;
-using RCynQ.UI.ViewModels.Items;
-using RCynQ.UI.ViewModels.Navigation;
 
 namespace RCynQ.UI.Tests.Localization;
 
@@ -101,10 +99,9 @@ public sealed class DisplayTextTests
     [Fact]
     public void Display_Text_Follows_The_Language()
     {
-        using var english = Texts.Scope(new Localizer(LanguageCatalog.LoadEmbedded(), "en"));
-
-        DisplayText.Patch(PatchStatus.Applied).Should().Be("applied");
-        DisplayText.Time(null).Should().Be("never");
-        DisplayText.Time(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)).Should().MatchRegex(@"^2026-01-0[123] \d\d:\d\d:05$");
+        DisplayText.Patch(TestTexts.English, PatchStatus.Applied).Should().Be("applied");
+        DisplayText.Time(TestTexts.English, null).Should().Be("never");
+        DisplayText.Time(TestTexts.English, new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)).Should().MatchRegex(@"^2026-01-0[123] \d\d:\d\d:05$");
+        DisplayText.Patch(TestTexts.Russian, PatchStatus.Applied).Should().NotBe("applied", "the same value is worded for each reader in the reader's language");
     }
 }

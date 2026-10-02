@@ -13,12 +13,12 @@ public sealed class LinkTokenProvider
     /// <summary>
     /// The secret store entry holding the token when it is not set in configuration.
     /// </summary>
-    public const string SecretName = "link-token";
+    public const string SECRET_NAME = "link-token";
 
     /// <summary>
     /// The minimum recommended token length.
     /// </summary>
-    public const int MinimumLength = 16;
+    public const int MINIMUM_LENGTH = 16;
 
     /// <summary>
     /// The node options.
@@ -49,7 +49,7 @@ public sealed class LinkTokenProvider
     public async Task<string?> GetTokenAsync(CancellationToken cancellationToken = default)
         => !string.IsNullOrWhiteSpace(_options.LinkToken)
             ? _options.LinkToken.Trim()
-            : await _secrets.GetAsync(SecretName, cancellationToken);
+            : await _secrets.GetAsync(SECRET_NAME, cancellationToken);
 
     /// <summary>
     /// Compares tokens in constant time.

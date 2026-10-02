@@ -17,7 +17,7 @@ public sealed class GitRepositoryServicePullSupportTests : IDisposable
     private readonly TempDirectory _repo = new();
 
     /// <summary>The Git runner.</summary>
-    private readonly GitCommandRunner _git = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _git = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>The service under test.</summary>
     private readonly GitRepositoryService _service;
@@ -27,7 +27,7 @@ public sealed class GitRepositoryServicePullSupportTests : IDisposable
     /// </summary>
     public GitRepositoryServicePullSupportTests()
     {
-        _service = new GitRepositoryService(_git);
+        _service = new GitRepositoryService(TestTexts.English, _git);
     }
 
     /// <summary>

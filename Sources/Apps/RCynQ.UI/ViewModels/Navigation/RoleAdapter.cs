@@ -1,10 +1,11 @@
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
+using RCynQ.UI.Enums;
 
 namespace RCynQ.UI.ViewModels.Navigation;
 
 /// <summary>
-/// Adapts the tabs to the node role: tabs that do not apply (synchronization and branches on a Mediator) are disabled.
+/// Adapts the tabs to the node role: tabs that do not apply (synchronization and branches on a Relay) are disabled.
 /// </summary>
 public sealed class RoleAdapter
 {

@@ -44,6 +44,12 @@ public sealed class SignalRNodeEventStream : INodeEventStream
     public event EventHandler<DiagnosticsEvent>? DiagnosticsCompleted;
 
     /// <inheritdoc />
+    public event EventHandler<RepositoryEvent>? RepositoryChanged;
+
+    /// <inheritdoc />
+    public event EventHandler<LinkRoutesChangedEvent>? LinkRoutesChanged;
+
+    /// <inheritdoc />
     public event EventHandler<bool>? ConnectionChanged;
 
     /// <inheritdoc />
@@ -78,13 +84,13 @@ public sealed class SignalRNodeEventStream : INodeEventStream
     /// <returns>The connection.</returns>
     private HubConnection Build(string token)
     {
-        var hub = new Uri(_settings.ServiceUri, ApiRoutes.Hub.TrimStart('/'));
+        var hub = new Uri(_settings.ServiceUri, ApiRoutes.HUB.TrimStart('/'));
         var connection = new HubConnectionBuilder()
             .WithUrl(hub, options =>
             {
                 if (token.Length > 0)
                 {
-                    options.Headers[ApiHeaders.ApiToken] = token;
+                    options.Headers[ApiHeaders.API_TOKEN] = token;
                 }
 
                 options.HttpMessageHandlerFactory = _ => new SocketsHttpHandler { UseProxy = false };
@@ -92,9 +98,11 @@ public sealed class SignalRNodeEventStream : INodeEventStream
             .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) })
             .Build();
 
-        connection.On<LinkStateChangedEvent>(NodeEventNames.LinkStateChanged, evt => LinkStateChanged?.Invoke(this, evt));
-        connection.On<PatchEvent>(NodeEventNames.PatchEvent, evt => PatchChanged?.Invoke(this, evt));
-        connection.On<DiagnosticsEvent>(NodeEventNames.DiagnosticsEvent, evt => DiagnosticsCompleted?.Invoke(this, evt));
+        connection.On<LinkStateChangedEvent>(NodeEventNames.LINK_STATE_CHANGED, evt => LinkStateChanged?.Invoke(this, evt));
+        connection.On<PatchEvent>(NodeEventNames.PATCH_EVENT, evt => PatchChanged?.Invoke(this, evt));
+        connection.On<DiagnosticsEvent>(NodeEventNames.DIAGNOSTICS_EVENT, evt => DiagnosticsCompleted?.Invoke(this, evt));
+        connection.On<RepositoryEvent>(NodeEventNames.REPOSITORY_EVENT, evt => RepositoryChanged?.Invoke(this, evt));
+        connection.On<LinkRoutesChangedEvent>(NodeEventNames.LINK_ROUTES_CHANGED, evt => LinkRoutesChanged?.Invoke(this, evt));
         connection.Reconnecting += _ => Notify(false);
         connection.Reconnected += _ => Notify(true);
         connection.Closed += _ => Notify(false);

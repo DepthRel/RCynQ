@@ -12,7 +12,7 @@ public static class InstallationStamp
     /// <summary>
     /// The stamp file inside the data directory.
     /// </summary>
-    public const string FileName = "installation.json";
+    public const string FILE_NAME = "installation.json";
 
     /// <summary>
     /// Compares the stamp with the current computer and creates the stamp when the data directory has none.
@@ -24,7 +24,7 @@ public static class InstallationStamp
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(machineName);
-        var path = Path.Combine(dataRoot, FileName);
+        var path = Path.Combine(dataRoot, FILE_NAME);
         try
         {
             if (File.Exists(path))
@@ -53,7 +53,8 @@ public static class InstallationStamp
     /// </summary>
     /// <param name="dataRoot">The data directory.</param>
     /// <param name="machineName">The current computer name.</param>
-    public static void Write(string dataRoot, string machineName)
+    /// <param name="timeProvider">The source of the recorded time, or <see langword="null"/> for the system clock.</param>
+    public static void Write(string dataRoot, string machineName, TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(machineName);
@@ -61,8 +62,8 @@ public static class InstallationStamp
         var stamp = new JsonObject
         {
             ["machineName"] = machineName,
-            ["recordedAtUtc"] = DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture)
+            ["recordedAtUtc"] = (timeProvider ?? TimeProvider.System).GetUtcNow().ToString("O", System.Globalization.CultureInfo.InvariantCulture)
         };
-        File.WriteAllText(Path.Combine(dataRoot, FileName), stamp.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(dataRoot, FILE_NAME), stamp.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 }

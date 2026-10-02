@@ -23,7 +23,7 @@ public class ServiceHostBuilderOptionsTests
     {
         var options = ServiceHostBuilder.BindOptions(Configuration(new Dictionary<string, string?>
         {
-            ["SyncBridge:NodeId"] = "source-1"
+            ["SyncBridge:NodeId"] = "workstation-1"
         }));
 
         options.ExcludedDirectories.Should().BeEquivalentTo(new SyncBridgeOptions().ExcludedDirectories);
@@ -38,7 +38,7 @@ public class ServiceHostBuilderOptionsTests
     {
         var options = ServiceHostBuilder.BindOptions(Configuration(new Dictionary<string, string?>
         {
-            ["SyncBridge:NodeId"] = "source-1",
+            ["SyncBridge:NodeId"] = "workstation-1",
             ["SyncBridge:ExcludedDirectories:0"] = ".kilo"
         }));
 
@@ -54,7 +54,7 @@ public class ServiceHostBuilderOptionsTests
     {
         var options = ServiceHostBuilder.BindOptions(Configuration(new Dictionary<string, string?>
         {
-            ["SyncBridge:NodeId"] = "source-1",
+            ["SyncBridge:NodeId"] = "workstation-1",
             ["SyncBridge:ExcludedDirectories:0"] = "bin",
             ["SyncBridge:ExcludedDirectories:1"] = "OBJ",
             ["SyncBridge:ExcludedDirectories:2"] = ".kilo",
@@ -74,7 +74,7 @@ public class ServiceHostBuilderOptionsTests
     {
         var options = ServiceHostBuilder.BindOptions(Configuration(new Dictionary<string, string?>
         {
-            ["SyncBridge:NodeId"] = "source-1",
+            ["SyncBridge:NodeId"] = "workstation-1",
             ["SyncBridge:ExcludedDirectories:0"] = "   ",
             ["SyncBridge:ExcludedDirectories:1"] = "  .kilo  "
         }));
@@ -92,7 +92,7 @@ public class ServiceHostBuilderOptionsTests
     public async Task Snapshot_Filter_Of_The_Service_Excludes_Configured_And_Default_Directories()
     {
         await using var host = await ServiceTestHost.StartAsync(
-            NodeRole.Source,
+            NodeRole.Workstation,
             extraSettings: new Dictionary<string, string?> { ["SyncBridge:ExcludedDirectories:0"] = ".kilo" });
 
         var filter = host.Services.GetRequiredService<SnapshotFilter>();

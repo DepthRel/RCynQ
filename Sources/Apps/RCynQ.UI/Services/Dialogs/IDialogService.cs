@@ -30,6 +30,13 @@ public interface IDialogService
     Task<bool> ShowAddNodeDialogAsync(AddNodeDialogViewModel dialog);
 
     /// <summary>
+    /// Shows the dialog that asks what to do with an imported node of a role that is known already.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user confirmed a decision.</returns>
+    Task<bool> ShowImportDecisionDialogAsync(ImportDecisionDialogViewModel dialog);
+
+    /// <summary>
     /// Shows read-only text such as a diff.
     /// </summary>
     /// <param name="title">The window title.</param>
@@ -66,6 +73,21 @@ public interface IDialogService
     /// <param name="suggestedName">The suggested file name.</param>
     /// <returns>The file path, or <see langword="null"/>.</returns>
     Task<string?> PickSaveFileAsync(string title, string suggestedName);
+
+    /// <summary>
+    /// Shows the window about the application.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns>A task that completes when the window is closed.</returns>
+    Task ShowAboutAsync(AboutViewModel dialog);
+
+    /// <summary>
+    /// Hands an address to the system: an <c>https</c> page to the browser, a <c>mailto</c> letter to the mail program.
+    /// Other schemes are refused.
+    /// </summary>
+    /// <param name="uri">The address.</param>
+    /// <returns><see langword="true"/> when a program of the system took the address.</returns>
+    Task<bool> OpenUriAsync(Uri uri);
 
     /// <summary>
     /// Copies text to the clipboard of the desktop.

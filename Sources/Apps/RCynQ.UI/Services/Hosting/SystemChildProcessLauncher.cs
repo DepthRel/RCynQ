@@ -45,7 +45,7 @@ public sealed class SystemChildProcessLauncher : IChildProcessLauncher
     private sealed class ChildProcess : IChildProcess
     {
         /// <summary>The number of standard error lines kept.</summary>
-        private const int MaxErrorLines = 40;
+        private const int MAX_ERROR_LINES = 40;
 
         /// <summary>The process.</summary>
         private readonly Process _process;
@@ -71,7 +71,7 @@ public sealed class SystemChildProcessLauncher : IChildProcessLauncher
                 lock (_errors)
                 {
                     _errors.Enqueue(e.Data);
-                    while (_errors.Count > MaxErrorLines)
+                    while (_errors.Count > MAX_ERROR_LINES)
                     {
                         _errors.Dequeue();
                     }

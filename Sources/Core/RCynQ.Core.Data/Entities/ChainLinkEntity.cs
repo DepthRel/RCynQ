@@ -34,4 +34,12 @@ public sealed class ChainLinkEntity
 
     /// <summary>Gets or sets the chain position.</summary>
     public int Priority { get; set; }
+
+    /// <summary>
+    /// Gets or sets the JSON array of the addresses the peer is reachable at; an empty array when it has only its own.
+    /// </summary>
+    public string RoutesJson { get; set; } = "[]";
+
+    /// <summary>Gets or sets the route chosen by hand, or <see langword="null"/> when the node chooses.</summary>
+    public Guid? PinnedRouteId { get; set; }
 }

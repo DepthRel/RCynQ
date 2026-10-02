@@ -21,12 +21,21 @@ public sealed class DefaultFileManifestBuilder : IFileManifestBuilder
     private readonly SnapshotFilter _filter;
 
     /// <summary>
+    /// The cache of file digests, or <see langword="null"/>.
+    /// </summary>
+    private readonly FileHashCache? _hashes;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DefaultFileManifestBuilder"/> class.
     /// </summary>
     /// <param name="filter">The snapshot filter.</param>
-    public DefaultFileManifestBuilder(SnapshotFilter filter)
+    /// <param name="hashes">
+    /// The cache of file digests, or <see langword="null"/> to read every file on every scan.
+    /// </param>
+    public DefaultFileManifestBuilder(SnapshotFilter filter, FileHashCache? hashes = null)
     {
         _filter = filter;
+        _hashes = hashes;
     }
 
     /// <inheritdoc />
@@ -88,7 +97,11 @@ public sealed class DefaultFileManifestBuilder : IFileManifestBuilder
                 }
 
                 var fileInfo = (FileInfo)info;
-                entries.Add(new FileEntry(relative, await DefaultStateHasher.Sha256FileAsync(fileInfo.FullName, cancellationToken), fileInfo.Length, false));
+                var length = fileInfo.Length;
+                var sha256 = _hashes is null
+                    ? await DefaultStateHasher.Sha256FileAsync(fileInfo.FullName, cancellationToken)
+                    : await _hashes.GetSha256Async(fileInfo, cancellationToken);
+                entries.Add(new FileEntry(relative, sha256, length, false));
             }
         }
 

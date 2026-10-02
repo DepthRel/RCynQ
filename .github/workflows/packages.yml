@@ -1,0 +1,153 @@
+# Builds every package of an RCynQ release: Windows (installer and .zip), Linux (.deb and .tar.gz) and macOS (Apple
+# silicon and Intel), with the checksums.
+#
+# Two ways to start it:
+#   - by hand: Actions -> Packages -> Run workflow. The packages appear as "Artifacts" of the run; nothing is released.
+#   - by a version tag (git tag 0.1.0 && git push origin 0.1.0). The tag must equal <Version> of Directory.Build.props.
+#     The packages and SHA256SUMS-<version>.txt are attached to the release of that tag; a release that does not exist
+#     yet is created as a draft, so nothing is published by itself: write the notes, check the files, press Publish,
+#     then fill in Sources/Apps/RCynQ.Pages/updates.json. Files with the same names are replaced, others stay.
+#
+# Code signing goes into the Windows job, between "Build" and the upload of the artifact. The macOS packages are built
+# on macOS, so their programs get an ad-hoc signature there (not a Developer ID one).
+# Scripts/build-release.ps1 builds the same packages on a developer's machine.
+name: Packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the version and match it with the tag
+        id: read
+        run: |
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "::error::No <Version> in Directory.Build.props."
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "$version" ]; then
+            echo "::error::The tag ${GITHUB_REF_NAME} differs from the version $version of Directory.Build.props."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Inno Setup
+        shell: powershell
+        run: |
+          if (-not (Get-ChildItem "${env:ProgramFiles(x86)}", "$env:ProgramFiles" -Filter 'Inno Setup*' -Directory -ErrorAction SilentlyContinue)) {
+              choco install innosetup --no-progress -y
+          }
+      # publish-win.ps1 (the .zip) and then the installer from the same folder.
+      - name: Build
+        shell: powershell
+        run: ./Scripts/App/build-installer.ps1
+      # Code signing: sign RCynQ-*-setup.exe and the executables inside RCynQ-*-win-x64.zip here, before the upload, so
+      # the release gets the signed files (or pass -Sign above with the certificate in the secrets of the repository).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            artifacts/publish/RCynQ-*-win-x64.zip
+            artifacts/publish/RCynQ-*-setup.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      # The .tar.gz and the .deb (dpkg-deb is part of Ubuntu).
+      - name: Build
+        run: bash Scripts/App/publish-linux.sh linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            artifacts/publish/RCynQ-*-linux-x64.tar.gz
+            artifacts/publish/RCynQ-*-linux-x64.deb
+          if-no-files-found: error
+
+  macos:
+    name: macOS, ${{ matrix.runtime }}
+    needs: version
+    # macos-latest is Apple silicon; it also builds the Intel package, .NET publishes for another processor without trouble.
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build
+        run: bash Scripts/App/publish-macos.sh "${{ matrix.runtime }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.runtime }}
+          path: artifacts/publish/RCynQ-*-${{ matrix.runtime }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      # The usual sha256sum format, so "sha256sum -c" checks a download.
+      - name: Checksums
+        working-directory: packages
+        run: |
+          sha256sum -- * > "SHA256SUMS-$VERSION.txt"
+          cat "SHA256SUMS-$VERSION.txt"
+      - name: Attach to the release
+        run: |
+          ls -l packages
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" packages/* --clobber
+          else
+            gh release create "$TAG" packages/* --draft --title "RCynQ $TAG" \
+              --notes "Every package of RCynQ $TAG. Write the notes, check the files, then publish and fill in updates.json of the project page."
+          fi

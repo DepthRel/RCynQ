@@ -45,7 +45,7 @@ public sealed class ChainLinkOptions
     /// <summary>
     /// Gets or sets the peer role.
     /// </summary>
-    public NodeRole PeerRole { get; set; } = NodeRole.Dest;
+    public NodeRole PeerRole { get; set; } = NodeRole.Origin;
 
     /// <summary>
     /// Gets or sets the peer host.
@@ -73,17 +73,12 @@ public sealed class ChainLinkOptions
     public string? SigningPublicKey { get; set; }
 
     /// <summary>
-    /// Gets or sets the repository path on a Dest peer.
-    /// </summary>
-    public string? GitRepoPath { get; set; }
-
-    /// <summary>
     /// Gets or sets the local forward port (0 = ephemeral).
     /// </summary>
     public int LocalPort { get; set; }
 
     /// <summary>
-    /// Gets or sets the remote port (peer patch endpoint for the endpoint link, next hop SSH port for mediators).
+    /// Gets or sets the remote port (peer patch endpoint for the endpoint link, next hop SSH port for relays).
     /// </summary>
     public int RemotePort { get; set; } = 18443;
 
@@ -91,4 +86,16 @@ public sealed class ChainLinkOptions
     /// Gets or sets the chain position.
     /// </summary>
     public int Priority { get; set; }
+
+    /// <summary>
+    /// Gets or sets the other addresses the peer is reachable at, besides <see cref="Host"/>. Empty by default: the peer
+    /// then has the one address of the link.
+    /// </summary>
+    public List<LinkRouteOptions> Routes { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the preference of the route through <see cref="Host"/> among the <see cref="Routes"/>; lower values
+    /// are preferred. Without other routes the value means nothing.
+    /// </summary>
+    public int RoutePriority { get; set; }
 }

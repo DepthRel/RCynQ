@@ -18,7 +18,7 @@ public sealed class InstallationStampTests : IDisposable
     public void Records_Computer_And_Detects_Copy()
     {
         InstallationStamp.Check(_root, "PC-1").Should().Be(new InstallationCheck(false, "PC-1"));
-        File.Exists(Path.Combine(_root, InstallationStamp.FileName)).Should().BeTrue();
+        File.Exists(Path.Combine(_root, InstallationStamp.FILE_NAME)).Should().BeTrue();
         InstallationStamp.Check(_root, "pc-1").CopiedFromAnotherMachine.Should().BeFalse("computer names are case-insensitive");
 
         InstallationStamp.Check(_root, "PC-2").Should().Be(new InstallationCheck(true, "PC-1"));
@@ -37,7 +37,7 @@ public sealed class InstallationStampTests : IDisposable
         InstallationStamp.Check(missing, "PC-1").CopiedFromAnotherMachine.Should().BeFalse();
         Directory.Exists(missing).Should().BeFalse();
 
-        File.WriteAllText(Path.Combine(_root, InstallationStamp.FileName), "{ damaged");
+        File.WriteAllText(Path.Combine(_root, InstallationStamp.FILE_NAME), "{ damaged");
         InstallationStamp.Check(_root, "PC-9").CopiedFromAnotherMachine.Should().BeFalse();
     }
 

@@ -9,16 +9,21 @@ namespace RCynQ.UI.ViewModels.Items;
 /// </summary>
 public sealed class AddressOptionViewModel
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AddressOptionViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="info">The detected address.</param>
     /// <param name="checkedOnOwnPort">
     /// <see langword="true"/> when reachability was checked on the node's own RCynQ port rather than on its SSH server; it only changes
     /// the wording of <see cref="StatusText"/>.
     /// </param>
-    public AddressOptionViewModel(NetworkAddressInfo info, bool checkedOnOwnPort = false)
+    public AddressOptionViewModel(ILocalizer localizer, NetworkAddressInfo info, bool checkedOnOwnPort = false)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         Info = info ?? throw new ArgumentNullException(nameof(info));
         _checkedOnOwnPort = checkedOnOwnPort;
     }
@@ -36,11 +41,11 @@ public sealed class AddressOptionViewModel
     public string InterfaceName => Info.InterfaceName;
 
     /// <summary>Gets the address kind label.</summary>
-    public string KindText => DisplayText.AddressKind(Info.Kind);
+    public string KindText => DisplayText.AddressKind(_localizer, Info.Kind);
 
     /// <summary>Gets a value indicating whether SSH answered on the address.</summary>
     public bool SshReachable => Info.SshReachable;
 
     /// <summary>Gets the SSH status label.</summary>
-    public string StatusText => Texts.Get($"Address.Status.{_checkedOnOwnPort}.{Info.SshReachable}");
+    public string StatusText => _localizer.Get($"Address.Status.{_checkedOnOwnPort}.{Info.SshReachable}");
 }

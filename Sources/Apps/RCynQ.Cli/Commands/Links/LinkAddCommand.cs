@@ -10,7 +10,7 @@ namespace RCynQ.Cli.Commands.Links;
 /// <summary>
 /// <c>rcynq link add</c>: adds or updates a chain link.
 /// </summary>
-[Command("link add", Description = "Adds or updates a chain link (mediators first, the Source/Dest endpoint last).")]
+[Command("link add", Description = "Adds or updates a chain link (relays first, the Workstation/Origin endpoint last).")]
 public sealed class LinkAddCommand : NodeCommandBase
 {
     /// <summary>
@@ -31,7 +31,7 @@ public sealed class LinkAddCommand : NodeCommandBase
     public string PeerId { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the peer role.</summary>
-    [CommandOption("peer-role", IsRequired = true, Description = "source, mediator or dest.")]
+    [CommandOption("peer-role", IsRequired = true, Description = "workstation, relay or origin.")]
     public NodeRole PeerRole { get; set; }
 
     /// <summary>Gets or sets the peer host.</summary>
@@ -47,7 +47,7 @@ public sealed class LinkAddCommand : NodeCommandBase
     public int SshPort { get; set; } = 22;
 
     /// <summary>Gets or sets the remote port.</summary>
-    [CommandOption("remote-port", Description = "Peer patch endpoint port for the endpoint link, next-hop SSH port for mediators.")]
+    [CommandOption("remote-port", Description = "Peer patch endpoint port for the endpoint link, next-hop SSH port for relays.")]
     public int RemotePort { get; set; } = 18443;
 
     /// <summary>Gets or sets the local forward port.</summary>
@@ -74,10 +74,6 @@ public sealed class LinkAddCommand : NodeCommandBase
     [CommandOption("fingerprint", Description = "Expected SSH host key fingerprint (SHA256:...).")]
     public string? Fingerprint { get; set; }
 
-    /// <summary>Gets or sets the repository path on Dest.</summary>
-    [CommandOption("git-repo", Description = "Repository path on a Dest peer.")]
-    public string? GitRepoPath { get; set; }
-
     /// <inheritdoc />
     protected override async ValueTask ExecuteAsync(NodeContext context, IConsole console, CancellationToken cancellationToken)
     {
@@ -94,8 +90,7 @@ public sealed class LinkAddCommand : NodeCommandBase
             Priority = Priority,
             Transport = Transport,
             FallbackTransports = Fallback.ToList(),
-            HostKeyFingerprint = Fingerprint,
-            GitRepoPath = GitRepoPath
+            HostKeyFingerprint = Fingerprint
         };
 
         foreach (var setting in Settings)

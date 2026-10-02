@@ -1,3 +1,5 @@
+using RCynQ.Ssh.Enums;
+
 namespace RCynQ.Ssh.Keys.HostKeys;
 
 /// <summary>

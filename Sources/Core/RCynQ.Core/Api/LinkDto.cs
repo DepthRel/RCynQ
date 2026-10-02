@@ -20,7 +20,6 @@ namespace RCynQ.Core.Api;
 /// <param name="SshUser">The SSH user.</param>
 /// <param name="HostKeyFingerprint">The expected host key fingerprint.</param>
 /// <param name="HasSigningKey">Whether a signing public key of the peer is known.</param>
-/// <param name="GitRepoPath">The repository path on a Dest peer.</param>
 /// <param name="LocalPort">The local forward port.</param>
 /// <param name="RemotePort">The remote port.</param>
 /// <param name="Priority">The chain position.</param>
@@ -38,7 +37,6 @@ public sealed record LinkDto(
     string SshUser,
     string? HostKeyFingerprint,
     bool HasSigningKey,
-    string? GitRepoPath,
     int LocalPort,
     int RemotePort,
     int Priority)
@@ -56,6 +54,6 @@ public sealed record LinkDto(
         return new LinkDto(
             link.Id, link.Name, link.Transport, link.FallbackTransports, link.TransportSettings,
             peer.Id, peer.Name, peer.Role, peer.Host, peer.SshPort, peer.SshUser, peer.HostKeyFingerprint,
-            peer.SigningPublicKey is not null, peer.GitRepoPath, link.LocalPort, link.RemotePort, link.Priority);
+            peer.SigningPublicKey is not null, link.LocalPort, link.RemotePort, link.Priority);
     }
 }

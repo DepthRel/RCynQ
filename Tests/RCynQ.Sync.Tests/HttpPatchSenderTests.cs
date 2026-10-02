@@ -37,7 +37,7 @@ public sealed class HttpPatchSenderTests : IDisposable
     public HttpPatchSenderTests()
     {
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), 0, "127.0.0.1", 18443, Arg.Any<CancellationToken>()).Returns(45555);
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v2\n");
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var hash = envelope.ContentHashes.Single();
         var handler = new FakeHandler(request => Script(request, envelope, missing: new[] { hash }));
 
-        var result = await CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var result = await CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         result.Status.Should().Be(PatchStatus.Applied);
         handler.Requests.Select(request => $"{request.Method} {request.Uri.AbsolutePath}").Should().Equal(
@@ -61,17 +61,17 @@ public sealed class HttpPatchSenderTests : IDisposable
         handler.Requests.Should().OnlyContain(request => request.Uri.Host == "127.0.0.1" && request.Uri.Port == 45555);
         foreach (var request in handler.Requests)
         {
-            request.Headers[HttpPatchSender.NodeIdHeader].Should().Be("source-1");
-            request.Headers[HttpPatchSender.LinkTokenHeader].Should().Be(SyncFixture.Token);
+            request.Headers[HttpPatchSender.NODE_ID_HEADER].Should().Be("workstation-1");
+            request.Headers[HttpPatchSender.LINK_TOKEN_HEADER].Should().Be(SyncFixture.TOKEN);
         }
 
-        var manifest = new PatchEnvelopeSerializer(_fixture.Paths).Deserialize(Gunzip(handler.Requests[0].Body));
+        var manifest = new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths).Deserialize(Gunzip(handler.Requests[0].Body));
         manifest.IsSigned.Should().BeTrue();
-        _fixture.SourceSigner.Verify(PayloadCanonicalizer.Build(manifest), manifest.Signature, await _fixture.SourceSigner.ExportPublicKeyAsync()).Should().BeTrue();
+        _fixture.WorkstationSigner.Verify(PayloadCanonicalizer.Build(manifest), manifest.Signature, await _fixture.WorkstationSigner.ExportPublicKeyAsync()).Should().BeTrue();
         Encoding.UTF8.GetString(Gunzip(handler.Requests[1].Body)).Should().Be("v2\n");
 
         await _forwards.Received(1).StartAsync(
-            Arg.Is<SshEndpoint>(target => target.Destination == "rcynq@dest.internal"),
+            Arg.Is<SshEndpoint>(target => target.Destination == "rcynq@origin.internal"),
             Arg.Is<IReadOnlyList<SshEndpoint>>(jumps => jumps.Single().Destination == "jump@relay.example"),
             0, "127.0.0.1", 18443, Arg.Any<CancellationToken>());
         await _forwards.Received(1).StopAsync(45555, Arg.Any<CancellationToken>());
@@ -85,11 +85,11 @@ public sealed class HttpPatchSenderTests : IDisposable
     public async Task Bodies_Are_Gzip_Compressed()
     {
         var big = new string('a', 2_000_000);
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", big);
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", big);
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(request => Script(request, envelope, missing: envelope.ContentHashes));
 
-        await CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        await CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         handler.Requests.Take(2).Should().OnlyContain(request => request.ContentEncoding == "gzip");
         handler.Requests[1].Body.Length.Should().BeLessThan(20_000, "two million equal characters compress to almost nothing");
@@ -106,7 +106,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(request => Script(request, envelope, missing: Array.Empty<string>()));
 
-        (await CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain())).Status.Should().Be(PatchStatus.Applied);
+        (await CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain())).Status.Should().Be(PatchStatus.Applied);
 
         handler.Requests.Select(request => request.Method).Should().Equal("POST", "POST");
     }
@@ -124,7 +124,7 @@ public sealed class HttpPatchSenderTests : IDisposable
             ? throw new HttpRequestException("connection reset")
             : Script(request, envelope, missing: envelope.ContentHashes));
 
-        (await CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain())).Status.Should().Be(PatchStatus.Applied);
+        (await CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain())).Status.Should().Be(PatchStatus.Applied);
 
         handler.Requests.Count(request => request.Method == "PUT").Should().Be(2);
         Encoding.UTF8.GetString(Gunzip(handler.Requests.Last(request => request.Method == "PUT").Body)).Should().Be("v2\n");
@@ -140,7 +140,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(_ => throw new HttpRequestException("unreachable"));
 
-        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("could not be delivered");
         handler.Requests.Should().HaveCount(2);
@@ -157,7 +157,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(_ => Json(HttpStatusCode.Forbidden, new PatchRejectionResponse(PatchRejectionReason.InvalidToken, "bad token")));
 
-        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("InvalidToken").And.Contain("403");
         handler.Requests.Should().ContainSingle();
@@ -177,7 +177,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent(body) });
 
-        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("older version");
         handler.Requests.Should().ContainSingle();
@@ -195,7 +195,7 @@ public sealed class HttpPatchSenderTests : IDisposable
             ? Json(HttpStatusCode.BadRequest, new PatchRejectionResponse(PatchRejectionReason.Malformed, "hash mismatch"))
             : Script(request, envelope, missing: envelope.ContentHashes));
 
-        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("hash mismatch");
         handler.Requests.Should().NotContain(request => request.Uri.AbsolutePath.EndsWith("/commit", StringComparison.Ordinal));
@@ -216,7 +216,7 @@ public sealed class HttpPatchSenderTests : IDisposable
                 : Json(HttpStatusCode.Conflict, new PatchRejectionResponse(PatchRejectionReason.Replay, "already processed"))
             : Script(request, envelope, missing: envelope.ContentHashes));
 
-        var result = await CreateSender(handler).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var result = await CreateSender(handler).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         result.Status.Should().Be(PatchStatus.Pending);
         result.Error.Should().Contain("already received");
@@ -231,7 +231,7 @@ public sealed class HttpPatchSenderTests : IDisposable
     {
         var envelope = await _fixture.BuildSignedEnvelopeAsync(new NodeId("somebody-else"));
 
-        var send = () => CreateSender(new FakeHandler(_ => throw new InvalidOperationException())).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(new FakeHandler(_ => throw new InvalidOperationException())).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         await send.Should().ThrowAsync<ArgumentException>();
         await _forwards.DidNotReceiveWithAnyArgs().StartAsync(default!, default!, default, default!, default, default);
@@ -247,7 +247,7 @@ public sealed class HttpPatchSenderTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var handler = new FakeHandler(_ => throw new InvalidOperationException());
 
-        var send = () => CreateSender(handler, new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero, MaxFileBytes = 1 }).SendAsync(envelope, _fixture.SourceContent, _fixture.CreateChain());
+        var send = () => CreateSender(handler, new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero, MaxFileBytes = 1 }).SendAsync(envelope, _fixture.WorkstationContent, _fixture.CreateChain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("a.txt");
         handler.Requests.Should().BeEmpty();
@@ -312,12 +312,13 @@ public sealed class HttpPatchSenderTests : IDisposable
     /// <returns>The sender.</returns>
     private HttpPatchSender CreateSender(HttpMessageHandler handler, HttpPatchSenderOptions? options = null)
         => new(
+            TestTexts.English,
             handler,
             _forwards,
-            _fixture.SourceSigner,
-            new PatchEnvelopeSerializer(_fixture.Paths),
-            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.Token }, new InMemorySecretStore()),
-            _fixture.SourceNode,
+            _fixture.WorkstationSigner,
+            new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths),
+            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.TOKEN }, new InMemorySecretStore()),
+            _fixture.WorkstationNode,
             options ?? new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero });
 
     /// <summary>

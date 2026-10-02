@@ -3,7 +3,6 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Core.Validation;
-using RCynQ.Git.Patches.Diff;
 using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
 using RCynQ.Sync.Paths;
@@ -26,14 +25,9 @@ public sealed class DefaultConflictResolver : IConflictResolver
     private readonly ContentOverwriteApplier _contentApplier;
 
     /// <summary>
-    /// The git applier.
+    /// Merges the incoming content into locally changed files.
     /// </summary>
-    private readonly GitPatchApplier _gitApplier;
-
-    /// <summary>
-    /// The diff builder; the diff of a patch is built from the local sync base when a policy needs it.
-    /// </summary>
-    private readonly IPatchDiffBuilder _diffs;
+    private readonly GitMergeApplier _gitMerge;
 
     /// <summary>
     /// The backup service.
@@ -49,15 +43,13 @@ public sealed class DefaultConflictResolver : IConflictResolver
     /// Initializes a new instance of the <see cref="DefaultConflictResolver"/> class.
     /// </summary>
     /// <param name="contentApplier">The applier that writes the incoming content.</param>
-    /// <param name="gitApplier">The git applier.</param>
-    /// <param name="diffs">The diff builder.</param>
+    /// <param name="gitMerge">Merges the incoming content into locally changed files.</param>
     /// <param name="backups">The backup service.</param>
     /// <param name="paths">The sync paths.</param>
-    public DefaultConflictResolver(ContentOverwriteApplier contentApplier, GitPatchApplier gitApplier, IPatchDiffBuilder diffs, BackupService backups, SyncPaths paths)
+    public DefaultConflictResolver(ContentOverwriteApplier contentApplier, GitMergeApplier gitMerge, BackupService backups, SyncPaths paths)
     {
         _contentApplier = contentApplier;
-        _gitApplier = gitApplier;
-        _diffs = diffs;
+        _gitMerge = gitMerge;
         _backups = backups;
         _paths = paths;
     }
@@ -89,16 +81,20 @@ public sealed class DefaultConflictResolver : IConflictResolver
                 return new PatchApplyResult(envelope.Id, PatchStatus.ConflictResolved, applied.AppliedFileCount, Array.Empty<ConflictFile>(), null);
 
             default:
-                // The sync base still holds the state the patch was built from, because the patch was not applied yet.
-                var diff = await _diffs.BuildAsync(envelope.Manifest, _paths.SyncBase, content, PatchDiffLimits.Full, cancellationToken);
-                var gitResult = await _gitApplier.ApplyDiffAsync(envelope, diff, _paths.Workdir, cancellationToken);
-                if (gitResult.Status != PatchStatus.Applied)
+                // The sync base still holds the state the patch was built from, because the patch was not applied yet:
+                // it is the common ancestor of the local files and the incoming ones.
+                var merge = await _gitMerge.MergeAsync(envelope, content, _paths.SyncBase, _paths.Workdir, cancellationToken);
+                if (merge.Status != PatchStatus.Applied)
                 {
-                    return gitResult;
+                    // Git cannot merge some file; nothing was written and the patch keeps waiting for a decision.
+                    return merge;
                 }
 
+                // The incoming content is merged into the working tree, so it becomes the base: what the local files
+                // have beyond it is what this node sends back. A file with conflict markers is merged too; it is
+                // reported, so the user edits it.
                 await _contentApplier.ApplyAsync(envelope, content, _paths.SyncBase, cancellationToken);
-                return new PatchApplyResult(envelope.Id, PatchStatus.ConflictResolved, gitResult.AppliedFileCount, Array.Empty<ConflictFile>(), null);
+                return new PatchApplyResult(envelope.Id, PatchStatus.ConflictResolved, merge.AppliedFileCount, merge.Conflicts, null);
         }
     }
 }

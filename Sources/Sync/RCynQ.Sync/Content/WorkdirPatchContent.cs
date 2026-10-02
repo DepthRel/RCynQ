@@ -21,7 +21,7 @@ public sealed class WorkdirPatchContent : IPatchContent
     /// <summary>
     /// The buffer size of the file streams.
     /// </summary>
-    private const int BufferSize = 81920;
+    private const int BUFFER_SIZE = 81920;
 
     /// <summary>
     /// The working tree.
@@ -34,12 +34,19 @@ public sealed class WorkdirPatchContent : IPatchContent
     private readonly IPathUtility _paths;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="WorkdirPatchContent"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="root">The working tree.</param>
     /// <param name="paths">The path utility.</param>
-    public WorkdirPatchContent(string root, IPathUtility paths)
+    public WorkdirPatchContent(ILocalizer localizer, string root, IPathUtility paths)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _root = root;
         _paths = paths;
     }
@@ -57,16 +64,16 @@ public sealed class WorkdirPatchContent : IPatchContent
         if (change.IsSymlink)
         {
             var target = new FileInfo(full).LinkTarget ?? new DirectoryInfo(full).LinkTarget
-                ?? throw new SyncBridgeException(Texts.Format("Content.NotALink", change.Path));
+                ?? throw new SyncBridgeException(_localizer.Format("Content.NotALink", change.Path));
             return Task.FromResult<Stream>(new MemoryStream(Encoding.UTF8.GetBytes(target)));
         }
 
         if (!File.Exists(full))
         {
-            throw new SyncBridgeException(Texts.Format("Content.FileMissing", change.Path));
+            throw new SyncBridgeException(_localizer.Format("Content.FileMissing", change.Path));
         }
 
         // The file may be open in an editor; sharing for writing keeps a running IDE from blocking the transfer.
-        return Task.FromResult<Stream>(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, BufferSize, useAsync: true));
+        return Task.FromResult<Stream>(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, BUFFER_SIZE, useAsync: true));
     }
 }

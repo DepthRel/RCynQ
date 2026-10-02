@@ -1,3 +1,5 @@
+using RCynQ.Core.Enums;
+
 namespace RCynQ.Core.Diagnostics;
 
 /// <summary>

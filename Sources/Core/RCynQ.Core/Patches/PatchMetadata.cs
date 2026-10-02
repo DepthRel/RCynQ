@@ -126,6 +126,12 @@ public sealed record PatchMetadata
     public byte[] Signature { get; }
 
     /// <summary>
+    /// Gets the name of the repository the patch belongs to, or <see langword="null"/> for a patch exchanged before the
+    /// node knew the name of its repository (it belongs to the repository the node started with).
+    /// </summary>
+    public string? Repository { get; init; }
+
+    /// <summary>
     /// Creates metadata describing the given envelope.
     /// </summary>
     /// <param name="envelope">The envelope.</param>
@@ -149,7 +155,10 @@ public sealed record PatchMetadata
             envelope.Manifest,
             null,
             null,
-            envelope.Signature);
+            envelope.Signature)
+        {
+            Repository = envelope.Repository
+        };
     }
 
     /// <summary>
@@ -167,6 +176,9 @@ public sealed record PatchMetadata
             : AppliedAtUtc;
         return new PatchMetadata(
             Id, Direction, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash,
-            result.Status, finalTime, Manifest, result.Conflicts, result.Error, Signature);
+            result.Status, finalTime, Manifest, result.Conflicts, result.Error, Signature)
+        {
+            Repository = Repository
+        };
     }
 }

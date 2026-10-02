@@ -7,38 +7,16 @@ using RCynQ.Sync.GitChannel;
 namespace RCynQ.Sync.SyncBase;
 
 /// <summary>
-/// The Git commit a node's sync base follows, or why there is none.
-/// </summary>
-/// <param name="IsRepository">Whether the working tree is a Git repository.</param>
-/// <param name="Branch">The branch the base follows, or <see langword="null"/> for a detached HEAD or when there is no commit.</param>
-/// <param name="Commit">The full name of the commit, or <see langword="null"/> when there is none.</param>
-/// <param name="Problem">Why there is no commit, in the language of the request; <see langword="null"/> when there is one.</param>
-public sealed record GitSyncBaseTarget(bool IsRepository, string? Branch, string? Commit, string? Problem);
-
-/// <summary>
-/// Finds the Git commit a node's sync base follows.
-/// </summary>
-public interface IGitSyncBaseLocator
-{
-    /// <summary>
-    /// Finds the commit.
-    /// </summary>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The commit, or why there is none.</returns>
-    Task<GitSyncBaseTarget> LocateAsync(CancellationToken cancellationToken = default);
-}
-
-/// <summary>
 /// Default <see cref="IGitSyncBaseLocator"/>: the commit both nodes are known to have.
 /// </summary>
 /// <remarks>
 /// <para>
-/// On Dest it is <c>HEAD</c>: what Dest shares with Source is its own repository, and Source gets every commit of it by Pull.
+/// On Origin it is <c>HEAD</c>: what Origin shares with Workstation is its own repository, and Workstation gets every commit of it by Pull.
 /// </para>
 /// <para>
-/// On Source it is the common ancestor of <c>HEAD</c> and <c>refs/remotes/dest/&lt;current branch&gt;</c>: the newest commit of
-/// Dest that the working tree is built on. Not the tracking ref itself: a Fetch moves the tracking ref without touching the working
-/// tree, and comparing the tree against a newer commit of Dest would offer to send the reverse of Dest's new commits.
+/// On Workstation it is the common ancestor of <c>HEAD</c> and <c>refs/remotes/rcynq/&lt;current branch&gt;</c>: the newest commit of
+/// Origin that the working tree is built on. Not the tracking ref itself: a Fetch moves the tracking ref without touching the working
+/// tree, and comparing the tree against a newer commit of Origin would offer to send the reverse of Origin's new commits.
 /// </para>
 /// </remarks>
 public sealed class GitSyncBaseLocator : IGitSyncBaseLocator
@@ -49,55 +27,75 @@ public sealed class GitSyncBaseLocator : IGitSyncBaseLocator
     /// <summary>The repository service.</summary>
     private readonly IGitRepositoryService _git;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>Renames the remote-tracking namespace of an earlier version, or <see langword="null"/>.</summary>
+    private readonly LegacyRemoteMigration? _legacyRemote;
+
+    /// <summary>Tells which repository the node works with now.</summary>
+    private readonly IActiveRepository _repository;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitSyncBaseLocator"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="git">The repository service.</param>
-    public GitSyncBaseLocator(NodeConfig node, IGitRepositoryService git)
+    /// <param name="legacyRemote">Renames the remote-tracking namespace of an earlier version; <see langword="null"/> leaves it alone.</param>
+    /// <param name="repository">Tells which repository the node works with now; <see langword="null"/> for the one the node started with.</param>
+    public GitSyncBaseLocator(ILocalizer localizer, NodeConfig node, IGitRepositoryService git, LegacyRemoteMigration? legacyRemote = null, IActiveRepository? repository = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _git = git;
+        _legacyRemote = legacyRemote;
+        _repository = repository ?? FixedRepository.FromNode(node);
     }
 
     /// <inheritdoc />
     public async Task<GitSyncBaseTarget> LocateAsync(CancellationToken cancellationToken = default)
     {
-        var workdir = _node.EffectiveWorkdir;
-        var isSource = _node.Role == NodeRole.Source;
+        var workdir = _repository.Current?.Path;
+        var isWorkstation = _node.Role == NodeRole.Workstation;
         if (workdir is null || !await _git.IsWorkTreeAsync(workdir, cancellationToken))
         {
-            return new GitSyncBaseTarget(false, null, null, Texts.Get(isSource ? "SyncBase.Source.NoRepository" : "SyncBase.Dest.NoRepository"));
+            return new GitSyncBaseTarget(false, null, null, _localizer.Get(isWorkstation ? "SyncBase.Workstation.NoRepository" : "SyncBase.Origin.NoRepository"));
         }
 
         var head = await _git.GetHeadCommitAsync(workdir, cancellationToken);
         if (head is null)
         {
-            return new GitSyncBaseTarget(true, null, null, Texts.Get(isSource ? "SyncBase.Source.NoCommits" : "SyncBase.Dest.NoCommits"));
+            return new GitSyncBaseTarget(true, null, null, _localizer.Get(isWorkstation ? "SyncBase.Workstation.NoCommits" : "SyncBase.Origin.NoCommits"));
         }
 
         var branch = await _git.GetCurrentBranchAsync(workdir, cancellationToken);
-        if (!isSource)
+        if (!isWorkstation)
         {
             return new GitSyncBaseTarget(true, branch, head, null);
         }
 
         if (branch is null)
         {
-            return new GitSyncBaseTarget(true, null, null, Texts.Get("SyncBase.Source.Detached"));
+            return new GitSyncBaseTarget(true, null, null, _localizer.Get("SyncBase.Workstation.Detached"));
+        }
+
+        if (_legacyRemote is not null)
+        {
+            await _legacyRemote.EnsureAsync(workdir, cancellationToken);
         }
 
         // Runs on every status refresh, so only the two lookups it needs: no divergence counting.
-        var tracking = $"refs/remotes/{GitChannelService.RemoteName}/{branch}";
-        var destCommit = await _git.ResolveCommitAsync(workdir, tracking, cancellationToken);
-        if (destCommit is null)
+        var tracking = $"refs/remotes/{GitChannelService.REMOTE_NAME}/{branch}";
+        var originCommit = await _git.ResolveCommitAsync(workdir, tracking, cancellationToken);
+        if (originCommit is null)
         {
-            return new GitSyncBaseTarget(true, branch, null, Texts.Format("SyncBase.Source.NotFetched", branch));
+            return new GitSyncBaseTarget(true, branch, null, _localizer.Format("SyncBase.Workstation.NotFetched", branch));
         }
 
-        var common = await _git.GetMergeBaseAsync(workdir, head, destCommit, cancellationToken);
+        var common = await _git.GetMergeBaseAsync(workdir, head, originCommit, cancellationToken);
         return common is null
-            ? new GitSyncBaseTarget(true, branch, null, Texts.Format("SyncBase.Source.Unrelated", branch))
+            ? new GitSyncBaseTarget(true, branch, null, _localizer.Format("SyncBase.Workstation.Unrelated", branch))
             : new GitSyncBaseTarget(true, branch, common, null);
     }
 }

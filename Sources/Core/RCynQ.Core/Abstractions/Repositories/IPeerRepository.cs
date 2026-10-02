@@ -31,4 +31,19 @@ public interface IPeerRepository
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>All peers.</returns>
     Task<IReadOnlyList<PeerDescriptor>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Forgets a peer that no chain link leads to, together with the keys imported for it.
+    /// </summary>
+    /// <remarks>
+    /// A peer that is replaced by another node must not stay known: its SSH key would keep its access to this node and
+    /// its signing key would keep being accepted.
+    /// </remarks>
+    /// <param name="id">The peer identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// <see langword="true"/> when the peer was removed; <see langword="false"/> when it is unknown or a chain link
+    /// still leads to it.
+    /// </returns>
+    Task<bool> DeleteUnlinkedAsync(NodeId id, CancellationToken cancellationToken = default);
 }

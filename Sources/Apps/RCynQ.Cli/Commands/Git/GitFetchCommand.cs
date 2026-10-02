@@ -7,9 +7,9 @@ using RCynQ.Cli.Services;
 namespace RCynQ.Cli.Commands.Git;
 
 /// <summary>
-/// <c>rcynq git fetch</c>: fetches branches from Dest through the chain.
+/// <c>rcynq git fetch</c>: fetches branches from Origin through the chain.
 /// </summary>
-[Command("git fetch", Description = "Fetches all branches from Dest into refs/remotes/dest/* (Source only; never pushes).")]
+[Command("git fetch", Description = "Fetches all branches from Origin into refs/remotes/rcynq/* (Workstation only; never pushes).")]
 public sealed class GitFetchCommand : NodeCommandBase
 {
     /// <summary>

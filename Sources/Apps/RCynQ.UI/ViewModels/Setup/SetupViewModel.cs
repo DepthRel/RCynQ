@@ -31,7 +31,7 @@ public sealed partial class SetupViewModel : ObservableObject
     /// <summary>The role.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PathLabel), nameof(IsPathVisible), nameof(IsTokenVisible), nameof(RoleHint), nameof(IsEndpointModeVisible), nameof(IsEndpointPortVisible))]
-    private NodeRole _selectedRole = NodeRole.Source;
+    private NodeRole _selectedRole = NodeRole.Workstation;
 
     /// <summary>The working copy or repository path.</summary>
     [ObservableProperty]
@@ -48,7 +48,7 @@ public sealed partial class SetupViewModel : ObservableObject
     /// <summary>How neighbours reach this node.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEndpointPortVisible), nameof(EndpointHint))]
-    private EndpointModeOption _selectedEndpointMode = EndpointModeOption.All[0];
+    private EndpointModeOption _selectedEndpointMode = null!;
 
     /// <summary>The TCP port of the direct endpoint.</summary>
     [ObservableProperty]
@@ -63,14 +63,21 @@ public sealed partial class SetupViewModel : ObservableObject
     [ObservableProperty]
     private bool _isBusy;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SetupViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="configPath">The configuration file to create or update.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="language">The language selector shown in the corner of the setup, or <see langword="null"/>.</param>
-    public SetupViewModel(string configPath, IDialogService dialogs, LanguageViewModel? language = null)
+    public SetupViewModel(ILocalizer localizer, string configPath, IDialogService dialogs, LanguageViewModel? language = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        EndpointModes = EndpointModeOption.CreateAll(localizer);
+        SelectedEndpointMode = EndpointModes[0];
         ConfigPath = configPath ?? throw new ArgumentNullException(nameof(configPath));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         Language = language;
@@ -91,27 +98,27 @@ public sealed partial class SetupViewModel : ObservableObject
     public bool HasLanguage => Language is not null;
 
     /// <summary>Gets the selectable roles.</summary>
-    public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
+    public IReadOnlyList<NodeRole> Roles { get; } = new[] { NodeRole.Workstation, NodeRole.Relay, NodeRole.Origin };
 
     /// <summary>Gets the label of the path field.</summary>
-    public string PathLabel => DisplayText.PathLabel(SelectedRole);
+    public string PathLabel => DisplayText.PathLabel(_localizer, SelectedRole);
 
     /// <summary>Gets a value indicating whether the path applies to the role.</summary>
-    public bool IsPathVisible => SelectedRole != NodeRole.Mediator;
+    public bool IsPathVisible => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets a value indicating whether the link token applies to the role.</summary>
-    public bool IsTokenVisible => SelectedRole != NodeRole.Mediator;
+    public bool IsTokenVisible => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets the connection modes offered.</summary>
-    public IReadOnlyList<EndpointModeOption> EndpointModes { get; } = EndpointModeOption.All;
+    public IReadOnlyList<EndpointModeOption> EndpointModes { get; }
 
-    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Mediator always uses its SSH server.</summary>
-    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Mediator;
+    /// <summary>Gets a value indicating whether the connection mode can be chosen: a Relay always uses its SSH server.</summary>
+    public bool IsEndpointModeVisible => SelectedRole != NodeRole.Relay;
 
     /// <summary>Gets a value indicating whether the port of the direct endpoint is shown.</summary>
     public bool IsEndpointPortVisible => IsEndpointModeVisible && SelectedEndpointMode.Value == EndpointMode.Direct;
 
-    /// <summary>Gets the connection mode that is saved: a Mediator always uses its SSH server.</summary>
+    /// <summary>Gets the connection mode that is saved: a Relay always uses its SSH server.</summary>
     private EndpointMode EffectiveEndpointMode => IsEndpointModeVisible ? SelectedEndpointMode.Value : EndpointMode.SshTunnel;
 
     /// <summary>Gets the explanation of the selected connection mode.</summary>
@@ -121,7 +128,7 @@ public sealed partial class SetupViewModel : ObservableObject
     public bool HasError => !string.IsNullOrEmpty(Error);
 
     /// <summary>Gets the description of the selected role.</summary>
-    public string RoleHint => Texts.Get($"Setup.RoleHint.{SelectedRole}");
+    public string RoleHint => _localizer.Get($"Setup.RoleHint.{SelectedRole}");
 
     /// <summary>
     /// Tells the bindings that the texts computed from the language changed.
@@ -168,11 +175,11 @@ public sealed partial class SetupViewModel : ObservableObject
         {
             NodeId = DefaultNodeId(Environment.MachineName);
             Name = Environment.MachineName;
-            SelectedRole = NodeRole.Source;
+            SelectedRole = NodeRole.Workstation;
             Path = string.Empty;
             ListenPort = 18443;
             LinkToken = CreateToken();
-            SelectedEndpointMode = EndpointModeOption.All[0];
+            SelectedEndpointMode = EndpointModes[0];
             EndpointPort = 18444;
         }
         else
@@ -180,10 +187,10 @@ public sealed partial class SetupViewModel : ObservableObject
             NodeId = string.IsNullOrWhiteSpace(existing.NodeId) ? DefaultNodeId(Environment.MachineName) : existing.NodeId;
             Name = string.IsNullOrWhiteSpace(existing.Name) ? Environment.MachineName : existing.Name;
             SelectedRole = existing.Role;
-            Path = (existing.Role == NodeRole.Dest ? existing.RepoPath : existing.WorkdirPath) ?? string.Empty;
+            Path = RepositoryConfigurationEditor.ActivePath(existing) ?? string.Empty;
             ListenPort = existing.ListenPort is >= 1 and <= 65535 ? existing.ListenPort : 18443;
             LinkToken = existing.LinkToken ?? string.Empty;
-            SelectedEndpointMode = EndpointModeOption.For(existing.Endpoint.Mode);
+            SelectedEndpointMode = EndpointModes.First(option => option.Value == existing.Endpoint.Mode);
             EndpointPort = existing.Endpoint.Port is >= 1 and <= 65535 ? existing.Endpoint.Port : 18444;
         }
 
@@ -219,13 +226,13 @@ public sealed partial class SetupViewModel : ObservableObject
     {
         if (!Core.Ids.NodeId.TryParse(NodeId.Trim(), out _))
         {
-            Error = Texts.Get("Setup.NodeIdInvalid");
+            Error = _localizer.Get("Setup.NodeIdInvalid");
             return;
         }
 
         if (IsPathVisible && string.IsNullOrWhiteSpace(Path))
         {
-            Error = Texts.Format("Setup.PathRequired", PathLabel.ToLower(Texts.Localizer.Culture));
+            Error = _localizer.Format("Setup.PathRequired", PathLabel.ToLower(_localizer.Culture));
             return;
         }
 
@@ -234,7 +241,8 @@ public sealed partial class SetupViewModel : ObservableObject
         {
             var errors = await LocalConfigFile.SaveAsync(
                 ConfigPath,
-                new NodeSetupValues(NodeId, Name, SelectedRole, Path, (int)ListenPort, LinkToken, EffectiveEndpointMode, (int)EndpointPort));
+                new NodeSetupValues(NodeId, Name, SelectedRole, Path, (int)ListenPort, LinkToken, EffectiveEndpointMode, (int)EndpointPort),
+                _localizer);
             if (errors.Count > 0)
             {
                 Error = string.Join(Environment.NewLine, errors);
@@ -246,7 +254,7 @@ public sealed partial class SetupViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Error = Texts.Format("Setup.WriteFailed", ConfigPath, ex.Message);
+            Error = _localizer.Format("Setup.WriteFailed", ConfigPath, _localizer.Describe(ex));
         }
         finally
         {

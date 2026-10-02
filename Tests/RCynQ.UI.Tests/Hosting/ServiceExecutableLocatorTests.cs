@@ -54,9 +54,9 @@ public sealed class ServiceExecutableLocatorTests : IDisposable
         Touch(Path.Combine(_root, "service", "RCynQ.Service"));
         var custom = Touch(Path.Combine(_root, "custom", "service-host"));
 
-        ServiceExecutableLocator.Locate(ui, new[] { ServiceExecutableLocator.Argument, custom }, _ => null, isWindows: false)!
+        ServiceExecutableLocator.Locate(ui, new[] { ServiceExecutableLocator.ARGUMENT, custom }, _ => null, isWindows: false)!
             .FileName.Should().Be(custom);
-        ServiceExecutableLocator.Locate(ui, Array.Empty<string>(), name => name == ServiceExecutableLocator.EnvironmentVariable ? Path.Combine(_root, "missing") : null, isWindows: false)
+        ServiceExecutableLocator.Locate(ui, Array.Empty<string>(), name => name == ServiceExecutableLocator.ENVIRONMENT_VARIABLE ? Path.Combine(_root, "missing") : null, isWindows: false)
             .Should().BeNull();
     }
 

@@ -33,7 +33,12 @@ public sealed class FilePermissionsTests : IDisposable
             foreach (var security in new FileSystemSecurity[] { new DirectoryInfo(keys).GetAccessControl(), new FileInfo(file).GetAccessControl() })
             {
                 security.AreAccessRulesProtected.Should().BeTrue();
-                var identities = security.GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Select(rule => rule.IdentityReference).Distinct().ToArray();
+                var identities = new HashSet<IdentityReference>();
+                foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+                {
+                    identities.Add(rule.IdentityReference);
+                }
+
                 identities.Should().BeEquivalentTo(new IdentityReference[] { user, system });
             }
         }

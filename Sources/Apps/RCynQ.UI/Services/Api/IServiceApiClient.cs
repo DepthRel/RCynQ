@@ -24,6 +24,11 @@ public interface IServiceApiClient
     /// <returns>The status.</returns>
     Task<NodeSyncStatus> GetStateAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Gets the synchronization status as of the last look at the working tree; the service does not walk it again.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The status.</returns>
+    Task<NodeSyncStatus> GetStateSummaryAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Gets recent patches.</summary>
     /// <param name="take">The maximum number of patches.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
@@ -93,12 +98,12 @@ public interface IServiceApiClient
     /// <returns>The branch information.</returns>
     Task<GitBranchInfo> GetBranchAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Fetches branches from Dest.</summary>
+    /// <summary>Fetches branches from Origin.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The result.</returns>
     Task<GitOperationResult> FetchAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Fetches from Dest and fast-forwards the current branch.</summary>
+    /// <summary>Fetches from Origin and fast-forwards the current branch.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The result.</returns>
     Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default);
@@ -124,6 +129,11 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>A task that completes when the request was accepted.</returns>
     Task ShutdownServiceAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Removes the finished data of the node whatever its age: patches, history, diagnostics runs, backups.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>What was removed.</returns>
+    Task<DataCleanupReport> CleanDataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Probes the network and SSH environment for an export.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
@@ -152,9 +162,41 @@ public interface IServiceApiClient
 
     /// <summary>Imports a peer configuration.</summary>
     /// <param name="configuration">The configuration.</param>
+    /// <param name="decision">
+    /// What to do when a peer of the imported role is known already, or <see langword="null"/> to be told the decisions
+    /// to choose from; an import that needs none ignores it.
+    /// </param>
+    /// <param name="linkId">The link whose peer the imported node replaces, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
-    /// <returns>The result.</returns>
-    Task<ImportResult> ImportConfigAsync(ExportedNodeConfiguration configuration, CancellationToken cancellationToken = default);
+    /// <returns>The result; when it asks for a decision nothing was imported.</returns>
+    Task<ImportResult> ImportConfigAsync(ExportedNodeConfiguration configuration, ImportDecision? decision = null, Guid? linkId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets the routes of the links that have any, with the outcome of their last check.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The routes per link.</returns>
+    Task<IReadOnlyList<LinkRoutesDto>> GetLinkRoutesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Pins a route of a link by hand, or hands the choice back to the node.</summary>
+    /// <param name="linkId">The link identifier.</param>
+    /// <param name="routeId">The route to use, or <see langword="null"/> for the automatic choice.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The routes of the link.</returns>
+    Task<LinkRoutesDto> SelectLinkRouteAsync(Guid linkId, Guid? routeId, CancellationToken cancellationToken = default);
+
+    /// <summary>Changes the preference of a route.</summary>
+    /// <param name="linkId">The link identifier.</param>
+    /// <param name="routeId">The route identifier.</param>
+    /// <param name="priority">The preference; lower values are preferred.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The routes of the link.</returns>
+    Task<LinkRoutesDto> SetLinkRoutePriorityAsync(Guid linkId, Guid routeId, int priority, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a route of a link.</summary>
+    /// <param name="linkId">The link identifier.</param>
+    /// <param name="routeId">The route identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The routes of the link.</returns>
+    Task<LinkRoutesDto> RemoveLinkRouteAsync(Guid linkId, Guid routeId, CancellationToken cancellationToken = default);
 
     /// <summary>Changes the role in the configuration file.</summary>
     /// <param name="request">The request.</param>
@@ -168,4 +210,29 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The entries, newest first.</returns>
     Task<IReadOnlyList<LogEntryDto>> GetLogsAsync(string level, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets the repositories of the node.</summary>
+    /// <param name="askOrigin">Whether a Workstation asks the Origin for what it offers; that needs the link to it.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The repositories.</returns>
+    Task<RepositoryListDto> GetRepositoriesAsync(bool askOrigin = true, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a repository to the node.</summary>
+    /// <param name="name">The name the nodes call the repository by.</param>
+    /// <param name="path">The local folder.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The repositories of the node afterwards.</returns>
+    Task<RepositoryListDto> AddRepositoryAsync(string name, string path, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a repository from the node; its files stay.</summary>
+    /// <param name="name">The repository name.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The repositories of the node afterwards.</returns>
+    Task<RepositoryListDto> RemoveRepositoryAsync(string name, CancellationToken cancellationToken = default);
+
+    /// <summary>Makes a repository the one the node works with.</summary>
+    /// <param name="name">The repository name.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The repositories of the node afterwards.</returns>
+    Task<RepositoryListDto> ActivateRepositoryAsync(string name, CancellationToken cancellationToken = default);
 }

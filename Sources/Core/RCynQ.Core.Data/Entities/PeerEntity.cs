@@ -31,7 +31,10 @@ public sealed class PeerEntity
     /// <summary>Gets or sets the Base64 DER signing public key.</summary>
     public string? SigningPublicKey { get; set; }
 
-    /// <summary>Gets or sets the repository path on a Dest peer.</summary>
+    /// <summary>
+    /// Gets or sets a column earlier versions kept the repository path of the peer in. It is not used: a repository is
+    /// named in every request, and its path stays on the node that owns it.
+    /// </summary>
     public string? GitRepoPath { get; set; }
 
     /// <summary>Gets or sets the OpenSSH public key line of the peer.</summary>

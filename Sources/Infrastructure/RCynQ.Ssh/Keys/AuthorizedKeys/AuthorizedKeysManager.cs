@@ -85,7 +85,7 @@ public sealed partial class AuthorizedKeysManager
         {
             AuthorizedKeyPurpose.GitReadOnly =>
                 $"restrict,command=\"git-upload-pack '{ValidateRepoPath(target)}'\",no-pty,no-agent-forwarding,no-port-forwarding,no-x11-forwarding",
-            AuthorizedKeyPurpose.PatchForward or AuthorizedKeyPurpose.MediatorForward =>
+            AuthorizedKeyPurpose.PatchForward or AuthorizedKeyPurpose.RelayForward =>
                 $"restrict,port-forwarding,permitopen=\"{ValidatePermitOpen(target)}\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding",
             _ => throw new ArgumentException($"Unknown key purpose {purpose}.", nameof(purpose))
         };
@@ -101,7 +101,7 @@ public sealed partial class AuthorizedKeysManager
     /// <param name="key">The public key.</param>
     /// <param name="targets">The <c>host:port</c> targets (IPv6 hosts in brackets).</param>
     /// <param name="gitRepoPath">The repository for a forced <c>git-upload-pack</c>, or <see langword="null"/> for <c>exit 1</c>.</param>
-    /// <param name="comment">The line comment, for example <c>rcynq:source-1</c>.</param>
+    /// <param name="comment">The line comment, for example <c>rcynq:workstation-1</c>.</param>
     /// <returns>The line.</returns>
     /// <exception cref="ArgumentException">A target, the repository path or the comment is unsafe.</exception>
     public static string BuildForwardLine(SshPublicKey key, IReadOnlyList<string> targets, string? gitRepoPath, string comment)
@@ -124,8 +124,8 @@ public sealed partial class AuthorizedKeysManager
     }
 
     /// <summary>
-    /// Builds the line for a peer according to its role: Source peers get Git and patch access on Dest,
-    /// Dest peers get patch access on Source, and every peer gets forward access on a Mediator.
+    /// Builds the line for a peer according to its role: Workstation peers get Git and patch access on Origin,
+    /// Origin peers get patch access on Workstation, and every peer gets forward access on a Relay.
     /// </summary>
     /// <param name="localRole">The local node role.</param>
     /// <param name="key">The peer public key.</param>
@@ -137,9 +137,9 @@ public sealed partial class AuthorizedKeysManager
     {
         var allowed = localRole switch
         {
-            NodeRole.Mediator => purpose == AuthorizedKeyPurpose.MediatorForward,
-            NodeRole.Dest => purpose is AuthorizedKeyPurpose.GitReadOnly or AuthorizedKeyPurpose.PatchForward,
-            NodeRole.Source => purpose == AuthorizedKeyPurpose.PatchForward,
+            NodeRole.Relay => purpose == AuthorizedKeyPurpose.RelayForward,
+            NodeRole.Origin => purpose is AuthorizedKeyPurpose.GitReadOnly or AuthorizedKeyPurpose.PatchForward,
+            NodeRole.Workstation => purpose == AuthorizedKeyPurpose.PatchForward,
             _ => false
         };
 
@@ -271,7 +271,7 @@ public sealed partial class AuthorizedKeysManager
         var tokens = line.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0)
         {
-            throw new FormatException(Texts.Format("Keys.LineEmpty", lineNumber));
+            throw LocalizedError.Format("Keys.LineEmpty", lineNumber);
         }
 
         if (SshPublicKey.AllowedTypes.Contains(tokens[0]))
@@ -296,7 +296,7 @@ public sealed partial class AuthorizedKeysManager
 
         if (end < 0 || inQuotes)
         {
-            throw new FormatException(Texts.Format("Keys.LineNoKey", lineNumber));
+            throw LocalizedError.Format("Keys.LineNoKey", lineNumber);
         }
 
         return new AuthorizedKeyEntry(line[..end], SshPublicKey.Parse(line[end..]), lineNumber);
@@ -344,9 +344,9 @@ public sealed partial class AuthorizedKeysManager
     private static string ValidatePermitOpen(string target)
     {
         var separator = target?.LastIndexOf(':') ?? -1;
-        if (separator <= 0
-            || !int.TryParse(target![(separator + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var port)
-            || port is < 1 or > 65535)
+        if (separator <= 0 ||
+            !int.TryParse(target![(separator + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var port) ||
+            port is < 1 or > 65535)
         {
             throw new ArgumentException($"Forward target '{target}' must have the form host:port.", nameof(target));
         }

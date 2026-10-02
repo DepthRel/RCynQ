@@ -52,6 +52,11 @@
   <Color x:Key="SystemAccentColorLight2">#7DB1FB</Color>
   <Color x:Key="SystemAccentColorLight3">#A3C8FD</Color>
 
+  <!-- The colours of the logo (Assets/rcynq.svg): the blue bar, the violet ring and their mix. -->
+  <SolidColorBrush x:Key="BrandBlueBrush" Color="#60A5FA" />
+  <SolidColorBrush x:Key="BrandVioletBrush" Color="#C084FC" />
+  <SolidColorBrush x:Key="BrandMixBrush" Color="#9094FB" />
+
   <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, JetBrains Mono, DejaVu Sans Mono, Menlo, monospace</FontFamily>
   <CornerRadius x:Key="ControlRadius">6</CornerRadius>
   <CornerRadius x:Key="CardRadius">8</CornerRadius>

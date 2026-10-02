@@ -27,8 +27,13 @@ public static class SshServiceCollectionExtensions
     public static IServiceCollection AddRCynQSsh(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The messages follow the language of the host; a host that registered no localizer gets the default language.
+        services.TryAddSingleton<RCynQ.Localization.ILocalizer>(_ => new RCynQ.Localization.Localizer(RCynQ.Localization.LanguageCatalog.LoadEmbedded()));
         services.TryAddSingleton(provider => provider.GetRequiredService<SyncBridgeOptions>().Ssh);
+        services.TryAddSingleton<SshClientConfigFile>();
         services.TryAddSingleton<SshCommandBuilder>();
+        services.TryAddSingleton<IPinnedHostKeyGuard, PinnedHostKeyGuard>();
         services.TryAddSingleton<ISshExecutor, SystemSshRunner>();
         services.TryAddSingleton<ITcpProbe, SocketTcpProbe>();
         services.TryAddSingleton<IPortAllocator, LoopbackPortAllocator>();

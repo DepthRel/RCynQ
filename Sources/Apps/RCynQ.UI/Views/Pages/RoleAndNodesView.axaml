@@ -72,7 +72,7 @@
             <StackPanel IsVisible="{Binding !IsEndpointModeVisible}">
               <TextBlock Classes="field-label" Text="{loc:Loc Endpoint.Title}" />
               <TextBlock TextWrapping="Wrap"
-                         Text="{loc:Loc Roles.MediatorEndpointHint}" />
+                         Text="{loc:Loc Roles.RelayEndpointHint}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding IsEndpointPortVisible}">
@@ -105,21 +105,61 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:ChainNodeItemViewModel">
                   <Border Classes="row">
-                    <Grid ColumnDefinitions="1.2*,*,1.3*,110,Auto">
-                      <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding Role}" />
-                      <TextBlock Grid.Column="2" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Column="3" Classes="status"
-                                 Classes.online="{Binding IsOnline}"
-                                 Classes.degraded="{Binding IsDegraded}"
-                                 Classes.offline="{Binding IsOffline}"
-                                 Text="{Binding StatusText}" />
-                      <Button Grid.Column="4" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Roles.RemoveNode}"
-                              Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).RemoveNodeCommand}"
-                              CommandParameter="{Binding}">
-                        <controls:IconView Classes="small" IconKey="Icon.Trash" />
-                      </Button>
-                    </Grid>
+                    <StackPanel Spacing="6">
+                      <Grid ColumnDefinitions="1.2*,*,1.3*,110,Auto">
+                        <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding Role}" />
+                        <TextBlock Grid.Column="2" Classes="mono secondary" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="3" Classes="status"
+                                   Classes.online="{Binding IsOnline}"
+                                   Classes.degraded="{Binding IsDegraded}"
+                                   Classes.offline="{Binding IsOffline}"
+                                   Text="{Binding StatusText}" />
+                        <Button Grid.Column="4" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Roles.RemoveNode}"
+                                Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).RemoveNodeCommand}"
+                                CommandParameter="{Binding}">
+                          <controls:IconView Classes="small" IconKey="Icon.Trash" />
+                        </Button>
+                      </Grid>
+
+                      <!-- The ways to the node: shown only when it is reachable at more than one address. -->
+                      <StackPanel Margin="18,0,0,0" Spacing="2" IsVisible="{Binding HasRoutes}">
+                        <RadioButton IsChecked="{Binding IsAutoRoute, Mode=OneWay}"
+                                     Content="{loc:Loc Routes.Auto}" ToolTip.Tip="{loc:Loc Routes.AutoTip}"
+                                     Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).AutoRouteCommand}"
+                                     CommandParameter="{Binding}" />
+                        <ItemsControl ItemsSource="{Binding Routes}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="items:LinkRouteItemViewModel">
+                              <Grid ColumnDefinitions="Auto,1.3*,90,110,*,Auto,Auto,Auto">
+                                <RadioButton IsChecked="{Binding IsPinned, Mode=OneWay}" ToolTip.Tip="{loc:Loc Routes.PinTip}"
+                                             Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).SelectRouteCommand}"
+                                             CommandParameter="{Binding}" />
+                                <TextBlock Grid.Column="1" Classes="mono secondary" VerticalAlignment="Center" Margin="6,0,0,0"
+                                           Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Classes="status online" VerticalAlignment="Center" Text="{Binding ActiveText}" />
+                                <TextBlock Grid.Column="3" Classes="status" VerticalAlignment="Center"
+                                           Classes.online="{Binding IsReachable}"
+                                           Classes.offline="{Binding IsUnreachable}"
+                                           Text="{Binding StatusText}" />
+                                <TextBlock Grid.Column="4" Classes="muted" VerticalAlignment="Center" Text="{Binding PriorityText}" />
+                                <Button Grid.Column="5" Classes="icon hover-only" Padding="5" Content="▲" ToolTip.Tip="{loc:Loc Routes.Raise}"
+                                        Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RaiseRouteCommand}"
+                                        CommandParameter="{Binding}" />
+                                <Button Grid.Column="6" Classes="icon hover-only" Padding="5" Content="▼" ToolTip.Tip="{loc:Loc Routes.Lower}"
+                                        Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).LowerRouteCommand}"
+                                        CommandParameter="{Binding}" />
+                                <Button Grid.Column="7" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Routes.Remove}"
+                                        Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RemoveRouteCommand}"
+                                        CommandParameter="{Binding}">
+                                  <controls:IconView Classes="small" IconKey="Icon.Trash" />
+                                </Button>
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </StackPanel>
                   </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>

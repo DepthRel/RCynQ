@@ -23,22 +23,22 @@ public sealed class AesGcmSecretStore : ISecretStore
     /// <summary>
     /// The key file name inside the keys directory.
     /// </summary>
-    public const string KeyFileName = "secrets.key";
+    public const string KEY_FILE_NAME = "secrets.key";
 
     /// <summary>
     /// AES key size in bytes.
     /// </summary>
-    private const int KeySize = 32;
+    private const int KEY_SIZE = 32;
 
     /// <summary>
     /// GCM nonce size in bytes.
     /// </summary>
-    private const int NonceSize = 12;
+    private const int NONCE_SIZE = 12;
 
     /// <summary>
     /// GCM tag size in bytes.
     /// </summary>
-    private const int TagSize = 16;
+    private const int TAG_SIZE = 16;
 
     /// <summary>
     /// The context factory.
@@ -66,13 +66,20 @@ public sealed class AesGcmSecretStore : ISecretStore
     private byte[]? _key;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AesGcmSecretStore"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="contextFactory">The context factory.</param>
     /// <param name="appDataFactory">The application data factory.</param>
     /// <param name="timeProvider">The clock.</param>
-    public AesGcmSecretStore(IDbContextFactory<RCynQDbContext> contextFactory, IAppDataFactory appDataFactory, TimeProvider timeProvider)
+    public AesGcmSecretStore(ILocalizer localizer, IDbContextFactory<RCynQDbContext> contextFactory, IAppDataFactory appDataFactory, TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _contextFactory = contextFactory;
         _appDataFactory = appDataFactory;
         _timeProvider = timeProvider;
@@ -85,11 +92,11 @@ public sealed class AesGcmSecretStore : ISecretStore
         ArgumentNullException.ThrowIfNull(value);
         var key = await GetKeyAsync(cancellationToken);
 
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+        var nonce = RandomNumberGenerator.GetBytes(NONCE_SIZE);
         var plain = Encoding.UTF8.GetBytes(value);
         var cipher = new byte[plain.Length];
-        var tag = new byte[TagSize];
-        using (var aes = new AesGcm(key, TagSize))
+        var tag = new byte[TAG_SIZE];
+        using (var aes = new AesGcm(key, TAG_SIZE))
         {
             aes.Encrypt(nonce, plain, cipher, tag, Encoding.UTF8.GetBytes(secretName));
         }
@@ -126,13 +133,13 @@ public sealed class AesGcmSecretStore : ISecretStore
         var plain = new byte[entity.CipherText.Length];
         try
         {
-            using var aes = new AesGcm(key, TagSize);
+            using var aes = new AesGcm(key, TAG_SIZE);
             aes.Decrypt(entity.Nonce, entity.CipherText, entity.Tag, plain, Encoding.UTF8.GetBytes(secretName));
             return Encoding.UTF8.GetString(plain);
         }
         catch (CryptographicException ex)
         {
-            throw new SyncBridgeException(Texts.Format("Secret.Undecryptable", secretName), ex);
+            throw new SyncBridgeException(_localizer.Format("Secret.Undecryptable", secretName), ex);
         }
         finally
         {
@@ -176,16 +183,16 @@ public sealed class AesGcmSecretStore : ISecretStore
                 return _key;
             }
 
-            var path = Path.Combine(_appDataFactory.Create().KeysDirectory, KeyFileName);
+            var path = Path.Combine(_appDataFactory.Create().KeysDirectory, KEY_FILE_NAME);
             if (!File.Exists(path))
             {
-                await FilePermissions.WriteAtomicallyAsync(path, RandomNumberGenerator.GetBytes(KeySize), ownerOnly: true, cancellationToken);
+                await FilePermissions.WriteAtomicallyAsync(path, RandomNumberGenerator.GetBytes(KEY_SIZE), ownerOnly: true, cancellationToken);
             }
 
             var key = await File.ReadAllBytesAsync(path, cancellationToken);
-            if (key.Length != KeySize)
+            if (key.Length != KEY_SIZE)
             {
-                throw new SyncBridgeException(Texts.Format("Secret.KeyMalformed", path, KeySize, key.Length));
+                throw new SyncBridgeException(_localizer.Format("Secret.KeyMalformed", path, KEY_SIZE, key.Length));
             }
 
             _key = key;

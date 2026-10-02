@@ -19,12 +19,12 @@ public static class LocalizedText
     /// The character that separates the parts of an encoded message: the ASCII "unit separator", which does not occur in
     /// ordinary text.
     /// </summary>
-    private const char Separator = '\u001F';
+    private const char SEPARATOR = '\u001F';
 
     /// <summary>
     /// The marker an encoded message starts with.
     /// </summary>
-    private static readonly string Marker = $"{Separator}lt{Separator}";
+    private static readonly string _marker = $"{SEPARATOR}lt{SEPARATOR}";
 
     /// <summary>
     /// Encodes a message.
@@ -35,10 +35,10 @@ public static class LocalizedText
     public static string Encode(string key, params object?[] args)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        var text = new StringBuilder(Marker).Append(key.Replace(Separator, ' '));
+        var text = new StringBuilder(_marker).Append(key.Replace(SEPARATOR, ' '));
         foreach (var arg in args)
         {
-            text.Append(Separator).Append(Convert.ToString(arg, CultureInfo.InvariantCulture)?.Replace(Separator, ' '));
+            text.Append(SEPARATOR).Append(Convert.ToString(arg, CultureInfo.InvariantCulture)?.Replace(SEPARATOR, ' '));
         }
 
         return text.ToString();
@@ -49,22 +49,24 @@ public static class LocalizedText
     /// </summary>
     /// <param name="text">The string.</param>
     /// <returns><see langword="true"/> for a message made by <see cref="Encode"/>.</returns>
-    public static bool IsEncoded(string? text) => text is not null && text.StartsWith(Marker, StringComparison.Ordinal);
+    public static bool IsEncoded(string? text) => text is not null && text.StartsWith(_marker, StringComparison.Ordinal);
 
     /// <summary>
     /// Words a message in the language in use.
     /// </summary>
     /// <param name="text">An encoded message, a plain text or <see langword="null"/>.</param>
-    /// <param name="localizer">The localizer to use; the one of the application by default.</param>
+    /// <param name="localizer">The localizer of the reader.</param>
     /// <returns>The text in the language of the localizer; a plain text is returned as it is.</returns>
-    public static string? Render(string? text, ILocalizer? localizer = null)
+    /// <exception cref="ArgumentNullException"><paramref name="localizer"/> is <see langword="null"/>.</exception>
+    public static string? Render(string? text, ILocalizer localizer)
     {
+        ArgumentNullException.ThrowIfNull(localizer);
         if (!IsEncoded(text))
         {
             return text;
         }
 
-        var parts = text![Marker.Length..].Split(Separator);
-        return (localizer ?? Texts.Localizer).Format(parts[0], [.. parts.Skip(1)]);
+        var parts = text![_marker.Length..].Split(SEPARATOR);
+        return localizer.Format(parts[0], [.. parts.Skip(1)]);
     }
 }

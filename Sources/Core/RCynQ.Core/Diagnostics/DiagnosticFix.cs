@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using RCynQ.Core.Enums;
 using RCynQ.Core.Validation;
 
 namespace RCynQ.Core.Diagnostics;

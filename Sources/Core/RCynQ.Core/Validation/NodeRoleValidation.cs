@@ -18,7 +18,7 @@ public static class NodeRoleValidation
     /// <summary>
     /// Parses the given text into a <see cref="NodeRole"/>.
     /// </summary>
-    /// <param name="value">The role name, such as <c>"source"</c> or <c>"mediator"</c>.</param>
+    /// <param name="value">The role name, such as <c>"workstation"</c> or <c>"relay"</c>.</param>
     /// <param name="ignoreCase">
     /// <see langword="true"/> to ignore case; otherwise <see langword="false"/>.
     /// Defaults to <see langword="true"/>.
@@ -53,7 +53,7 @@ public static class NodeRoleValidation
     /// </param>
     /// <param name="role">
     /// When this method returns <see langword="true"/>, the parsed role;
-    /// otherwise <see cref="NodeRole.Source"/>.
+    /// otherwise <see cref="NodeRole.Workstation"/>.
     /// </param>
     /// <returns>
     /// <see langword="true"/> when the value is a defined member name;

@@ -68,21 +68,22 @@ public sealed class LocalizerTests
     }
 
     /// <summary>
-    /// The application carries English and Russian, English is the default, and the languages are offered by name.
+    /// The application carries six languages, English is the default and comes first, the others are offered by their
+    /// own names.
     /// </summary>
     [Fact]
-    public void EmbeddedCatalog_HasEnglishAndRussian()
+    public void EmbeddedCatalog_HasTheSixLanguages()
     {
         var catalog = LanguageCatalog.LoadEmbedded();
 
-        Assert.Equal(["en", "ru"], catalog.Languages.Select(l => l.Code));
-        Assert.Equal(["English", "Русский"], catalog.Languages.Select(l => l.NativeName));
+        Assert.Equal(["en", "de", "es", "fr", "pt", "ru"], catalog.Languages.Select(l => l.Code));
+        Assert.Equal(["English", "Deutsch", "Español", "Français", "Português", "Русский"], catalog.Languages.Select(l => l.NativeName));
         Assert.Equal("en", catalog.Default.Language.Code);
     }
 
     /// <summary>
-    /// The operating system decides the language of a first start: Russian gets Russian, everything else the default
-    /// language, whatever the region is.
+    /// The operating system decides the language of a first start: a language with a pack gets that pack, whatever the
+    /// region is, and everything else the default language.
     /// </summary>
     [Theory]
     [InlineData("ru-RU", "ru")]
@@ -90,10 +91,15 @@ public sealed class LocalizerTests
     [InlineData("ru-KZ", "ru")]
     [InlineData("en-US", "en")]
     [InlineData("en-GB", "en")]
-    [InlineData("de-DE", "en")]
+    [InlineData("de-DE", "de")]
+    [InlineData("de-AT", "de")]
+    [InlineData("es-MX", "es")]
+    [InlineData("fr-CA", "fr")]
+    [InlineData("pt-PT", "pt")]
+    [InlineData("pt-BR", "pt")]
     [InlineData("ja-JP", "en")]
     [InlineData("", "en")]
-    public void Detect_ChoosesRussianOrTheDefault(string culture, string expected)
+    public void Detect_ChoosesTheLanguageOfTheSystemOrTheDefault(string culture, string expected)
         => Assert.Equal(expected, LanguageCatalog.LoadEmbedded().Detect(CultureInfo.GetCultureInfo(culture)).Code);
 
     /// <summary>
@@ -156,21 +162,15 @@ public sealed class LocalizerTests
     }
 
     /// <summary>
-    /// The ambient texts of the application follow the localizer that is put in place of the default one.
+    /// A text that is given fewer values than it asks for (a text encoded by a node of another version) is shown as it is
+    /// written instead of failing.
     /// </summary>
     [Fact]
-    public void Texts_FollowsTheReplacedLocalizer()
+    public void Localizer_ShowsTheTextAsWritten_WhenValuesAreMissing()
     {
-        var before = Texts.Localizer;
-        try
-        {
-            Texts.Localizer = new Localizer(Catalog(), "ru");
-            Assert.Equal("Привет", Texts.Get("Hello"));
-            Assert.Equal("2 шт., 0,5", Texts.Format("Count", 2, 0.5));
-        }
-        finally
-        {
-            Texts.Localizer = before;
-        }
+        var localizer = new Localizer(Catalog(), "en");
+
+        Assert.Equal("{0} items, {1:0.0}", localizer.Format("Count", 3));
+        Assert.Equal("{0} items, {1:0.0}", LocalizedText.Render(LocalizedText.Encode("Count", 3), localizer));
     }
 }

@@ -17,6 +17,7 @@ using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Navigation;
 using RCynQ.UI.ViewModels.Pages;
+using RCynQ.UI.ViewModels.Repositories;
 using RCynQ.UI.ViewModels.Setup;
 using RCynQ.UI.Views;
 using RCynQ.UI.Views.Dialogs;
@@ -33,7 +34,31 @@ public sealed class App : Application
     /// <summary>
     /// The maximum time the application waits for the service to stop on exit.
     /// </summary>
-    private static readonly TimeSpan ExitStopTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan _exitStopTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="App"/> class.
+    /// </summary>
+    /// <remarks>
+    /// The application is where the user interface is put together, so the localizer is created here, before the first
+    /// view is loaded, and handed to everything that words a text.
+    /// </remarks>
+    public App()
+    {
+        Localizer = new Localizer(LanguageCatalog.LoadEmbedded());
+        Localization = new LocalizationSource(Localizer);
+    }
+
+    /// <summary>
+    /// Gets the localizer of the user interface.
+    /// </summary>
+    public ILocalizer Localizer { get; }
+
+    /// <summary>
+    /// Gets the texts of the current language as a source of bindings; the views reach it through
+    /// <see cref="LocExtension"/>.
+    /// </summary>
+    public LocalizationSource Localization { get; }
 
     /// <inheritdoc />
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -52,7 +77,7 @@ public sealed class App : Application
             // The language is stored next to the configuration file. Reading it takes a moment, so the splash already
             // speaks the language of the user; on the first start the language of the operating system is chosen here.
             var uiSettings = new JsonUiSettingsStore(JsonUiSettingsStore.PathFor(settings.ConfigPath));
-            var language = new LanguageService(Texts.Localizer, uiSettings);
+            var language = new LanguageService(Localizer, uiSettings);
             language.Initialize();
 
             var splash = new SplashWindow();
@@ -74,7 +99,7 @@ public sealed class App : Application
     /// <param name="uiSettings">The local settings of the UI.</param>
     /// <param name="language">The language service, already initialized.</param>
     /// <returns>A task that completes when the main window is shown.</returns>
-    private static async Task StartAsync(
+    private async Task StartAsync(
         IClassicDesktopStyleApplicationLifetime desktop,
         SplashWindow splash,
         IReadOnlyList<string> args,
@@ -87,25 +112,25 @@ public sealed class App : Application
             // Lets the splash draw its first frame before the work below keeps the UI thread busy.
             await Dispatcher.UIThread.InvokeAsync(static () => { }, DispatcherPriority.Background);
 
-            splash.ShowStep(Texts.Get("Splash.Preparing"));
+            splash.ShowStep(Localizer.Get("Splash.Preparing"));
             var tokens = new ApiTokenProvider(settings);
-            var api = new ServiceApiClient(settings, tokens);
+            var api = new ServiceApiClient(Localizer, settings, tokens);
             var events = new SignalRNodeEventStream(settings, tokens);
             var controller = Compose(args, settings, api, out var cli);
             var (main, owner) = CreateViewModel(settings, uiSettings, language, api, events, controller, cli);
 
             // The service is started and the configuration is read before the window appears.
-            splash.ShowStep(Texts.Get("Splash.StartingService"));
+            splash.ShowStep(Localizer.Get("Splash.StartingService"));
             try
             {
                 await main.InitializeAsync();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                main.StartupError = Texts.Format("Splash.StartFailed", ex.Message);
+                main.StartupError = Localizer.Format("Splash.StartFailed", Localizer.Describe(ex));
             }
 
-            splash.ShowStep(Texts.Get("Splash.OpeningWindow"));
+            splash.ShowStep(Localizer.Get("Splash.OpeningWindow"));
             var window = new MainWindow { DataContext = main };
             owner.Value = window;
 
@@ -118,7 +143,7 @@ public sealed class App : Application
                 Task.Run(() => events.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(3));
 
                 // The service started by the UI is stopped with it; it closes its tunnels and SSH forwards on shutdown.
-                Task.Run(() => controller.StopAsync()).Wait(ExitStopTimeout);
+                Task.Run(() => controller.StopAsync()).Wait(_exitStopTimeout);
                 controller.Dispose();
                 api.Dispose();
             };
@@ -127,7 +152,7 @@ public sealed class App : Application
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // The application cannot start: say so instead of leaving a process without a window.
-            var failure = new TextDialog { DataContext = new TextDialogViewModel("RCynQ", Texts.Format("Splash.StartFailed", ex.Message)) };
+            var failure = new TextDialog { DataContext = new TextDialogViewModel("RCynQ", Localizer.Format("Splash.StartFailed", Localizer.Describe(ex))) };
             desktop.MainWindow = failure;
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             failure.Show();
@@ -143,7 +168,7 @@ public sealed class App : Application
     /// <param name="api">The API client.</param>
     /// <param name="cli">The command that starts the command line tool, or <see langword="null"/> when it was not found.</param>
     /// <returns>The controller.</returns>
-    private static ServiceProcessController Compose(
+    private ServiceProcessController Compose(
         IReadOnlyList<string> args,
         ServiceConnectionSettings settings,
         IServiceApiClient api,
@@ -151,7 +176,7 @@ public sealed class App : Application
     {
         var command = ServiceExecutableLocator.Locate(AppContext.BaseDirectory, args, Environment.GetEnvironmentVariable, OperatingSystem.IsWindows());
         cli = ExecutableLocator.Locate(AppContext.BaseDirectory, "rcynq", "cli", "RCynQ.Cli", OperatingSystem.IsWindows(), Environment.GetEnvironmentVariable);
-        return new ServiceProcessController(settings, api, new SystemChildProcessLauncher(), command);
+        return new ServiceProcessController(Localizer, settings, api, new SystemChildProcessLauncher(), command);
     }
 
     /// <summary>
@@ -165,7 +190,7 @@ public sealed class App : Application
     /// <param name="controller">The controller of the local service.</param>
     /// <param name="cli">The command that starts the command line tool, or <see langword="null"/>.</param>
     /// <returns>The main view model and the holder of the window that owns the dialogs, filled when the window exists.</returns>
-    private static (MainViewModel Main, OwnerHolder Owner) CreateViewModel(
+    private (MainViewModel Main, OwnerHolder Owner) CreateViewModel(
         ServiceConnectionSettings settings,
         JsonUiSettingsStore uiSettings,
         ILanguageService language,
@@ -176,22 +201,24 @@ public sealed class App : Application
     {
         var owner = new OwnerHolder();
         var dialogs = new AvaloniaDialogService(() => owner.Value);
-        var languageSelector = new LanguageViewModel(language, FlagImages.Load);
+        var languageSelector = new LanguageViewModel(Localizer, language, FlagImages.Load);
         var main = new MainViewModel(
+            Localizer,
             api,
             events,
             new AvaloniaUiDispatcher(),
             new RoleAdapter(),
             controller,
-            new SetupViewModel(settings.ConfigPath, dialogs, languageSelector),
-            new OverviewViewModel(api),
-            new RoleAndNodesViewModel(api, dialogs, new ElevatedCliRunner(settings.ConfigPath, cli), new LocalNodeSettings(settings.ConfigPath)),
-            new SyncViewModel(api, dialogs),
-            new TunnelViewModel(api),
-            new DiagnosticsViewModel(api, dialogs),
-            new BranchViewModel(api),
-            new LogsViewModel(api, dialogs),
-            new SettingsViewModel(languageSelector, uiSettings.FilePath));
+            new SetupViewModel(Localizer, settings.ConfigPath, dialogs, languageSelector),
+            new OverviewViewModel(Localizer, api),
+            new RoleAndNodesViewModel(Localizer, api, dialogs, new ElevatedCliRunner(Localizer, settings.ConfigPath, cli), new LocalNodeSettings(Localizer, settings.ConfigPath)),
+            new SyncViewModel(Localizer, api, dialogs),
+            new TunnelViewModel(Localizer, api),
+            new DiagnosticsViewModel(Localizer, api, dialogs),
+            new BranchViewModel(Localizer, api),
+            new LogsViewModel(Localizer, api, dialogs),
+            new SettingsViewModel(Localizer, languageSelector, api, dialogs, uiSettings.FilePath),
+            new RepositoriesViewModel(Localizer, api, dialogs));
         return (main, owner);
     }
 

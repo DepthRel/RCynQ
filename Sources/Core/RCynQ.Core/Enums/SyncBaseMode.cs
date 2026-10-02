@@ -20,8 +20,8 @@ public enum SyncBaseMode
     None = 0,
 
     /// <summary>
-    /// The sync base is built automatically from a Git commit both nodes have: <c>HEAD</c> on Dest, the commit Source last
-    /// pulled from Dest on Source.
+    /// The sync base is built automatically from a Git commit both nodes have: <c>HEAD</c> on Origin, the commit Workstation last
+    /// pulled from Origin on Workstation.
     /// </summary>
     [Description("Built automatically from a Git commit both nodes have.")]
     Git = 1,

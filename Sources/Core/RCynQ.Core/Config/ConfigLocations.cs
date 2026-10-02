@@ -5,13 +5,13 @@ namespace RCynQ.Core.Config;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A <b>portable installation</b> is a directory that contains the <see cref="PortableMarkerFileName"/> file (created by
+/// A <b>portable installation</b> is a directory that contains the <see cref="PORTABLE_MARKER_FILE_NAME"/> file (created by
 /// the publish scripts) next to the <c>service</c>, <c>ui</c> and <c>cli</c> directories. In a portable installation the
 /// configuration is <c>&lt;root&gt;/config/syncbridge.json</c> and all data (database, keys, logs, temporary files) is
 /// stored below <c>&lt;root&gt;/data</c>, so nothing is written to the user profile.
 /// </para>
 /// <para>
-/// Configuration precedence: an explicit path, the <see cref="EnvironmentVariable"/> variable, the portable
+/// Configuration precedence: an explicit path, the <see cref="ENVIRONMENT_VARIABLE"/> variable, the portable
 /// configuration, <c>./syncbridge.json</c> when it exists, and finally <see cref="UserConfigPath"/>.
 /// </para>
 /// </remarks>
@@ -20,22 +20,22 @@ public static class ConfigLocations
     /// <summary>
     /// The environment variable that points to the configuration file.
     /// </summary>
-    public const string EnvironmentVariable = "RCYNQ_CONFIG";
+    public const string ENVIRONMENT_VARIABLE = "RCYNQ_CONFIG";
 
     /// <summary>
     /// The file that marks the root of a portable installation.
     /// </summary>
-    public const string PortableMarkerFileName = "rcynq.portable";
+    public const string PORTABLE_MARKER_FILE_NAME = "rcynq.portable";
 
     /// <summary>
     /// The configuration directory inside a portable installation.
     /// </summary>
-    public const string PortableConfigDirectory = "config";
+    public const string PORTABLE_CONFIG_DIRECTORY = "config";
 
     /// <summary>
     /// The data directory inside a portable installation.
     /// </summary>
-    public const string PortableDataDirectory = "data";
+    public const string PORTABLE_DATA_DIRECTORY = "data";
 
     /// <summary>
     /// Gets the per-user configuration file used outside portable installations: <c>%APPDATA%\RCynQ\syncbridge.json</c>
@@ -44,7 +44,7 @@ public static class ConfigLocations
     public static string UserConfigPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
         "RCynQ",
-        SyncBridgeOptions.DefaultFileName);
+        SyncBridgeOptions.DEFAULT_FILE_NAME);
 
     /// <summary>
     /// Finds the portable installation that contains an application directory.
@@ -56,7 +56,7 @@ public static class ConfigLocations
         var directory = new DirectoryInfo(Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory)));
         for (var level = 0; level < 2 && directory is not null; level++, directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, PortableMarkerFileName)))
+            if (File.Exists(Path.Combine(directory.FullName, PORTABLE_MARKER_FILE_NAME)))
             {
                 return directory.FullName;
             }
@@ -86,7 +86,7 @@ public static class ConfigLocations
             return Path.GetFullPath(explicitPath);
         }
 
-        var fromEnvironment = (environment ?? Environment.GetEnvironmentVariable)(EnvironmentVariable);
+        var fromEnvironment = (environment ?? Environment.GetEnvironmentVariable)(ENVIRONMENT_VARIABLE);
         if (!string.IsNullOrWhiteSpace(fromEnvironment))
         {
             return Path.GetFullPath(fromEnvironment);
@@ -95,10 +95,10 @@ public static class ConfigLocations
         var root = (portableRoot ?? (() => FindPortableRoot()))();
         if (root is not null)
         {
-            return Path.Combine(root, PortableConfigDirectory, SyncBridgeOptions.DefaultFileName);
+            return Path.Combine(root, PORTABLE_CONFIG_DIRECTORY, SyncBridgeOptions.DEFAULT_FILE_NAME);
         }
 
-        var local = Path.Combine(currentDirectory ?? Directory.GetCurrentDirectory(), SyncBridgeOptions.DefaultFileName);
+        var local = Path.Combine(currentDirectory ?? Directory.GetCurrentDirectory(), SyncBridgeOptions.DEFAULT_FILE_NAME);
         return File.Exists(local) ? Path.GetFullPath(local) : Path.GetFullPath(userConfigPath ?? UserConfigPath);
     }
 
@@ -129,7 +129,7 @@ public static class ConfigLocations
 
         if (portableRoot is not null)
         {
-            return Path.Combine(portableRoot, PortableDataDirectory);
+            return Path.Combine(portableRoot, PORTABLE_DATA_DIRECTORY);
         }
 
         var nodeSegment = string.IsNullOrWhiteSpace(options.NodeId) ? "default" : options.NodeId.Trim();
@@ -141,7 +141,7 @@ public static class ConfigLocations
 
     /// <summary>
     /// Makes the storage settings absolute so every component uses the same files: resolves <c>DataRoot</c> and points
-    /// the SSH <c>known_hosts</c> file into the data directory unless it was configured.
+    /// the SSH <c>known_hosts</c> file and the SSH client configuration into the data directory unless they were configured.
     /// </summary>
     /// <param name="options">The node options to update.</param>
     /// <param name="configPath">The configuration file, or <see langword="null"/>.</param>
@@ -153,6 +153,11 @@ public static class ConfigLocations
         if (string.IsNullOrWhiteSpace(options.Ssh.KnownHostsFile))
         {
             options.Ssh.KnownHostsFile = AppDataPaths.FromRoot(options.DataRoot).KnownHostsPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Ssh.ConfigFile))
+        {
+            options.Ssh.ConfigFile = AppDataPaths.FromRoot(options.DataRoot).SshConfigPath;
         }
     }
 }

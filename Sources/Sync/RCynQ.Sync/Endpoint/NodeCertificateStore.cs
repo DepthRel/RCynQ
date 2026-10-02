@@ -24,17 +24,17 @@ public static class NodeCertificateStore
     /// <summary>
     /// The certificate file name inside <see cref="AppDataPaths.TlsDirectory"/>.
     /// </summary>
-    public const string CertificateFileName = "node.crt";
+    public const string CERTIFICATE_FILE_NAME = "node.crt";
 
     /// <summary>
     /// The private key file name inside <see cref="AppDataPaths.TlsDirectory"/>.
     /// </summary>
-    public const string PrivateKeyFileName = "node.key";
+    public const string PRIVATE_KEY_FILE_NAME = "node.key";
 
     /// <summary>
     /// The prefix of a formatted fingerprint.
     /// </summary>
-    public const string FingerprintPrefix = "SHA256:";
+    public const string FINGERPRINT_PREFIX = "SHA256:";
 
     /// <summary>
     /// The certificate lifetime.
@@ -54,8 +54,8 @@ public static class NodeCertificateStore
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentException.ThrowIfNullOrWhiteSpace(nodeId);
 
-        var certificatePath = Path.Combine(paths.TlsDirectory, CertificateFileName);
-        var keyPath = Path.Combine(paths.TlsDirectory, PrivateKeyFileName);
+        var certificatePath = Path.Combine(paths.TlsDirectory, CERTIFICATE_FILE_NAME);
+        var keyPath = Path.Combine(paths.TlsDirectory, PRIVATE_KEY_FILE_NAME);
         if (!File.Exists(certificatePath) || !File.Exists(keyPath))
         {
             Create(paths.TlsDirectory, certificatePath, keyPath, nodeId, timeProvider ?? TimeProvider.System);
@@ -72,7 +72,7 @@ public static class NodeCertificateStore
     public static string Fingerprint(X509Certificate2 certificate)
     {
         ArgumentNullException.ThrowIfNull(certificate);
-        return FingerprintPrefix + Convert.ToHexString(SHA256.HashData(certificate.RawData));
+        return FINGERPRINT_PREFIX + Convert.ToHexString(SHA256.HashData(certificate.RawData));
     }
 
     /// <summary>
@@ -89,9 +89,9 @@ public static class NodeCertificateStore
         }
 
         var trimmed = value.Trim();
-        if (trimmed.StartsWith(FingerprintPrefix, StringComparison.OrdinalIgnoreCase))
+        if (trimmed.StartsWith(FINGERPRINT_PREFIX, StringComparison.OrdinalIgnoreCase))
         {
-            trimmed = trimmed[FingerprintPrefix.Length..];
+            trimmed = trimmed[FINGERPRINT_PREFIX.Length..];
         }
 
         var hex = trimmed.Replace(":", string.Empty, StringComparison.Ordinal)
@@ -103,7 +103,7 @@ public static class NodeCertificateStore
             throw new FormatException($"'{value}' is not a SHA-256 certificate fingerprint.");
         }
 
-        return FingerprintPrefix + hex;
+        return FINGERPRINT_PREFIX + hex;
     }
 
     /// <summary>
@@ -116,9 +116,9 @@ public static class NodeCertificateStore
     public static bool Matches(X509Certificate2? certificate, string? fingerprint)
     {
         var expected = NormalizeFingerprint(fingerprint);
-        return certificate is not null
-            && expected is not null
-            && string.Equals(Fingerprint(certificate), expected, StringComparison.Ordinal);
+        return certificate is not null &&
+            expected is not null &&
+            string.Equals(Fingerprint(certificate), expected, StringComparison.Ordinal);
     }
 
     /// <summary>

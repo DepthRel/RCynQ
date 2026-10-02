@@ -1,4 +1,5 @@
 using RCynQ.Core.Config;
+using RCynQ.Localization;
 
 namespace RCynQ.UI.Services.Configuration;
 
@@ -7,12 +8,17 @@ namespace RCynQ.UI.Services.Configuration;
 /// </summary>
 public sealed class LocalNodeSettings : ILocalNodeSettings
 {
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalNodeSettings"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="configPath">The path of the configuration file.</param>
-    public LocalNodeSettings(string configPath)
+    public LocalNodeSettings(ILocalizer localizer, string configPath)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
         ConfigPath = configPath;
     }
@@ -25,5 +31,5 @@ public sealed class LocalNodeSettings : ILocalNodeSettings
 
     /// <inheritdoc />
     public Task<IReadOnlyList<string>> SaveAsync(NodeSetupValues values, CancellationToken cancellationToken = default)
-        => LocalConfigFile.SaveAsync(ConfigPath, values, cancellationToken);
+        => LocalConfigFile.SaveAsync(ConfigPath, values, _localizer, cancellationToken);
 }

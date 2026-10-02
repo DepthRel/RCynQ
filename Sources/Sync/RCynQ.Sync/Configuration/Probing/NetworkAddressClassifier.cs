@@ -40,10 +40,10 @@ public static class NetworkAddressClassifier
                 return NetworkAddressKind.Tunnel;
             }
 
-            var isPrivate = bytes[0] == 10
-                || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
-                || (bytes[0] == 192 && bytes[1] == 168)
-                || (bytes[0] == 100 && bytes[1] is >= 64 and <= 127);
+            var isPrivate = bytes[0] == 10 ||
+                (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
+                (bytes[0] == 192 && bytes[1] == 168) ||
+                (bytes[0] == 100 && bytes[1] is >= 64 and <= 127);
             return isPrivate ? NetworkAddressKind.Private : NetworkAddressKind.Public;
         }
 

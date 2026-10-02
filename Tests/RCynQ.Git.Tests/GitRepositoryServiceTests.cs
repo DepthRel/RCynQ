@@ -29,12 +29,12 @@ public class GitRepositoryServiceTests
         using var dir = new TempDirectory();
         Setup("rev-parse --is-inside-work-tree", 0, "true\n");
         Setup("symbolic-ref --quiet --short HEAD", 0, "feature/x\n");
-        Setup("rev-parse --verify --quiet refs/remotes/dest/feature/x", 0, "abc\n");
-        Setup("rev-list --left-right --count HEAD...refs/remotes/dest/feature/x", 0, "2\t5\n");
+        Setup("rev-parse --verify --quiet refs/remotes/rcynq/feature/x", 0, "abc\n");
+        Setup("rev-list --left-right --count HEAD...refs/remotes/rcynq/feature/x", 0, "2\t5\n");
 
-        var info = await new GitRepositoryService(_git).GetBranchInfoAsync(dir.Path, "dest");
+        var info = await new GitRepositoryService(TestTexts.English, _git).GetBranchInfoAsync(dir.Path, "rcynq");
 
-        info.Should().Be(new Core.State.GitBranchInfo(true, "feature/x", "refs/remotes/dest/feature/x", 2, 5));
+        info.Should().Be(new Core.State.GitBranchInfo(true, "feature/x", "refs/remotes/rcynq/feature/x", 2, 5));
     }
 
     /// <summary>
@@ -46,17 +46,17 @@ public class GitRepositoryServiceTests
     {
         using var dir = new TempDirectory();
         _git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "", " * [new branch] main -> dest/main"));
+            .Returns(new ProcessResult(0, "", " * [new branch] main -> rcynq/main"));
 
-        var url = GitRepositoryService.BuildSshUrl(new SshEndpoint("git", "dest.internal", 2222), "/srv/repo");
-        var output = await new GitRepositoryService(_git).FetchAsync(dir.Path, url, "dest", "ssh -o BatchMode=yes");
+        var url = GitRepositoryService.BuildSshUrl(new SshEndpoint("git", "origin.internal", 2222), "/srv/repo");
+        var output = await new GitRepositoryService(TestTexts.English, _git).FetchAsync(dir.Path, url, "rcynq", "ssh -o BatchMode=yes");
 
-        url.Should().Be("ssh://git@dest.internal:2222/srv/repo");
-        output.Should().Contain("dest/main");
+        url.Should().Be("ssh://git@origin.internal:2222/srv/repo");
+        output.Should().Contain("rcynq/main");
         await _git.Received(1).RunAsync(
-            Arg.Is<IReadOnlyList<string>>(args => args[0] == "fetch" && args.Contains(url) && args.Last() == "+refs/heads/*:refs/remotes/dest/*" && !args.Contains("push")),
+            Arg.Is<IReadOnlyList<string>>(args => args[0] == "fetch" && args.Contains(url) && args.Last() == "+refs/heads/*:refs/remotes/rcynq/*" && !args.Contains("push")),
             dir.Path,
-            Arg.Is<IReadOnlyDictionary<string, string>?>(env => env!["GIT_SSH_COMMAND"] == "ssh -o BatchMode=yes"),
+            Arg.Is<IReadOnlyDictionary<string, string>?>(env => env!["GIT_SSH_COMMAND"] == "ssh -o BatchMode=yes" && env["GIT_SSH_VARIANT"] == "ssh"),
             Arg.Any<CancellationToken>());
     }
 
@@ -65,15 +65,16 @@ public class GitRepositoryServiceTests
     /// </summary>
     /// <param name="url">The URL.</param>
     /// <param name="remote">The remote name.</param>
+    /// <returns>A task representing the test.</returns>
     [Theory]
-    [InlineData("--upload-pack=touch /tmp/x", "dest")]
-    [InlineData("ext::sh -c touch% /tmp/pwned", "dest")]
-    [InlineData("https://example.com/repo.git", "dest")]
+    [InlineData("--upload-pack=touch /tmp/x", "rcynq")]
+    [InlineData("ext::sh -c touch% /tmp/pwned", "rcynq")]
+    [InlineData("https://example.com/repo.git", "rcynq")]
     [InlineData("ssh://git@host/repo", "../evil")]
-    public void Fetch_Rejects_Unsafe_Input(string url, string remote)
+    public async Task Fetch_Rejects_Unsafe_Input(string url, string remote)
     {
-        var fetch = () => new GitRepositoryService(_git).FetchAsync(Path.GetTempPath(), url, remote, null);
-        fetch.Should().ThrowAsync<ArgumentException>().GetAwaiter().GetResult();
+        var fetch = () => new GitRepositoryService(TestTexts.English, _git).FetchAsync(Path.GetTempPath(), url, remote, null);
+        await fetch.Should().ThrowAsync<ArgumentException>();
     }
 
     /// <summary>
@@ -86,7 +87,7 @@ public class GitRepositoryServiceTests
         _git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(128, "", "fatal: Could not read from remote repository."));
 
-        var fetch = () => new GitRepositoryService(_git).FetchAsync(Path.GetTempPath(), "ssh://git@h:22/r", "dest", null);
+        var fetch = () => new GitRepositoryService(TestTexts.English, _git).FetchAsync(Path.GetTempPath(), "ssh://git@h:22/r", "rcynq", null);
 
         (await fetch.Should().ThrowAsync<GitExecutionException>()).Which.ExitCode.Should().Be(128);
     }

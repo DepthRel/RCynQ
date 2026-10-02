@@ -28,4 +28,9 @@ public sealed class PatchEnvelopeDto
 
     /// <summary>Gets or sets the Base64 signature.</summary>
     public string? Signature { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name of the repository the patch belongs to, or <see langword="null"/>.
+    /// </summary>
+    public string? Repository { get; set; }
 }

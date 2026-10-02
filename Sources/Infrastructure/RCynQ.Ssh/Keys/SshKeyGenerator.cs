@@ -25,12 +25,19 @@ public sealed class SshKeyGenerator
     private readonly SshClientOptions _options;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SshKeyGenerator"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processRunner">The process runner.</param>
     /// <param name="options">The SSH options.</param>
-    public SshKeyGenerator(IProcessRunner processRunner, SshClientOptions options)
+    public SshKeyGenerator(ILocalizer localizer, IProcessRunner processRunner, SshClientOptions options)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processRunner = processRunner;
         _options = options;
     }
@@ -57,7 +64,7 @@ public sealed class SshKeyGenerator
         var publicPath = path + ".pub";
         if (File.Exists(path) || File.Exists(publicPath))
         {
-            throw new SyncBridgeException(Texts.Format("Keys.AlreadyExists", path));
+            throw new SyncBridgeException(_localizer.Format("Keys.AlreadyExists", path));
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -66,7 +73,7 @@ public sealed class SshKeyGenerator
             cancellationToken);
         if (generate.ExitCode != 0 || !File.Exists(publicPath))
         {
-            throw new SshExecutionException(Texts.Format("Keys.KeygenFailed", generate.StandardError.Trim()), generate.ExitCode);
+            throw new SshExecutionException(_localizer.Format("Keys.KeygenFailed", generate.StandardError.Trim()), generate.ExitCode);
         }
 
         var publicKey = SshPublicKey.Parse(await File.ReadAllTextAsync(publicPath, cancellationToken));
@@ -79,7 +86,7 @@ public sealed class SshKeyGenerator
 
         if (reported is not null && SshPublicKey.NormalizeFingerprint(reported) != publicKey.Fingerprint)
         {
-            throw new SshExecutionException(Texts.Format("Keys.FingerprintMismatch", reported, publicKey.Fingerprint));
+            throw new SshExecutionException(_localizer.Format("Keys.FingerprintMismatch", reported, publicKey.Fingerprint));
         }
 
         return new SshKeyPair(path, publicPath, publicKey, publicKey.Fingerprint);

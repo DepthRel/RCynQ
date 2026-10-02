@@ -24,14 +24,14 @@ public sealed class ReceiverAndResolverTests : IDisposable
     private readonly SyncFixture _fixture = new();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ReceiverAndResolverTests"/> class with Source changes:
+    /// Initializes a new instance of the <see cref="ReceiverAndResolverTests"/> class with Workstation changes:
     /// <c>a.txt</c> modified, <c>new/n.txt</c> added, <c>b.txt</c> deleted.
     /// </summary>
     public ReceiverAndResolverTests()
     {
-        SyncFixture.Write(_fixture.SourceWork, "a.txt", "v2\n");
-        SyncFixture.Write(_fixture.SourceWork, "new/n.txt", "new\n");
-        File.Delete(Path.Combine(_fixture.SourceWork, "b.txt"));
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v2\n");
+        SyncFixture.Write(_fixture.WorkstationWork, "new/n.txt", "new\n");
+        File.Delete(Path.Combine(_fixture.WorkstationWork, "b.txt"));
     }
 
     /// <summary>
@@ -41,14 +41,14 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Clean_Patch_Is_Applied()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
 
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), envelope, Context());
 
         result.Status.Should().Be(PatchStatus.Applied);
         result.AppliedFileCount.Should().Be(3);
-        foreach (var root in new[] { _fixture.DestWork, _fixture.DestPaths.SyncBase })
+        foreach (var root in new[] { _fixture.OriginWork, _fixture.OriginPaths.SyncBase })
         {
             SyncFixture.Read(root, "a.txt").Should().Be("v2\n");
             SyncFixture.Read(root, "new/n.txt").Should().Be("new\n");
@@ -70,17 +70,17 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Local_Change_Produces_Conflict_Without_Partial_Apply()
     {
-        await _fixture.RegisterSourcePeerAsync();
-        SyncFixture.Write(_fixture.DestWork, "a.txt", "local edit\n");
+        await _fixture.RegisterWorkstationPeerAsync();
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", "local edit\n");
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
 
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), envelope, Context());
 
         result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && LocalizedText.Render(conflict.Detail)!.Contains("Modified locally"));
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("local edit\n");
-        SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().BeNull();
-        SyncFixture.Read(_fixture.DestWork, "b.txt").Should().Be("keep\n");
+        result.Conflicts.Should().ContainSingle().Which.Should().Match<ConflictFile>(conflict => conflict.Path == "a.txt" && LocalizedText.Render(conflict.Detail, TestTexts.English)!.Contains("Modified locally"));
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("local edit\n");
+        SyncFixture.Read(_fixture.OriginWork, "new/n.txt").Should().BeNull();
+        SyncFixture.Read(_fixture.OriginWork, "b.txt").Should().Be("keep\n");
         _fixture.Patches.Items[envelope.Id].Conflicts.Should().ContainSingle();
         _fixture.Storage.Staged.Keys.Count(key => key.PatchId == envelope.Id).Should().Be(2, "the resolution needs the content of both files");
     }
@@ -92,8 +92,8 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Identical_Local_Change_Is_Not_A_Conflict()
     {
-        await _fixture.RegisterSourcePeerAsync();
-        SyncFixture.Write(_fixture.DestWork, "a.txt", "v2\n");
+        await _fixture.RegisterWorkstationPeerAsync();
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", "v2\n");
 
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), await _fixture.BuildSignedEnvelopeAsync(), Context());
 
@@ -111,13 +111,13 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
 
         (await Reason(() => receiver.OpenSessionAsync(envelope, Context()))).Should().Be(PatchRejectionReason.UnknownSender);
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
 
-        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("source-1", "wrong-token")))).Should().Be(PatchRejectionReason.InvalidToken);
-        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("source-1", null)))).Should().Be(PatchRejectionReason.InvalidToken);
-        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("dest-1", SyncFixture.Token)))).Should().Be(PatchRejectionReason.SenderMismatch);
+        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("workstation-1", "wrong-token")))).Should().Be(PatchRejectionReason.InvalidToken);
+        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("workstation-1", null)))).Should().Be(PatchRejectionReason.InvalidToken);
+        (await Reason(() => receiver.OpenSessionAsync(envelope, new PatchReceiveContext("origin-1", SyncFixture.TOKEN)))).Should().Be(PatchRejectionReason.SenderMismatch);
 
-        var misdirected = await _fixture.BuildSignedEnvelopeAsync(new NodeId("other-dest"));
+        var misdirected = await _fixture.BuildSignedEnvelopeAsync(new NodeId("other-origin"));
         (await Reason(() => receiver.OpenSessionAsync(misdirected, Context()))).Should().Be(PatchRejectionReason.WrongReceiver);
 
         var tampered = new PatchEnvelope(envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc.AddSeconds(1),
@@ -134,7 +134,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
 
         _fixture.Storage.Uploads.Should().BeEmpty();
         _fixture.Patches.Items.Should().BeEmpty();
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v1\n");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v1\n");
 
         (await _fixture.DeliverAsync(receiver, envelope, Context())).Status.Should().Be(PatchStatus.Applied);
         (await Reason(() => receiver.OpenSessionAsync(envelope, Context()))).Should().Be(PatchRejectionReason.Replay);
@@ -147,7 +147,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Session_Reports_Missing_Content_And_Can_Be_Resumed()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
 
@@ -161,7 +161,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var resumed = await receiver.OpenSessionAsync(envelope, Context());
 
         resumed.MissingContent.Should().ContainSingle().Which.Should().Be(HashOf("new\n"));
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v1\n", "nothing is written before the commit");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v1\n", "nothing is written before the commit");
     }
 
     /// <summary>
@@ -171,7 +171,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Content_Uploaded_By_An_Earlier_Attempt_Is_Not_Requested_Again()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var interrupted = await _fixture.BuildSignedEnvelopeAsync();
         await receiver.OpenSessionAsync(interrupted, Context());
@@ -192,7 +192,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Content_Is_Verified_Against_The_Signed_Manifest()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         await receiver.OpenSessionAsync(envelope, Context());
@@ -215,7 +215,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Session_Requests_Need_Token_Sender_And_A_Known_Session()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var hash = HashOf("v2\n");
@@ -224,10 +224,10 @@ public sealed class ReceiverAndResolverTests : IDisposable
         (await Reason(() => receiver.ReceiveContentAsync(Guid.NewGuid(), hash, content(), Context()))).Should().Be(PatchRejectionReason.Malformed, "the session was never opened");
         await receiver.OpenSessionAsync(envelope, Context());
 
-        (await Reason(() => receiver.ReceiveContentAsync(envelope.Id, hash, content(), new PatchReceiveContext("source-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
-        (await Reason(() => receiver.ReceiveContentAsync(envelope.Id, hash, content(), new PatchReceiveContext("dest-1", SyncFixture.Token)))).Should().Be(PatchRejectionReason.SenderMismatch);
-        (await Reason(() => receiver.CommitAsync(envelope.Id, new PatchReceiveContext("source-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
-        (await Reason(() => receiver.CommitAsync(envelope.Id, new PatchReceiveContext("dest-1", SyncFixture.Token)))).Should().Be(PatchRejectionReason.SenderMismatch);
+        (await Reason(() => receiver.ReceiveContentAsync(envelope.Id, hash, content(), new PatchReceiveContext("workstation-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
+        (await Reason(() => receiver.ReceiveContentAsync(envelope.Id, hash, content(), new PatchReceiveContext("origin-1", SyncFixture.TOKEN)))).Should().Be(PatchRejectionReason.SenderMismatch);
+        (await Reason(() => receiver.CommitAsync(envelope.Id, new PatchReceiveContext("workstation-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
+        (await Reason(() => receiver.CommitAsync(envelope.Id, new PatchReceiveContext("origin-1", SyncFixture.TOKEN)))).Should().Be(PatchRejectionReason.SenderMismatch);
     }
 
     /// <summary>
@@ -237,20 +237,56 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [Fact]
     public async Task Commit_Needs_All_Content_And_Works_Only_Once()
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         await receiver.OpenSessionAsync(envelope, Context());
         await Upload(receiver, envelope, "a.txt");
 
         (await Reason(() => receiver.CommitAsync(envelope.Id, Context()))).Should().Be(PatchRejectionReason.Malformed);
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v1\n");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v1\n");
         _fixture.Patches.Items[envelope.Id].Status.Should().Be(PatchStatus.Pending, "the session stays open for the rest of the content");
 
         await Upload(receiver, envelope, "new/n.txt");
         (await receiver.CommitAsync(envelope.Id, Context())).Status.Should().Be(PatchStatus.Applied);
         (await Reason(() => receiver.CommitAsync(envelope.Id, Context()))).Should().Be(PatchRejectionReason.Replay);
         (await Reason(() => receiver.ReceiveContentAsync(envelope.Id, HashOf("v2\n"), new MemoryStream("v2\n"u8.ToArray()), Context()))).Should().Be(PatchRejectionReason.Replay);
+    }
+
+    /// <summary>
+    /// Verifies that a commit that has started runs to its end although the sender gives up meanwhile (its request times
+    /// out and is aborted): the patch is applied completely and recorded, not left half-written and "pending".
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Commit_Runs_To_Its_End_When_The_Sender_Gives_Up()
+    {
+        await _fixture.RegisterWorkstationPeerAsync();
+        var receiver = _fixture.CreateReceiver();
+        var envelope = await _fixture.BuildSignedEnvelopeAsync();
+        await receiver.OpenSessionAsync(envelope, Context());
+        await Upload(receiver, envelope, "a.txt");
+        await Upload(receiver, envelope, "new/n.txt");
+        using var sender = new CancellationTokenSource();
+
+        // The display diff is built right before the files are written: the request is aborted at that moment.
+        _fixture.DiffBuilder.BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            sender.Cancel();
+            return "diff --git a/a.txt b/a.txt\n"u8.ToArray();
+        });
+
+        var result = await receiver.CommitAsync(envelope.Id, Context(), sender.Token);
+
+        result.Status.Should().Be(PatchStatus.Applied);
+        foreach (var root in new[] { _fixture.OriginWork, _fixture.OriginPaths.SyncBase })
+        {
+            SyncFixture.Read(root, "a.txt").Should().Be("v2\n");
+            SyncFixture.Read(root, "new/n.txt").Should().Be("new\n");
+            SyncFixture.Read(root, "b.txt").Should().BeNull();
+        }
+
+        _fixture.Patches.Items[envelope.Id].Status.Should().Be(PatchStatus.Applied);
     }
 
     /// <summary>
@@ -263,22 +299,22 @@ public sealed class ReceiverAndResolverTests : IDisposable
     [InlineData("../escape.txt")]
     public async Task Signed_Manifest_With_Unsafe_Path_Fails_Without_Writing(string hostilePath)
     {
-        await _fixture.RegisterSourcePeerAsync();
+        await _fixture.RegisterWorkstationPeerAsync();
         var receiver = _fixture.CreateReceiver();
         var content = "payload\n"u8.ToArray();
         var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
         var unsigned = new PatchEnvelope(
-            Guid.NewGuid(), new NodeId("source-1"), new NodeId("dest-1"), DateTimeOffset.UtcNow, hash, hash,
+            Guid.NewGuid(), new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow, hash, hash,
             new[] { new FileChange(ChangeKind.Added, hostilePath, hash, content.Length, false) });
-        var envelope = unsigned.WithSignature(await _fixture.SourceSigner.SignAsync(Signing.PayloadCanonicalizer.Build(unsigned)));
+        var envelope = unsigned.WithSignature(await _fixture.WorkstationSigner.SignAsync(Signing.PayloadCanonicalizer.Build(unsigned)));
 
         await receiver.OpenSessionAsync(envelope, Context());
         await receiver.ReceiveContentAsync(envelope.Id, hash, new MemoryStream(content), Context());
         var result = await receiver.CommitAsync(envelope.Id, Context());
 
         result.Status.Should().Be(PatchStatus.Failed);
-        Directory.Exists(Path.Combine(_fixture.DestWork, ".git")).Should().BeFalse();
-        File.Exists(Path.GetFullPath(Path.Combine(_fixture.DestWork, "..", "escape.txt"))).Should().BeFalse();
+        Directory.Exists(Path.Combine(_fixture.OriginWork, ".git")).Should().BeFalse();
+        File.Exists(Path.GetFullPath(Path.Combine(_fixture.OriginWork, "..", "escape.txt"))).Should().BeFalse();
     }
 
     /// <summary>
@@ -293,22 +329,22 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var result = await _fixture.CreateResolver(Substitute.For<IGitCommandRunner>()).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.KeepLocal);
 
         result.Status.Should().Be(PatchStatus.Rejected);
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("local edit\n");
-        SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().BeNull();
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n", "the peer keeps its version, so the base records it and the local one is offered back");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("local edit\n");
+        SyncFixture.Read(_fixture.OriginWork, "new/n.txt").Should().BeNull();
+        SyncFixture.Read(_fixture.OriginPaths.SyncBase, "a.txt").Should().Be("v2\n", "the peer keeps its version, so the base records it and the local one is offered back");
     }
 
     /// <summary>
-    /// Verifies that the base the sender reports decides a conflict: a Dest file that equals Dest's own base but not what the
-    /// sender built from was changed on Dest (for example committed there) and must not be overwritten.
+    /// Verifies that the base the sender reports decides a conflict: an Origin file that equals Origin's own base but not what the
+    /// sender built from was changed on Origin (for example committed there) and must not be overwritten.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Sender_Base_Decides_Even_When_The_Local_Base_Agrees_With_The_Local_File()
     {
-        await _fixture.RegisterSourcePeerAsync();
-        SyncFixture.Write(_fixture.DestWork, "a.txt", "committed on Dest\n");
-        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "committed on Dest\n");
+        await _fixture.RegisterWorkstationPeerAsync();
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", "committed on Origin\n");
+        SyncFixture.Write(_fixture.OriginPaths.SyncBase, "a.txt", "committed on Origin\n");
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         envelope.Manifest.Single(change => change.Path == "a.txt").BaseSha256.Should().NotBeNull();
 
@@ -316,25 +352,25 @@ public sealed class ReceiverAndResolverTests : IDisposable
 
         result.Status.Should().Be(PatchStatus.ConflictPending);
         result.Conflicts.Should().ContainSingle().Which.Path.Should().Be("a.txt");
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("committed on Dest\n");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("committed on Origin\n");
     }
 
     /// <summary>
-    /// Verifies that a Dest file that still has exactly the content the sender built from is overwritten, even when Dest's own
+    /// Verifies that an Origin file that still has exactly the content the sender built from is overwritten, even when Origin's own
     /// base holds something else.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Local_File_Equal_To_The_Sender_Base_Is_Overwritten()
     {
-        await _fixture.RegisterSourcePeerAsync();
-        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "stale base\n");
+        await _fixture.RegisterWorkstationPeerAsync();
+        SyncFixture.Write(_fixture.OriginPaths.SyncBase, "a.txt", "stale base\n");
 
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), await _fixture.BuildSignedEnvelopeAsync(), Context());
 
         result.Status.Should().Be(PatchStatus.Applied);
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v2\n");
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n");
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v2\n");
+        SyncFixture.Read(_fixture.OriginPaths.SyncBase, "a.txt").Should().Be("v2\n");
     }
 
     /// <summary>
@@ -347,13 +383,38 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var detector = new ConflictDetector(_fixture.Paths);
         var incoming = new string('a', 64);
         var legacy = new[] { new FileChange(ChangeKind.Modified, "a.txt", incoming, 3, false) };
-        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "local edit\n");
-        SyncFixture.Write(_fixture.DestWork, "a.txt", "local edit\n");
+        SyncFixture.Write(_fixture.OriginPaths.SyncBase, "a.txt", "local edit\n");
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", "local edit\n");
 
-        (await detector.DetectAsync(legacy, _fixture.DestWork, _fixture.DestPaths.SyncBase)).Should().BeEmpty("the local file equals the local base");
+        (await detector.DetectAsync(legacy, _fixture.OriginWork, _fixture.OriginPaths.SyncBase)).Should().BeEmpty("the local file equals the local base");
 
-        SyncFixture.Write(_fixture.DestPaths.SyncBase, "a.txt", "v1\n");
-        (await detector.DetectAsync(legacy, _fixture.DestWork, _fixture.DestPaths.SyncBase)).Should().ContainSingle();
+        SyncFixture.Write(_fixture.OriginPaths.SyncBase, "a.txt", "v1\n");
+        (await detector.DetectAsync(legacy, _fixture.OriginWork, _fixture.OriginPaths.SyncBase)).Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// Verifies that the line endings of a checkout are no conflict between nodes: the sender reports its base by content
+    /// (CRLF counted as LF), and the receiver compares its own file the same way. A Windows checkout with CRLF and a
+    /// Linux checkout with LF of the same text therefore agree, in both directions, while a real edit is still found.
+    /// </summary>
+    /// <param name="local">The file of the receiver.</param>
+    /// <param name="conflicts">Whether a conflict is expected.</param>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData("v1\r\n", false)]
+    [InlineData("v1\n", false)]
+    [InlineData("edited here\r\n", true)]
+    public async Task Line_Endings_Of_A_Checkout_Are_Not_A_Conflict(string local, bool conflicts)
+    {
+        var detector = new ConflictDetector(_fixture.Paths);
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", local);
+
+        // What a sender puts into the manifest for a base file "v1" whatever its line endings: the hash of the LF form.
+        var change = new FileChange(ChangeKind.Modified, "a.txt", HashOf("v2\r\n"), 4, false, HashOf("v1\n"));
+
+        var found = await detector.DetectAsync(new[] { change }, _fixture.OriginWork, _fixture.OriginPaths.SyncBase);
+
+        found.Should().HaveCount(conflicts ? 1 : 0);
     }
 
     /// <summary>
@@ -368,63 +429,12 @@ public sealed class ReceiverAndResolverTests : IDisposable
         var result = await _fixture.CreateResolver(Substitute.For<IGitCommandRunner>()).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.ApplyIncomingOverLocal);
 
         result.Status.Should().Be(PatchStatus.ConflictResolved);
-        SyncFixture.Read(_fixture.DestWork, "a.txt").Should().Be("v2\n");
-        SyncFixture.Read(_fixture.DestWork, "new/n.txt").Should().Be("new\n");
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n");
-        var backup = Directory.GetFiles(Path.Combine(_fixture.DestPaths.Backups, envelope.Id.ToString("N")), "a.txt", SearchOption.AllDirectories);
+        SyncFixture.Read(_fixture.OriginWork, "a.txt").Should().Be("v2\n");
+        SyncFixture.Read(_fixture.OriginWork, "new/n.txt").Should().Be("new\n");
+        SyncFixture.Read(_fixture.OriginPaths.SyncBase, "a.txt").Should().Be("v2\n");
+        var backup = Directory.GetFiles(Path.Combine(_fixture.OriginPaths.Backups, envelope.Id.ToString("N")), "a.txt", SearchOption.AllDirectories);
         backup.Should().ContainSingle();
         File.ReadAllText(backup[0]).Should().Be("local edit\n");
-    }
-
-    /// <summary>
-    /// Verifies that UseGit outside a repository falls back to <c>--reject</c> and reports the <c>.rej</c> file.
-    /// </summary>
-    /// <returns>A task representing the test.</returns>
-    [Fact]
-    public async Task UseGit_Reports_Rejected_Hunks()
-    {
-        var (envelope, conflicts) = await ReceiveConflictAsync();
-        var git = Substitute.For<IGitCommandRunner>();
-        git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var args = call.Arg<IReadOnlyList<string>>();
-                if (args.Contains("--reject"))
-                {
-                    File.WriteAllText(Path.Combine(_fixture.DestWork, "a.txt.rej"), "@@ rejected hunk @@");
-                }
-
-                return args.Contains("--is-inside-work-tree") ? new Core.Abstractions.Processes.ProcessResult(128, "", "not a git repository") : new Core.Abstractions.Processes.ProcessResult(1, "", "patch does not apply");
-            });
-
-        var result = await _fixture.CreateResolver(git).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.UseGit);
-
-        result.Status.Should().Be(PatchStatus.ConflictPending);
-        result.Conflicts.Should().ContainSingle().Which.Detail.Should().Match(detail => LocalizedText.Render(detail)!.Contains("a.txt.rej"));
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v1\n", "the sync base changes only after a clean apply");
-        await git.DidNotReceive().RunAsync(Arg.Is<IReadOnlyList<string>>(args => args.Contains("--3way")), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// Verifies that a clean git apply resolves the patch and updates the sync base, and that the diff comes from the receiver's own sync base.
-    /// </summary>
-    /// <returns>A task representing the test.</returns>
-    [Fact]
-    public async Task UseGit_Clean_Apply_Resolves()
-    {
-        var (envelope, conflicts) = await ReceiveConflictAsync();
-        var git = Substitute.For<IGitCommandRunner>();
-        git.RunAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<string?>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<IReadOnlyList<string>>().Contains("--is-inside-work-tree")
-                ? new Core.Abstractions.Processes.ProcessResult(128, "", "")
-                : new Core.Abstractions.Processes.ProcessResult(0, "", ""));
-
-        var result = await _fixture.CreateResolver(git).ResolveAsync(envelope, Stored(envelope), conflicts, ConflictPolicy.UseGit);
-
-        result.Status.Should().Be(PatchStatus.ConflictResolved);
-        SyncFixture.Read(_fixture.DestPaths.SyncBase, "a.txt").Should().Be("v2\n");
-        await git.Received(1).RunAsync(Arg.Is<IReadOnlyList<string>>(args => args.Contains("--check")), _fixture.DestWork, Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>());
-        await _fixture.DiffBuilder.Received().BuildAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -436,7 +446,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     /// Creates a valid request context.
     /// </summary>
     /// <returns>The context.</returns>
-    private static PatchReceiveContext Context() => new("source-1", SyncFixture.Token);
+    private static PatchReceiveContext Context() => new("workstation-1", SyncFixture.TOKEN);
 
     /// <summary>
     /// Computes the SHA-256 hash of a text as lowercase hex.
@@ -453,7 +463,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     private StoredPatchContent Stored(PatchEnvelope envelope) => new(envelope.Id, _fixture.Storage);
 
     /// <summary>
-    /// Uploads the content of one file of the Source working tree to an open session.
+    /// Uploads the content of one file of the Workstation working tree to an open session.
     /// </summary>
     /// <param name="receiver">The receiver.</param>
     /// <param name="envelope">The envelope of the session.</param>
@@ -462,7 +472,7 @@ public sealed class ReceiverAndResolverTests : IDisposable
     private async Task Upload(Core.Abstractions.Patches.IPatchReceiver receiver, PatchEnvelope envelope, string path)
     {
         var change = envelope.Manifest.Single(candidate => candidate.Path == path);
-        await using var stream = await _fixture.SourceContent.OpenReadAsync(change);
+        await using var stream = await _fixture.WorkstationContent.OpenReadAsync(change);
         await receiver.ReceiveContentAsync(envelope.Id, change.Sha256!, stream, Context());
     }
 
@@ -472,8 +482,8 @@ public sealed class ReceiverAndResolverTests : IDisposable
     /// <returns>The envelope and its conflicts.</returns>
     private async Task<(PatchEnvelope Envelope, IReadOnlyList<ConflictFile> Conflicts)> ReceiveConflictAsync()
     {
-        await _fixture.RegisterSourcePeerAsync();
-        SyncFixture.Write(_fixture.DestWork, "a.txt", "local edit\n");
+        await _fixture.RegisterWorkstationPeerAsync();
+        SyncFixture.Write(_fixture.OriginWork, "a.txt", "local edit\n");
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
         var result = await _fixture.DeliverAsync(_fixture.CreateReceiver(), envelope, Context());
         result.Status.Should().Be(PatchStatus.ConflictPending);

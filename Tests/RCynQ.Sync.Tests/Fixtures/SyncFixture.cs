@@ -1,7 +1,6 @@
 using NSubstitute;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Patches;
-using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Data.Storage;
@@ -21,7 +20,6 @@ using RCynQ.Sync.Apply;
 using RCynQ.Sync.Backups;
 using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.Content;
-using RCynQ.Sync.GitChannel;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
@@ -36,7 +34,7 @@ using RCynQ.Sync.Transfer;
 namespace RCynQ.Sync.Tests.Fixtures;
 
 /// <summary>
-/// A Source node and a Dest node with temporary working trees, sync bases and mocked persistence.
+/// A Workstation node and an Origin node with temporary working trees, sync bases and mocked persistence.
 /// </summary>
 /// <remarks>
 /// Initially every tree contains <c>a.txt = "v1\n"</c> and <c>b.txt = "keep\n"</c>.
@@ -44,22 +42,27 @@ namespace RCynQ.Sync.Tests.Fixtures;
 public sealed class SyncFixture : IDisposable
 {
     /// <summary>The shared link token.</summary>
-    public const string Token = "0123456789abcdef-link-token";
+    public const string TOKEN = "0123456789abcdef-link-token";
+
+    /// <summary>
+    /// The name the Workstation of the fixture knows its repository by; its patches carry it.
+    /// </summary>
+    public const string REPOSITORY_NAME = "app";
 
     /// <summary>The real Git repository service, shared by both nodes (stateless).</summary>
-    public static readonly IGitRepositoryService GitRepository = new GitRepositoryService(new GitCommandRunner(new SystemProcessRunner(), new GitOptions()));
+    public static readonly IGitRepositoryService GitRepository = new GitRepositoryService(TestTexts.English, new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions()));
 
-    /// <summary>The Source node data directories.</summary>
-    private readonly AppDataFactory _sourceAppData;
+    /// <summary>The Workstation node data directories.</summary>
+    private readonly AppDataFactory _workstationAppData;
 
-    /// <summary>The Dest node data directories.</summary>
-    private readonly AppDataFactory _destAppData;
+    /// <summary>The Origin node data directories.</summary>
+    private readonly AppDataFactory _originAppData;
 
-    /// <summary>The sync base manager of the Source node, created on first use.</summary>
-    private SyncBaseManager? _sourceSyncBase;
+    /// <summary>The sync base manager of the Workstation node, created on first use.</summary>
+    private SyncBaseManager? _workstationSyncBase;
 
-    /// <summary>The sync base manager of the Dest node, created on first use.</summary>
-    private SyncBaseManager? _destSyncBase;
+    /// <summary>The sync base manager of the Origin node, created on first use.</summary>
+    private SyncBaseManager? _originSyncBase;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncFixture"/> class.
@@ -67,19 +70,23 @@ public sealed class SyncFixture : IDisposable
     public SyncFixture()
     {
         Root = Path.Combine(Path.GetTempPath(), "rcynq-sync-tests", Guid.NewGuid().ToString("N"));
-        SourceWork = Dir("source-work");
-        SourceBaseForBuild = Dir("source-base");
-        DestWork = Dir("dest-work");
-        SourceNode = new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, SourceWork);
-        DestNode = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, DestWork, null);
-        DestOptions = new SyncBridgeOptions { NodeId = "dest-1", Role = NodeRole.Dest, RepoPath = DestWork, LinkToken = Token };
-        _sourceAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "source-data")));
-        _destAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "dest-data")));
-        SourcePaths = new SyncPaths(_sourceAppData, SourceNode);
-        DestPaths = new SyncPaths(_destAppData, DestNode);
-        Directory.CreateDirectory(DestPaths.SyncBase);
+        WorkstationWork = Dir("workstation-work");
+        WorkstationBaseForBuild = Dir("workstation-base");
+        OriginWork = Dir("origin-work");
+        WorkstationNode = new NodeConfig(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, WorkstationWork);
+        OriginNode = new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, OriginWork, null);
+        OriginOptions = new SyncBridgeOptions { NodeId = "origin-1", Role = NodeRole.Origin, Repositories = { new RepositoryOptions { Path = OriginWork } }, LinkToken = TOKEN };
+        _workstationAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "workstation-data")));
+        _originAppData = new AppDataFactory(AppDataPaths.FromRoot(Path.Combine(Root, "origin-data")));
+        WorkstationPaths = new SyncPaths(
+            TestTexts.English,
+            _workstationAppData,
+            WorkstationNode,
+            new FixedRepository(new RepositoryEntry(RepositoryEntry.DefaultId, REPOSITORY_NAME, WorkstationWork)));
+        OriginPaths = new SyncPaths(TestTexts.English, _originAppData, OriginNode);
+        Directory.CreateDirectory(OriginPaths.SyncBase);
 
-        foreach (var dir in new[] { SourceWork, SourceBaseForBuild, DestWork, DestPaths.SyncBase })
+        foreach (var dir in new[] { WorkstationWork, WorkstationBaseForBuild, OriginWork, OriginPaths.SyncBase })
         {
             Write(dir, "a.txt", "v1\n");
             Write(dir, "b.txt", "keep\n");
@@ -92,44 +99,44 @@ public sealed class SyncFixture : IDisposable
     /// <summary>Gets the temporary root.</summary>
     public string Root { get; }
 
-    /// <summary>Gets the Source working tree.</summary>
-    public string SourceWork { get; }
+    /// <summary>Gets the Workstation working tree.</summary>
+    public string WorkstationWork { get; }
 
-    /// <summary>Gets a Source base directory used to build envelopes directly.</summary>
-    public string SourceBaseForBuild { get; }
+    /// <summary>Gets a Workstation base directory used to build envelopes directly.</summary>
+    public string WorkstationBaseForBuild { get; }
 
-    /// <summary>Gets the Dest working tree.</summary>
-    public string DestWork { get; }
+    /// <summary>Gets the Origin working tree.</summary>
+    public string OriginWork { get; }
 
-    /// <summary>Gets the Source node.</summary>
-    public NodeConfig SourceNode { get; }
+    /// <summary>Gets the Workstation node.</summary>
+    public NodeConfig WorkstationNode { get; }
 
-    /// <summary>Gets the Dest node.</summary>
-    public NodeConfig DestNode { get; }
+    /// <summary>Gets the Origin node.</summary>
+    public NodeConfig OriginNode { get; }
 
-    /// <summary>Gets the Dest options.</summary>
-    public SyncBridgeOptions DestOptions { get; }
+    /// <summary>Gets the Origin options.</summary>
+    public SyncBridgeOptions OriginOptions { get; }
 
-    /// <summary>Gets the Source sync paths.</summary>
-    public SyncPaths SourcePaths { get; }
+    /// <summary>Gets the Workstation sync paths.</summary>
+    public SyncPaths WorkstationPaths { get; }
 
-    /// <summary>Gets the Dest sync paths.</summary>
-    public SyncPaths DestPaths { get; }
+    /// <summary>Gets the Origin sync paths.</summary>
+    public SyncPaths OriginPaths { get; }
 
     /// <summary>Gets the path utility.</summary>
-    public PathUtility Paths { get; } = new();
+    public PathUtility Paths { get; } = new(TestTexts.English);
 
     /// <summary>Gets the diff builder that works on the mocked git diff.</summary>
     public PatchDiffBuilder Diffs => new(DiffBuilder, Paths);
 
     /// <summary>Gets the applier that writes incoming content.</summary>
-    public ContentOverwriteApplier Applier => new(Paths);
+    public ContentOverwriteApplier Applier => new(TestTexts.English, Paths);
 
-    /// <summary>Gets the Source signer.</summary>
-    public EcdsaSignatureService SourceSigner { get; } = new(new InMemorySecretStore());
+    /// <summary>Gets the Workstation signer.</summary>
+    public EcdsaSignatureService WorkstationSigner { get; } = new(TestTexts.English, new InMemorySecretStore());
 
-    /// <summary>Gets the Dest signer.</summary>
-    public EcdsaSignatureService DestSigner { get; } = new(new InMemorySecretStore());
+    /// <summary>Gets the Origin signer.</summary>
+    public EcdsaSignatureService OriginSigner { get; } = new(TestTexts.English, new InMemorySecretStore());
 
     /// <summary>Gets the patch repository.</summary>
     public InMemoryPatchRepository Patches { get; } = new();
@@ -186,103 +193,107 @@ public sealed class SyncFixture : IDisposable
         => new(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), TimeProvider.System);
 
     /// <summary>
-    /// Builds an envelope from <see cref="SourceBaseForBuild"/> to <see cref="SourceWork"/>, signed by the Source key.
+    /// Builds an envelope from <see cref="WorkstationBaseForBuild"/> to <see cref="WorkstationWork"/>, signed by the Workstation key.
     /// </summary>
-    /// <param name="target">The receiver, defaulting to Dest.</param>
+    /// <param name="target">The receiver, defaulting to Origin.</param>
     /// <returns>The envelope.</returns>
     public async Task<PatchEnvelope> BuildSignedEnvelopeAsync(NodeId? target = null)
     {
-        var envelope = await CreateBuilder().BuildAsync(SourceNode.Id, target ?? DestNode.Id, SourceBaseForBuild, SourceWork);
-        return envelope.WithSignature(await SourceSigner.SignAsync(PayloadCanonicalizer.Build(envelope)));
+        var built = await CreateBuilder().BuildAsync(WorkstationNode.Id, target ?? OriginNode.Id, WorkstationBaseForBuild, WorkstationWork);
+        var envelope = new PatchEnvelope(
+            built.Id, built.SourceNode, built.TargetNode, built.CreatedAtUtc, built.BaseStateHash, built.IncomingStateHash, built.Manifest, repository: REPOSITORY_NAME);
+        return envelope.WithSignature(await WorkstationSigner.SignAsync(PayloadCanonicalizer.Build(envelope)));
     }
 
     /// <summary>
-    /// Registers the Source node as a known peer of Dest.
+    /// Registers the Workstation node as a known peer of Origin.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
-    public async Task RegisterSourcePeerAsync()
+    public async Task RegisterWorkstationPeerAsync()
     {
-        var key = Convert.ToBase64String(await SourceSigner.ExportPublicKeyAsync());
-        Peers.GetAsync(SourceNode.Id, Arg.Any<CancellationToken>())
-            .Returns(new PeerDescriptor(SourceNode.Id, "Source", NodeRole.Source, "source.local", 22, "rcynq", signingPublicKey: key));
+        var key = Convert.ToBase64String(await WorkstationSigner.ExportPublicKeyAsync());
+        Peers.GetAsync(WorkstationNode.Id, Arg.Any<CancellationToken>())
+            .Returns(new PeerDescriptor(WorkstationNode.Id, "Workstation", NodeRole.Workstation, "workstation.local", 22, "rcynq", signingPublicKey: key));
     }
 
     /// <summary>
-    /// Creates the Dest receiver.
+    /// Creates the Origin receiver.
     /// </summary>
     /// <returns>The receiver.</returns>
     public DefaultPatchReceiver CreateReceiver()
         => new(
-            DestNode,
-            Peers,
-            DestSigner,
-            new ReplayGuard(Patches, TimeProvider.System, new ReplayGuardOptions()),
-            new LinkTokenProvider(DestOptions, new InMemorySecretStore()),
+            TestTexts.English,
+            new PatchAdmission(TestTexts.English, OriginNode, Peers, OriginSigner, new LinkTokenProvider(OriginOptions, new InMemorySecretStore()), Patches),
+            new IncomingPatchApplier(Storage, new PatchDisplayDiffStore(Diffs, Storage), new ConflictDetector(Paths), Applier, OriginPaths, OriginSyncBase),
+            new ReplayGuard(TestTexts.English, Patches, TimeProvider.System, new ReplayGuardOptions()),
             Patches,
             Storage,
-            Diffs,
-            new ConflictDetector(Paths),
-            Applier,
             CreateOutcomes(),
-            CreateTracker(DestNode),
-            DestPaths,
-            DestSyncBase,
-            DestLock,
+            CreateTracker(OriginNode),
+            OriginLock,
             TimeProvider.System);
 
     /// <summary>
-    /// Creates the Dest conflict resolver.
+    /// Creates the Origin conflict resolver.
     /// </summary>
-    /// <param name="git">The git runner mock.</param>
+    /// <param name="git">The Git command runner.</param>
     /// <returns>The resolver.</returns>
     public DefaultConflictResolver CreateResolver(Git.Commands.IGitCommandRunner git)
     {
         var applier = Applier;
-        return new DefaultConflictResolver(
-            applier,
-            new GitPatchApplier(git, new Git.Repository.GitRepositoryService(git), Paths),
-            Diffs,
-            new BackupService(DestPaths, Paths, TimeProvider.System),
-            DestPaths);
+        var backups = new BackupService(OriginPaths, Paths, TimeProvider.System);
+        return new DefaultConflictResolver(applier, new GitMergeApplier(git, Paths, applier, backups), backups, OriginPaths);
     }
 
     /// <summary>
-    /// Creates a Source patch service with the given sender.
+    /// Creates a Workstation patch service with the given sender.
     /// </summary>
     /// <param name="sender">The sender.</param>
     /// <param name="chain">The chain repository.</param>
     /// <returns>The service.</returns>
-    public PatchService CreateSourceService(IPatchSender sender, IChainLinkRepository chain)
+    public PatchService CreateWorkstationService(IPatchSender sender, IChainLinkRepository chain)
     {
-        return new PatchService(
-            SourceNode,
-            SourcePaths,
+        var outcomes = CreateOutcomes();
+        var tracker = CreateTracker(WorkstationNode);
+        var send = new PatchSendOperation(
+            TestTexts.English,
+            WorkstationNode,
+            WorkstationPaths,
             chain,
             CreateBuilder(),
-            SourceSigner,
+            WorkstationSigner,
             sender,
-            Substitute.For<IPatchReceiver>(),
-            Substitute.For<IConflictResolver>(),
-            new ConflictDetector(Paths),
-            new SyncBaseUpdater(Applier, Paths),
-            Diffs,
+            new SyncBaseUpdater(TestTexts.English, Applier, Paths),
+            new PatchDisplayDiffStore(Diffs, Storage),
             Paths,
             Patches,
+            outcomes,
+            tracker,
+            WorkstationLock,
+            WorkstationSyncBase);
+        var resolve = new PatchResolveOperation(
+            TestTexts.English,
+            WorkstationNode,
+            WorkstationPaths,
+            Substitute.For<IConflictResolver>(),
+            new ConflictDetector(Paths),
+            Patches,
             Storage,
-            CreateOutcomes(),
-            CreateTracker(SourceNode),
-            SourceLock,
-            SourceSyncBase);
+            outcomes,
+            tracker,
+            WorkstationLock,
+            WorkstationSyncBase);
+        return new PatchService(WorkstationNode, send, resolve, Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase);
     }
 
     /// <summary>
-    /// Gets the reader of the Source working tree, the content a sender streams.
+    /// Gets the reader of the Workstation working tree, the content a sender streams.
     /// </summary>
-    public WorkdirPatchContent SourceContent => new(SourceWork, Paths);
+    public WorkdirPatchContent WorkstationContent => new(TestTexts.English, WorkstationWork, Paths);
 
     /// <summary>
     /// Delivers an envelope to a receiver the way the sender does: opens the session, uploads the missing content from the
-    /// Source working tree and commits.
+    /// Workstation working tree and commits.
     /// </summary>
     /// <param name="receiver">The receiver.</param>
     /// <param name="envelope">The signed envelope.</param>
@@ -294,7 +305,7 @@ public sealed class SyncFixture : IDisposable
         foreach (var hash in session.MissingContent)
         {
             var change = envelope.Manifest.First(candidate => candidate.Kind != ChangeKind.Deleted && candidate.Sha256 == hash);
-            await using var stream = await SourceContent.OpenReadAsync(change);
+            await using var stream = await WorkstationContent.OpenReadAsync(change);
             await receiver.ReceiveContentAsync(envelope.Id, hash, stream, context);
         }
 
@@ -302,14 +313,14 @@ public sealed class SyncFixture : IDisposable
     }
 
     /// <summary>
-    /// Creates a chain from Source through one mediator to Dest.
+    /// Creates a chain from Workstation through one relay to Origin.
     /// </summary>
     /// <returns>The chain.</returns>
     public IReadOnlyList<ChainLinkConfig> CreateChain()
         => new[]
         {
-            new ChainLinkConfig(Guid.NewGuid(), "hop", TransportKind.Direct, new PeerDescriptor(new NodeId("mediator-1"), "Relay", NodeRole.Mediator, "relay.example", 22, "jump"), 0, 22, 0),
-            new ChainLinkConfig(Guid.NewGuid(), "endpoint", TransportKind.Direct, new PeerDescriptor(DestNode.Id, "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq"), 0, 18443, 1)
+            new ChainLinkConfig(Guid.NewGuid(), "hop", TransportKind.Direct, new PeerDescriptor(new NodeId("relay-1"), "Relay", NodeRole.Relay, "relay.example", 22, "jump"), 0, 22, 0),
+            new ChainLinkConfig(Guid.NewGuid(), "endpoint", TransportKind.Direct, new PeerDescriptor(OriginNode.Id, "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq"), 0, 18443, 1)
         };
 
     /// <summary>
@@ -338,42 +349,42 @@ public sealed class SyncFixture : IDisposable
     private PatchOutcomeRecorder CreateOutcomes() => new(Patches, History, Events, TimeProvider.System);
 
     /// <summary>
-    /// Gets the working tree lock of the Source node, shared by everything the fixture builds for it.
+    /// Gets the working tree lock of the Workstation node, shared by everything the fixture builds for it.
     /// </summary>
-    public WorkingTreeLock SourceLock { get; } = new();
+    public WorkingTreeLock WorkstationLock { get; } = new();
 
     /// <summary>
-    /// Gets the working tree lock of the Dest node, shared by everything the fixture builds for it.
+    /// Gets the working tree lock of the Origin node, shared by everything the fixture builds for it.
     /// </summary>
-    public WorkingTreeLock DestLock { get; } = new();
+    public WorkingTreeLock OriginLock { get; } = new();
 
     /// <summary>
-    /// Gets the sync base manager of the Source node, backed by the real Git plumbing so tests that <c>git init</c> the
+    /// Gets the sync base manager of the Workstation node, backed by the real Git plumbing so tests that <c>git init</c> the
     /// working tree exercise the Git sync base.
     /// </summary>
-    public SyncBaseManager SourceSyncBase => _sourceSyncBase ??= CreateSyncBase(SourceNode, SourcePaths, _sourceAppData, SourceLock);
+    public SyncBaseManager WorkstationSyncBase => _workstationSyncBase ??= CreateSyncBase(WorkstationNode, WorkstationPaths, _workstationAppData, WorkstationLock);
 
     /// <summary>
-    /// Gets the sync base manager of the Dest node.
+    /// Gets the sync base manager of the Origin node.
     /// </summary>
-    public SyncBaseManager DestSyncBase => _destSyncBase ??= CreateSyncBase(DestNode, DestPaths, _destAppData, DestLock);
+    public SyncBaseManager OriginSyncBase => _originSyncBase ??= CreateSyncBase(OriginNode, OriginPaths, _originAppData, OriginLock);
 
     /// <summary>
-    /// Gets the working tree lock of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// Gets the working tree lock of <see cref="WorkstationNode"/> or <see cref="OriginNode"/>.
     /// </summary>
     /// <param name="node">Either node.</param>
     /// <returns>The lock.</returns>
-    public WorkingTreeLock LockOf(NodeConfig node) => node.Id == SourceNode.Id ? SourceLock : DestLock;
+    public WorkingTreeLock LockOf(NodeConfig node) => node.Id == WorkstationNode.Id ? WorkstationLock : OriginLock;
 
     /// <summary>
-    /// Gets the sync base manager of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// Gets the sync base manager of <see cref="WorkstationNode"/> or <see cref="OriginNode"/>.
     /// </summary>
     /// <param name="node">Either node.</param>
     /// <returns>The manager.</returns>
-    public SyncBaseManager SyncBaseOf(NodeConfig node) => node.Id == SourceNode.Id ? SourceSyncBase : DestSyncBase;
+    public SyncBaseManager SyncBaseOf(NodeConfig node) => node.Id == WorkstationNode.Id ? WorkstationSyncBase : OriginSyncBase;
 
     /// <summary>
-    /// Creates a state tracker of <see cref="SourceNode"/> or <see cref="DestNode"/>.
+    /// Creates a state tracker of <see cref="WorkstationNode"/> or <see cref="OriginNode"/>.
     /// </summary>
     /// <param name="node">Either node.</param>
     /// <returns>The tracker.</returns>
@@ -382,7 +393,7 @@ public sealed class SyncFixture : IDisposable
             StateStore,
             new DefaultFileManifestBuilder(new SnapshotFilter()),
             new DefaultStateHasher(),
-            node.Id == SourceNode.Id ? SourcePaths : DestPaths,
+            node.Id == WorkstationNode.Id ? WorkstationPaths : OriginPaths,
             node,
             TimeProvider.System,
             SyncBaseOf(node),
@@ -398,9 +409,10 @@ public sealed class SyncFixture : IDisposable
     /// <returns>The manager.</returns>
     private SyncBaseManager CreateSyncBase(NodeConfig node, SyncPaths paths, AppDataFactory appData, WorkingTreeLock workingTreeLock)
         => new(
+            TestTexts.English,
             node,
             paths,
-            new GitSyncBaseLocator(node, GitRepository),
+            new GitSyncBaseLocator(TestTexts.English, node, GitRepository),
             GitRepository,
             new SyncBaseMetadataStore(appData),
             new DefaultFileManifestBuilder(new SnapshotFilter()),

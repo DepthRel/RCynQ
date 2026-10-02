@@ -16,17 +16,17 @@ public class PathAndHashTests
     /// <summary>
     /// A valid digest.
     /// </summary>
-    private const string HashA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string HASH_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     /// <summary>
     /// Another valid digest.
     /// </summary>
-    private const string HashB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     /// <summary>
     /// The utility under test.
     /// </summary>
-    private readonly PathUtility _paths = new();
+    private readonly PathUtility _paths = new(TestTexts.English);
 
     /// <summary>
     /// Verifies normalization of acceptable relative paths.
@@ -88,17 +88,17 @@ public class PathAndHashTests
     public void StateHash_Is_Deterministic()
     {
         var hasher = new DefaultStateHasher();
-        var a = new FileEntry("a.txt", HashA, 1, false);
-        var b = new FileEntry("b/c.txt", HashB, 2, false);
+        var a = new FileEntry("a.txt", HASH_A, 1, false);
+        var b = new FileEntry("b/c.txt", HASH_B, 2, false);
 
         var hash = hasher.ComputeHash(new[] { a, b });
         hasher.ComputeHash(new[] { b, a }).Should().Be(hash);
         hash.Should().MatchRegex("^[0-9a-f]{64}$");
 
-        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HashA, 2, false) }).Should().NotBe(hash);
-        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HashB, 3, false) }).Should().NotBe(hash);
-        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HashB, 2, true) }).Should().NotBe(hash);
-        hasher.ComputeHash(new[] { a, new FileEntry("b/d.txt", HashB, 2, false) }).Should().NotBe(hash);
+        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HASH_A, 2, false) }).Should().NotBe(hash);
+        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HASH_B, 3, false) }).Should().NotBe(hash);
+        hasher.ComputeHash(new[] { a, new FileEntry("b/c.txt", HASH_B, 2, true) }).Should().NotBe(hash);
+        hasher.ComputeHash(new[] { a, new FileEntry("b/d.txt", HASH_B, 2, false) }).Should().NotBe(hash);
         hasher.ComputeHash(Array.Empty<FileEntry>()).Should().Be("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 
         var duplicate = () => hasher.ComputeHash(new[] { a, a });

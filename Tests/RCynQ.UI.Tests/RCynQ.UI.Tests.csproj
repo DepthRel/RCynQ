@@ -1,13 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--
-    The expectations of these tests were written against the Russian texts, so the run speaks Russian
-    (Tests/Shared/UseRussianTexts.cs); the tests of the localization itself choose their languages explicitly.
-  -->
-  <ItemGroup>
-    <Compile Include="..\Shared\UseRussianTexts.cs" Link="UseRussianTexts.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Sources\Apps\RCynQ.UI\RCynQ.UI.csproj" />
   </ItemGroup>

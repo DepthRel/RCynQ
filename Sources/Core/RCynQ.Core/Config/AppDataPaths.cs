@@ -102,6 +102,11 @@ public sealed record AppDataPaths
     public string KnownHostsPath => Path.Combine(KeysDirectory, "known_hosts");
 
     /// <summary>
+    /// Gets the SSH client configuration file RCynQ writes for its own connections.
+    /// </summary>
+    public string SshConfigPath => Path.Combine(KeysDirectory, "ssh_config");
+
+    /// <summary>
     /// Gets the directory holding the node's TLS certificate for the direct endpoint.
     /// </summary>
     public string TlsDirectory => Path.Combine(KeysDirectory, "tls");
@@ -115,6 +120,20 @@ public sealed record AppDataPaths
     /// Gets the SQLite connection string for <see cref="DatabasePath"/>.
     /// </summary>
     public string ConnectionString => $"Data Source={DatabasePath}";
+
+    /// <summary>
+    /// Returns the paths of the data the node keeps about one repository: its sync base lives in a folder of its own.
+    /// </summary>
+    /// <remarks>
+    /// The repository a node started with (<see cref="RepositoryEntry.DefaultId"/>) keeps its data where earlier versions,
+    /// which knew one repository only, kept it, so an updated node finds its sync base without moving anything.
+    /// </remarks>
+    /// <param name="repositoryId">The local identifier of the repository.</param>
+    /// <returns>The paths, with <see cref="SnapshotsDirectory"/> of the repository.</returns>
+    public AppDataPaths ForRepository(Guid repositoryId)
+        => repositoryId == RepositoryEntry.DefaultId
+            ? this
+            : new AppDataPaths(Root, DatabasePath, PatchesDirectory, BackupsDirectory, KeysDirectory, LogsDirectory, Path.Combine(SnapshotsDirectory, repositoryId.ToString("N")));
 
     /// <summary>
     /// Creates the path set with the standard layout below the given root.

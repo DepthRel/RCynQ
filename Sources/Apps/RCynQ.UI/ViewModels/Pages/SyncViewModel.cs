@@ -48,9 +48,11 @@ public sealed partial class SyncViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
-    public SyncViewModel(IServiceApiClient api, IDialogService dialogs)
+    public SyncViewModel(ILocalizer localizer, IServiceApiClient api, IDialogService dialogs)
+        : base(localizer)
     {
         _api = api;
         _dialogs = dialogs;
@@ -69,7 +71,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
     public ObservableCollection<PatchHistoryItemViewModel> History { get; } = new();
 
     /// <summary>Gets the last synchronization time in the language of the user.</summary>
-    public string LastSyncText => DisplayText.Time(_lastSync);
+    public string LastSyncText => DisplayText.Time(Localizer, _lastSync);
 
     /// <summary>Gets a value indicating whether there are no local changes.</summary>
     public bool HasNoChangedFiles => ChangedFiles.Count == 0;
@@ -91,8 +93,8 @@ public sealed partial class SyncViewModel : PageViewModelBase
             }
 
             return IsSelectionMode
-                ? $"({Texts.Format("Sync.SelectedOf", SelectedCount, ChangedFiles.Count)})"
-                : $"({DisplayText.Count("Sync.FileCount", ChangedFiles.Count)})";
+                ? $"({Localizer.Format("Sync.SelectedOf", SelectedCount, ChangedFiles.Count)})"
+                : $"({DisplayText.Count(Localizer, "Sync.FileCount", ChangedFiles.Count)})";
         }
     }
 
@@ -115,19 +117,19 @@ public sealed partial class SyncViewModel : PageViewModelBase
     public bool CanRebuildBaseline => _syncBase is { IsReady: true };
 
     /// <summary>Gets the text of the rebuild button.</summary>
-    public string RebuildButtonText => Texts.Get(_syncBase is { Mode: SyncBaseMode.Git } ? "Sync.RebuildBase" : "Sync.RecreateBaseline");
+    public string RebuildButtonText => Localizer.Get(_syncBase is { Mode: SyncBaseMode.Git } ? "Sync.RebuildBase" : "Sync.RecreateBaseline");
 
     /// <summary>Gets where the sync base comes from, for the header.</summary>
     public string SyncBaseText => _syncBase switch
     {
-        { Mode: SyncBaseMode.Git } git => Texts.Format("Sync.BaseGit", git.Branch ?? "HEAD", ShortCommit(git.Commit)),
-        { Mode: SyncBaseMode.Manual } => Texts.Get("Sync.BaseManual"),
-        { } => Texts.Get("Sync.BaseNone"),
+        { Mode: SyncBaseMode.Git } git => Localizer.Format("Sync.BaseGit", git.Branch ?? "HEAD", ShortCommit(git.Commit)),
+        { Mode: SyncBaseMode.Manual } => Localizer.Get("Sync.BaseManual"),
+        { } => Localizer.Get("Sync.BaseNone"),
         null => "—"
     };
 
     /// <inheritdoc />
-    public override Task RefreshAsync() => RunSafeAsync(async () =>
+    protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
         var status = await _api.GetStateAsync();
         RoleText = status.Role.ToString();
@@ -147,10 +149,13 @@ public sealed partial class SyncViewModel : PageViewModelBase
 
         OnSelectionChanged();
 
+        // Fetched first, then replaced in one go. Two refreshes often overlap (a patch event arrives while the page is
+        // refreshed after a send); clearing before the request would let both clear and then both add, doubling the list.
+        var patches = await _api.GetPatchesAsync(100);
         History.Clear();
-        foreach (var patch in await _api.GetPatchesAsync(100))
+        foreach (var patch in patches)
         {
-            History.Add(new PatchHistoryItemViewModel(patch));
+            History.Add(new PatchHistoryItemViewModel(Localizer, patch));
         }
     });
 
@@ -178,6 +183,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
         if (await RunSafeAsync(async () => InfoMessage = (await _api.SendPatchAsync(paths)).Message))
         {
             SetAllSelected(false);
+            NotifyDataChanged();
             await RefreshAsync();
         }
     }
@@ -247,7 +253,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
-    private async Task ScanAsync() => await RefreshAsync();
+    private Task ScanAsync() => ReloadAsync();
 
     /// <summary>
     /// Rebuilds the sync base after confirmation: from the Git commit, or as a manual snapshot for a working tree without Git.
@@ -262,15 +268,16 @@ public sealed partial class SyncViewModel : PageViewModelBase
     {
         var isGit = _syncBase is { Mode: SyncBaseMode.Git };
         var wasInitialized = _syncBase is { IsReady: true };
-        var confirmText = Texts.Get(isGit ? "Sync.RebuildConfirm" : wasInitialized ? "Sync.BaselineRecreateConfirm" : "Sync.BaselineConfirm");
-        if (!await _dialogs.ConfirmAsync(Texts.Get(isGit ? "Sync.RebuildTitle" : "Sync.BaselineTitle"), confirmText))
+        var confirmText = Localizer.Get(isGit ? "Sync.RebuildConfirm" : wasInitialized ? "Sync.BaselineRecreateConfirm" : "Sync.BaselineConfirm");
+        if (!await _dialogs.ConfirmAsync(Localizer.Get(isGit ? "Sync.RebuildTitle" : "Sync.BaselineTitle"), confirmText))
         {
             return;
         }
 
         if (await RunSafeAsync(async () => await _api.CreateBaselineAsync()))
         {
-            InfoMessage = Texts.Get(isGit ? "Sync.Rebuilt" : wasInitialized ? "Sync.BaselineRecreated" : "Sync.BaselineCreated");
+            InfoMessage = Localizer.Get(isGit ? "Sync.Rebuilt" : wasInitialized ? "Sync.BaselineRecreated" : "Sync.BaselineCreated");
+            NotifyDataChanged();
             await RefreshAsync();
         }
     }
@@ -288,7 +295,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
             return;
         }
 
-        var dialog = new ConflictDialogViewModel(item.Id, item.Patch.SourceNode.Value, item.Patch.Conflicts);
+        var dialog = new ConflictDialogViewModel(Localizer, item.Id, item.Patch.SourceNode.Value, item.Patch.Conflicts);
         var policy = await _dialogs.ShowConflictDialogAsync(dialog);
         if (policy is null)
         {
@@ -300,13 +307,17 @@ public sealed partial class SyncViewModel : PageViewModelBase
             var result = await _api.ResolvePatchAsync(item.Id, policy.Value);
             InfoMessage = result.Status switch
             {
-                PatchStatus.ConflictResolved => Texts.Get("Sync.Resolved"),
-                PatchStatus.Rejected => Texts.Get("Sync.PatchRejected"),
-                PatchStatus.ConflictPending => Texts.Format("Sync.ConflictsLeft", result.Conflicts.Count),
-                _ => LocalizedText.Render(result.Error) ?? result.Status.ToString()
+                // A merge that left conflict markers is done, but the files it names still need an edit.
+                PatchStatus.ConflictResolved when result.Conflicts.Count > 0 => Localizer.Format(
+                    "Sync.ResolvedWithMarkers", result.Conflicts.Count, string.Join(", ", result.Conflicts.Select(conflict => conflict.Path))),
+                PatchStatus.ConflictResolved => Localizer.Get("Sync.Resolved"),
+                PatchStatus.Rejected => Localizer.Get("Sync.PatchRejected"),
+                PatchStatus.ConflictPending => Localizer.Format("Sync.ConflictsLeft", result.Conflicts.Count),
+                _ => LocalizedText.Render(result.Error, Localizer) ?? result.Status.ToString()
             };
         }))
         {
+            NotifyDataChanged();
             await RefreshAsync();
         }
     }
@@ -327,7 +338,7 @@ public sealed partial class SyncViewModel : PageViewModelBase
         string? diff = null;
         if (await RunSafeAsync(async () => diff = await _api.GetPatchDiffAsync(item.Id)))
         {
-            await _dialogs.ShowTextAsync(Texts.Format("Sync.DiffTitle", item.Id), string.IsNullOrEmpty(diff) ? Texts.Get("Sync.EmptyDiff") : diff!);
+            await _dialogs.ShowTextAsync(Localizer.Format("Sync.DiffTitle", item.Id), string.IsNullOrEmpty(diff) ? Localizer.Get("Sync.EmptyDiff") : diff!);
         }
     }
 

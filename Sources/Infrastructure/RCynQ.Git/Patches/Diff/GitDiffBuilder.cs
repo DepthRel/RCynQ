@@ -24,7 +24,7 @@ public sealed class GitDiffBuilder : IGitDiffBuilder
     /// <summary>
     /// The name of the diff output file inside the staging directory.
     /// </summary>
-    public const string OutputFileName = "patch.diff";
+    public const string OUTPUT_FILE_NAME = "patch.diff";
 
     /// <summary>
     /// The git command runner.
@@ -46,7 +46,7 @@ public sealed class GitDiffBuilder : IGitDiffBuilder
         var root = Path.GetFullPath(Guard.NotBlank(stagingDirectory, nameof(stagingDirectory)));
         Directory.CreateDirectory(Path.Combine(root, "a"));
         Directory.CreateDirectory(Path.Combine(root, "b"));
-        var output = Path.Combine(root, OutputFileName);
+        var output = Path.Combine(root, OUTPUT_FILE_NAME);
         if (File.Exists(output))
         {
             File.Delete(output);

@@ -11,9 +11,9 @@ namespace RCynQ.Core.Config;
 /// <remarks>
 /// Path requirements depend on the role:
 /// <list type="bullet">
-///   <item><description>Source requires <see cref="WorkdirPath"/> (the local working copy).</description></item>
-///   <item><description>Dest requires <see cref="RepoPath"/>; the working directory defaults to the repository.</description></item>
-///   <item><description>Mediator has no repository and no working directory.</description></item>
+///   <item><description>Workstation requires <see cref="WorkdirPath"/> (the local working copy).</description></item>
+///   <item><description>Origin requires <see cref="RepoPath"/>; the working directory defaults to the repository.</description></item>
+///   <item><description>Relay has no repository and no working directory.</description></item>
 /// </list>
 /// </remarks>
 public sealed record NodeConfig
@@ -24,8 +24,8 @@ public sealed record NodeConfig
     /// <param name="id">The node identifier.</param>
     /// <param name="name">The display name of the node.</param>
     /// <param name="role">The role of the node.</param>
-    /// <param name="repoPath">The Git repository path (required for Dest, forbidden for Mediator).</param>
-    /// <param name="workdirPath">The working directory path (required for Source, forbidden for Mediator).</param>
+    /// <param name="repoPath">The Git repository path (required for Origin, forbidden for Relay).</param>
+    /// <param name="workdirPath">The working directory path (required for Workstation, forbidden for Relay).</param>
     /// <exception cref="ArgumentException">A value is blank, the identifier is empty or the paths do not fit the role.</exception>
     public NodeConfig(NodeId id, string name, NodeRole role, string? repoPath, string? workdirPath)
     {
@@ -42,12 +42,12 @@ public sealed record NodeConfig
 
         switch (Role)
         {
-            case NodeRole.Source when WorkdirPath is null:
-                throw new ArgumentException(Texts.Get("Node.SourceNeedsWorkdir"), nameof(workdirPath));
-            case NodeRole.Dest when RepoPath is null:
-                throw new ArgumentException(Texts.Get("Node.DestNeedsRepo"), nameof(repoPath));
-            case NodeRole.Mediator when RepoPath is not null || WorkdirPath is not null:
-                throw new ArgumentException(Texts.Get("Node.MediatorNoPaths"), nameof(role));
+            case NodeRole.Workstation when WorkdirPath is null:
+                throw LocalizedError.Argument(nameof(workdirPath), "Node.WorkstationNeedsWorkdir");
+            case NodeRole.Origin when RepoPath is null:
+                throw LocalizedError.Argument(nameof(repoPath), "Node.OriginNeedsRepo");
+            case NodeRole.Relay when RepoPath is not null || WorkdirPath is not null:
+                throw LocalizedError.Argument(nameof(role), "Node.RelayNoPaths");
         }
     }
 
@@ -78,12 +78,26 @@ public sealed record NodeConfig
 
     /// <summary>
     /// Gets the working tree live patches are applied to: <see cref="WorkdirPath"/> when set, otherwise
-    /// <see cref="RepoPath"/>. <see langword="null"/> for a Mediator.
+    /// <see cref="RepoPath"/>. <see langword="null"/> for a Relay.
     /// </summary>
     public string? EffectiveWorkdir => WorkdirPath ?? RepoPath;
 
     /// <summary>
     /// Gets a value indicating whether the role takes part in the live patch channel.
     /// </summary>
-    public bool ParticipatesInPatchChannel => Role is NodeRole.Source or NodeRole.Dest;
+    public bool ParticipatesInPatchChannel => Role is NodeRole.Workstation or NodeRole.Origin;
+
+    /// <summary>
+    /// Returns the node with the paths of a repository, for code that describes the node as it works now.
+    /// </summary>
+    /// <remarks>
+    /// The paths of a <see cref="NodeConfig"/> are those of the repository the node started with. The repository it works
+    /// with now is told by <see cref="IActiveRepository"/>.
+    /// </remarks>
+    /// <param name="repository">The repository, or <see langword="null"/> to keep the paths.</param>
+    /// <returns>The node; a Relay is returned unchanged.</returns>
+    public NodeConfig WithRepository(RepositoryEntry? repository)
+        => repository is null || Role == NodeRole.Relay
+            ? this
+            : new NodeConfig(Id, Name, Role, Role == NodeRole.Origin ? repository.Path : null, Role == NodeRole.Workstation ? repository.Path : null);
 }

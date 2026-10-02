@@ -26,15 +26,15 @@ public sealed class NodeCertificateStoreTests : IDisposable
     [Fact]
     public void Certificate_Is_Created_Once_And_Reused()
     {
-        using var created = NodeCertificateStore.GetOrCreate(_paths, "dest-1");
+        using var created = NodeCertificateStore.GetOrCreate(_paths, "origin-1");
 
         created.HasPrivateKey.Should().BeTrue("Kestrel needs the private key");
-        created.Subject.Should().Contain("rcynq-dest-1");
-        File.Exists(Path.Combine(_paths.TlsDirectory, NodeCertificateStore.CertificateFileName)).Should().BeTrue();
-        File.Exists(Path.Combine(_paths.TlsDirectory, NodeCertificateStore.PrivateKeyFileName)).Should().BeTrue();
+        created.Subject.Should().Contain("rcynq-origin-1");
+        File.Exists(Path.Combine(_paths.TlsDirectory, NodeCertificateStore.CERTIFICATE_FILE_NAME)).Should().BeTrue();
+        File.Exists(Path.Combine(_paths.TlsDirectory, NodeCertificateStore.PRIVATE_KEY_FILE_NAME)).Should().BeTrue();
         created.NotAfter.Should().BeAfter(DateTime.Now.AddYears(5));
 
-        using var loaded = NodeCertificateStore.GetOrCreate(_paths, "dest-1");
+        using var loaded = NodeCertificateStore.GetOrCreate(_paths, "origin-1");
         NodeCertificateStore.Fingerprint(loaded).Should().Be(NodeCertificateStore.Fingerprint(created), "the node keeps its identity across restarts");
     }
 
@@ -44,9 +44,9 @@ public sealed class NodeCertificateStoreTests : IDisposable
     [Fact]
     public void Unsafe_Node_Id_Is_Sanitized()
     {
-        using var certificate = NodeCertificateStore.GetOrCreate(_paths, "dest 1/../evil");
+        using var certificate = NodeCertificateStore.GetOrCreate(_paths, "origin 1/../evil");
 
-        certificate.Subject.Should().Be("CN=rcynq-dest-1----evil");
+        certificate.Subject.Should().Be("CN=rcynq-origin-1----evil");
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public sealed class NodeCertificateStoreTests : IDisposable
     [Fact]
     public void Fingerprint_Is_Normalized_And_Compared()
     {
-        using var certificate = NodeCertificateStore.GetOrCreate(_paths, "dest-1");
+        using var certificate = NodeCertificateStore.GetOrCreate(_paths, "origin-1");
         var fingerprint = NodeCertificateStore.Fingerprint(certificate);
 
         fingerprint.Should().StartWith("SHA256:").And.HaveLength(7 + 64);
@@ -64,7 +64,7 @@ public sealed class NodeCertificateStoreTests : IDisposable
         NodeCertificateStore.Matches(certificate, string.Join(':', Enumerable.Range(0, 32).Select(i => fingerprint.Substring(7 + (i * 2), 2)))).Should().BeTrue("separators are ignored");
         NodeCertificateStore.Matches(certificate, null).Should().BeFalse();
 
-        using var other = NodeCertificateStore.GetOrCreate(AppDataPaths.FromRoot(Path.Combine(_root, "other")), "dest-1");
+        using var other = NodeCertificateStore.GetOrCreate(AppDataPaths.FromRoot(Path.Combine(_root, "other")), "origin-1");
         NodeCertificateStore.Matches(other, fingerprint).Should().BeFalse("a different node must not pass the pinned check");
 
         NodeCertificateStore.NormalizeFingerprint("  ").Should().BeNull();

@@ -15,12 +15,12 @@ public sealed class JsonUiSettingsStore : IUiSettingsStore
     /// <summary>
     /// The name of the file next to the configuration file.
     /// </summary>
-    public const string FileName = "ui-settings.json";
+    public const string FILE_NAME = "ui-settings.json";
 
     /// <summary>
     /// The JSON options of the file.
     /// </summary>
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions _json = new() { WriteIndented = true };
 
     /// <summary>
     /// Serializes the writes of one process.
@@ -50,7 +50,7 @@ public sealed class JsonUiSettingsStore : IUiSettingsStore
     public static string PathFor(string configPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
-        return Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, FileName);
+        return Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, FILE_NAME);
     }
 
     /// <inheritdoc />
@@ -73,10 +73,10 @@ public sealed class JsonUiSettingsStore : IUiSettingsStore
 
             var directory = Path.GetDirectoryName(FilePath)!;
             Directory.CreateDirectory(directory);
-            var temp = Path.Combine(directory, $".{FileName}.{Guid.NewGuid():N}.tmp");
+            var temp = Path.Combine(directory, $".{FILE_NAME}.{Guid.NewGuid():N}.tmp");
             try
             {
-                File.WriteAllText(temp, root.ToJsonString(Json));
+                File.WriteAllText(temp, root.ToJsonString(_json));
                 File.Move(temp, FilePath, overwrite: true);
             }
             finally

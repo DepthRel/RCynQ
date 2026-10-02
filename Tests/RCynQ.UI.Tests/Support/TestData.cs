@@ -41,10 +41,9 @@ public static class TestData
             "rcynq",
             null,
             false,
-            null,
             0,
-            role == NodeRole.Mediator ? 22 : 18443,
-            role == NodeRole.Mediator ? 10 : 1000);
+            role == NodeRole.Relay ? 22 : 18443,
+            role == NodeRole.Relay ? 10 : 1000);
 
     /// <summary>
     /// Creates a link state.
@@ -66,8 +65,8 @@ public static class TestData
             new NodeId("node-1"),
             "Node",
             role,
-            role == NodeRole.Dest ? workdir : null,
-            role == NodeRole.Source ? workdir : null,
+            role == NodeRole.Origin ? workdir : null,
+            role == NodeRole.Workstation ? workdir : null,
             18443,
             RoleCapabilities.For(role),
             null);
@@ -77,7 +76,7 @@ public static class TestData
     /// </summary>
     /// <param name="role">The role.</param>
     /// <returns>The status.</returns>
-    public static NodeSyncStatus Status(NodeRole role = NodeRole.Source)
+    public static NodeSyncStatus Status(NodeRole role = NodeRole.Workstation)
         => new(new NodeId("node-1"), "Node", role, new SyncState(HashA, HashA, null, null), GitSyncBase, Array.Empty<FileChange>(), 0);
 
     /// <summary>
@@ -93,7 +92,7 @@ public static class TestData
         => new(
             Guid.NewGuid(),
             PatchDirection.Incoming,
-            new NodeId("dest-1"),
+            new NodeId("origin-1"),
             new NodeId("node-1"),
             DateTimeOffset.UtcNow,
             HashA,

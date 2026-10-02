@@ -3,22 +3,28 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using Serilog.Events;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Config.Legacy;
 using RCynQ.Core.Data.DependencyInjection;
 using RCynQ.Core.Data.Storage;
+using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Git.DependencyInjection;
+using RCynQ.Localization;
 using RCynQ.Service.Endpoints;
 using RCynQ.Service.Events;
 using RCynQ.Service.Hubs;
+using RCynQ.Service.Localization;
 using RCynQ.Service.Logging;
+using RCynQ.Service.Maintenance;
 using RCynQ.Service.Pipelines;
 using RCynQ.Service.Security;
 using RCynQ.Service.Startup;
 using RCynQ.Ssh.DependencyInjection;
-using RCynQ.Core.Enums;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.DependencyInjection;
 using RCynQ.Sync.Diagnostics.Endpoint;
@@ -26,9 +32,6 @@ using RCynQ.Sync.Endpoint;
 using RCynQ.Transports.Abstractions.DependencyInjection;
 using RCynQ.Transports.AmneziaWG.DependencyInjection;
 using RCynQ.Transports.Direct.DependencyInjection;
-using Serilog;
-using Serilog.Events;
-using RCynQ.Localization;
 
 namespace RCynQ.Service.Hosting;
 
@@ -40,23 +43,23 @@ public static class ServiceHostBuilder
     /// <summary>
     /// The prefix of environment variables read into configuration (for example <c>RCYNQ_SyncBridge__ListenPort</c>).
     /// </summary>
-    public const string EnvironmentPrefix = "RCYNQ_";
+    public const string ENVIRONMENT_PREFIX = "RCYNQ_";
 
     /// <summary>
     /// The maximum accepted request body: the compressed content of one file of a patch, or a compressed manifest.
     /// </summary>
-    public const long MaxRequestBodyBytes = 512L * 1024 * 1024;
+    public const long MAX_REQUEST_BODY_BYTES = 512L * 1024 * 1024;
 
     /// <summary>
     /// The argument with the identifier of the process that started the service.
     /// </summary>
-    public const string ParentProcessArgument = "--parent-pid";
+    public const string PARENT_PROCESS_ARGUMENT = "--parent-pid";
 
     /// <summary>
     /// The argument with the language of the messages of this process (<c>ru</c>, <c>en</c>); the UI passes the language
     /// the user chose, and requests may ask for another one with <c>Accept-Language</c>.
     /// </summary>
-    public const string LanguageArgument = "--language";
+    public const string LANGUAGE_ARGUMENT = "--language";
 
     /// <summary>
     /// Reads the parent process identifier from the arguments.
@@ -70,7 +73,7 @@ public static class ServiceHostBuilder
         processId = 0;
         for (var i = 0; i < args.Count - 1; i++)
         {
-            if (args[i] == ParentProcessArgument)
+            if (args[i] == PARENT_PROCESS_ARGUMENT)
             {
                 return int.TryParse(args[i + 1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out processId) && processId > 0;
             }
@@ -92,18 +95,21 @@ public static class ServiceHostBuilder
         hostOptions ??= new ServiceHostOptions();
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory });
-        UseRequestedLanguage(GetArgument(args, LanguageArgument));
+        var localizer = CreateLocalizer(args);
         var configPath = ConfigurationFileEditor.ResolvePath(GetArgument(args, "--config"));
+
+        // Before anything reads the file: a node updated from an earlier version starts without a new setup.
+        ConfigurationFileMigrator.Migrate(configPath);
         builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
-        builder.Configuration.AddEnvironmentVariables(EnvironmentPrefix);
+        builder.Configuration.AddEnvironmentVariables(ENVIRONMENT_PREFIX);
         builder.Configuration.AddCommandLine(args);
         hostOptions.ConfigureConfiguration?.Invoke(builder.Configuration);
 
         var options = BindOptions(builder.Configuration);
-        var errors = SyncBridgeOptionsValidator.Validate(options);
+        var errors = SyncBridgeOptionsValidator.Validate(options, localizer);
         if (errors.Count > 0)
         {
-            throw new SyncBridgeException(Texts.Format("Service.InvalidConfig", configPath, Environment.NewLine, string.Join(Environment.NewLine + " - ", errors)));
+            throw new SyncBridgeException(localizer.Format("Service.InvalidConfig", configPath, Environment.NewLine, string.Join(Environment.NewLine + " - ", errors)));
         }
 
         ConfigLocations.ApplyStorageDefaults(options, configPath, ConfigLocations.FindPortableRoot());
@@ -113,7 +119,10 @@ public static class ServiceHostBuilder
         var services = builder.Services;
         services.AddSingleton(options);
         services.AddSingleton(node);
+        services.AddSingleton(localizer);
+        services.AddSingleton<ILocalizer>(localizer);
         services.AddSingleton(new ServiceRuntimeInfo(configPath));
+        services.AddSingleton(new RCynQ.Sync.Repositories.RepositoryCatalogStorage(configPath));
         services.AddSingleton<InMemoryLogSink>();
         services.AddSingleton<ApiTokenStore>();
         services.AddSingleton<IEventPublisher, SignalREventPublisher>();
@@ -128,15 +137,17 @@ public static class ServiceHostBuilder
             .AddRCynQSync()
             .AddRCynQDiagnostics();
 
-        services.AddSingleton<SourcePipeline>();
-        services.AddSingleton<DestPipeline>();
-        services.AddSingleton<MediatorPipeline>();
+        services.AddSingleton<WorkstationPipeline>();
+        services.AddSingleton<OriginPipeline>();
+        services.AddSingleton<RelayPipeline>();
         services.AddSingleton<IRolePipelineFactory, RolePipelineFactory>();
         if (hostOptions.RunBackgroundServices)
         {
             services.AddHostedService<DatabaseInitializer>();
             services.AddHostedService<ChainConfigurationSeeder>();
             services.AddHostedService<RolePipelineHostedService>();
+            services.AddHostedService<DataRetentionBackgroundService>();
+            services.AddHostedService<LinkRouteMonitor>();
         }
 
         if (TryGetParentProcessId(args, out var parentProcessId))
@@ -173,7 +184,7 @@ public static class ServiceHostBuilder
                     listen => listen.UseHttps(endpointCertificate));
             }
 
-            kestrel.Limits.MaxRequestBodySize = MaxRequestBodyBytes;
+            kestrel.Limits.MaxRequestBodySize = MAX_REQUEST_BODY_BYTES;
         });
 
         hostOptions.ConfigureBuilder?.Invoke(builder);
@@ -190,20 +201,21 @@ public static class ServiceHostBuilder
 
         app.UseMiddleware<ApiTokenMiddleware>();
         app.MapRCynQApi();
-        app.MapHub<SyncBridgeHub>(ApiRoutes.Hub);
+        app.MapHub<SyncBridgeHub>(ApiRoutes.HUB);
         return app;
     }
 
     /// <summary>
-    /// Puts the messages of this process into a language, when the application has texts for it.
+    /// Creates the localizer of the service: its messages come in the language named by <see cref="LANGUAGE_ARGUMENT"/>,
+    /// when the application has texts for it, and in the default language otherwise.
     /// </summary>
-    /// <param name="code">The language code, or <see langword="null"/> to keep the default language.</param>
-    private static void UseRequestedLanguage(string? code)
+    /// <param name="args">The command-line arguments.</param>
+    /// <returns>The localizer.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="args"/> is <see langword="null"/>.</exception>
+    public static RequestLocalizer CreateLocalizer(string[] args)
     {
-        if (code is not null && Texts.Localizer.Languages.Any(language => string.Equals(language.Code, code.Trim(), StringComparison.OrdinalIgnoreCase)))
-        {
-            Texts.Localizer.SetLanguage(code.Trim().ToLowerInvariant());
-        }
+        ArgumentNullException.ThrowIfNull(args);
+        return new RequestLocalizer(LanguageCatalog.LoadEmbedded(), GetArgument(args, LANGUAGE_ARGUMENT));
     }
 
     /// <summary>
@@ -219,7 +231,7 @@ public static class ServiceHostBuilder
     public static SyncBridgeOptions BindOptions(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var section = configuration.GetSection(SyncBridgeOptions.SectionName);
+        var section = configuration.GetSection(SyncBridgeOptions.SECTION_NAME);
         var options = new SyncBridgeOptions();
         section.Bind(options);
 

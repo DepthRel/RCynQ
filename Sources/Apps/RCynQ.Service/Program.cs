@@ -1,6 +1,6 @@
 using RCynQ.Core.Exceptions;
-using RCynQ.Service.Hosting;
 using RCynQ.Localization;
+using RCynQ.Service.Hosting;
 
 namespace RCynQ.Service;
 
@@ -26,7 +26,9 @@ public static class Program
         }
         catch (SyncBridgeException ex)
         {
-            await Console.Error.WriteLineAsync(ex.Message);
+            // The configuration could not be read, so the application was never built; the message follows the language
+            // the service was started with.
+            await Console.Error.WriteLineAsync(ServiceHostBuilder.CreateLocalizer(args).Describe(ex));
             return 2;
         }
 
@@ -37,7 +39,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            await Console.Error.WriteLineAsync(Texts.Format("Service.Crashed", ex));
+            await Console.Error.WriteLineAsync(ServiceHostBuilder.CreateLocalizer(args).Format("Service.Crashed", ex));
             return 1;
         }
         finally

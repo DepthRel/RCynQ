@@ -9,17 +9,17 @@ namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 public static class WindowsAccounts
 {
     /// <summary>The well-known SID of the built-in Administrators group.</summary>
-    public const string AdministratorsSid = "S-1-5-32-544";
+    public const string ADMINISTRATORS_SID = "S-1-5-32-544";
 
     /// <summary>The cached group membership.</summary>
-    private static readonly Lazy<bool> Membership = new(QueryAdministratorsMembership, LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<bool> _membership = new(QueryAdministratorsMembership, LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Checks whether the user belongs to the Administrators group, also when the process is not elevated (the Windows
     /// SSH server then reads <c>administrators_authorized_keys</c> for this user).
     /// </summary>
     /// <returns><see langword="true"/> for members of Administrators on Windows.</returns>
-    public static bool IsAdministratorsMember() => OperatingSystem.IsWindows() && Membership.Value;
+    public static bool IsAdministratorsMember() => OperatingSystem.IsWindows() && _membership.Value;
 
     /// <summary>
     /// Checks whether the process runs elevated (with administrator rights).
@@ -42,7 +42,7 @@ public static class WindowsAccounts
     /// <param name="whoamiOutput">The output of <c>whoami /groups /fo csv /nh</c>.</param>
     /// <returns><see langword="true"/> when the group is listed.</returns>
     public static bool ListsAdministrators(string? whoamiOutput)
-        => whoamiOutput is not null && whoamiOutput.Contains(AdministratorsSid, StringComparison.OrdinalIgnoreCase);
+        => whoamiOutput is not null && whoamiOutput.Contains(ADMINISTRATORS_SID, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Runs <c>whoami</c>, which reports deny-only groups that <see cref="WindowsIdentity.Groups"/> leaves out.

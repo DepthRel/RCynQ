@@ -7,9 +7,9 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Validation;
+using RCynQ.Localization;
 using RCynQ.Ssh.Keys;
 using RCynQ.Sync.Endpoint;
-using RCynQ.Localization;
 
 namespace RCynQ.Sync.Configuration;
 
@@ -18,19 +18,19 @@ namespace RCynQ.Sync.Configuration;
 /// </summary>
 /// <remarks>
 /// Import is the explicit trust decision of the pairing: the peer's signing key becomes accepted for patch verification.
-/// When the peer is new and reachable, a chain link is created in the right position: mediators before the endpoint.
+/// When the peer is new and reachable, a chain link is created in the right position: relays before the endpoint.
 /// </remarks>
 public sealed class NodeConfigurationTransfer
 {
     /// <summary>
-    /// The priority assigned to endpoint links so mediators come first.
+    /// The priority assigned to endpoint links so relays come first.
     /// </summary>
-    public const int EndpointPriority = 1000;
+    public const int ENDPOINT_PRIORITY = 1000;
 
     /// <summary>
     /// JSON options of the export file.
     /// </summary>
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     /// <summary>The local node.</summary>
     private readonly NodeConfig _node;
@@ -51,8 +51,14 @@ public sealed class NodeConfigurationTransfer
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NodeConfigurationTransfer"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The node options.</param>
     /// <param name="signatures">The signature service.</param>
@@ -64,6 +70,7 @@ public sealed class NodeConfigurationTransfer
     /// SSH server; <see langword="null"/> when no certificate is published.
     /// </param>
     public NodeConfigurationTransfer(
+        ILocalizer localizer,
         NodeConfig node,
         SyncBridgeOptions options,
         ISignatureService signatures,
@@ -72,6 +79,7 @@ public sealed class NodeConfigurationTransfer
         TimeProvider timeProvider,
         Func<string?>? tlsFingerprint = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _options = options;
         _signatures = signatures;
@@ -100,16 +108,16 @@ public sealed class NodeConfigurationTransfer
     public async Task<ExportedNodeConfiguration> ExportAsync(string? host, string? sshUser, int sshPort = 22, string? sshPublicKey = null, string? hostKeyFingerprint = null, CancellationToken cancellationToken = default)
     {
         var normalizedFingerprint = NormalizeHostKeyFingerprint(hostKeyFingerprint)
-            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException(Texts.Format("Transfer.HostKeyFingerprintValue", hostKeyFingerprint), nameof(hostKeyFingerprint)));
+            ?? (string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : throw new ArgumentException(_localizer.Format("Transfer.HostKeyFingerprintValue", hostKeyFingerprint), nameof(hostKeyFingerprint)));
 
         if (host is not null && !SshEndpoint.IsValidHost(host))
         {
-            throw new ArgumentException(Texts.Format("Transfer.HostInvalid", host), nameof(host));
+            throw new ArgumentException(_localizer.Format("Transfer.HostInvalid", host), nameof(host));
         }
 
         if (sshUser is not null && !SshEndpoint.IsValidUser(sshUser))
         {
-            throw new ArgumentException(Texts.Format("Transfer.UserInvalid", sshUser), nameof(sshUser));
+            throw new ArgumentException(_localizer.Format("Transfer.UserInvalid", sshUser), nameof(sshUser));
         }
 
         Guard.Port(sshPort, nameof(sshPort));
@@ -122,7 +130,7 @@ public sealed class NodeConfigurationTransfer
             }
             catch (FormatException ex)
             {
-                throw new ArgumentException(ex.Message, nameof(sshPublicKey), ex);
+                throw new ArgumentException(_localizer.Describe(ex), nameof(sshPublicKey), ex);
             }
         }
 
@@ -131,7 +139,7 @@ public sealed class NodeConfigurationTransfer
             : null;
 
         return new ExportedNodeConfiguration(
-            ExportedNodeConfiguration.CurrentFormatVersion,
+            ExportedNodeConfiguration.CURRENT_FORMAT_VERSION,
             _node.Id,
             _node.Name,
             _node.Role,
@@ -139,7 +147,6 @@ public sealed class NodeConfigurationTransfer
             host,
             sshUser,
             sshPort,
-            _node.Role == NodeRole.Dest ? _node.RepoPath : null,
             _options.ListenPort,
             normalizedSshKey,
             _timeProvider.GetUtcNow(),
@@ -157,7 +164,7 @@ public sealed class NodeConfigurationTransfer
     private string EndpointCertificateFingerprint()
         => _tlsFingerprint()
             ?? throw new SyncBridgeException(
-                Texts.Get("Transfer.NoCertificate"));
+                _localizer.Get("Transfer.NoCertificate"));
 
     /// <summary>
     /// Imports the configuration of a peer.
@@ -166,19 +173,48 @@ public sealed class NodeConfigurationTransfer
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The import result.</returns>
     /// <exception cref="FormatException">The configuration is invalid or incomplete.</exception>
-    public async Task<ImportResult> ImportAsync(ExportedNodeConfiguration imported, CancellationToken cancellationToken = default)
+    public Task<ImportResult> ImportAsync(ExportedNodeConfiguration imported, CancellationToken cancellationToken = default)
+        => ImportAsync(imported, null, null, cancellationToken);
+
+    /// <summary>
+    /// Imports the configuration of a peer, with the decision an earlier attempt asked for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An import that meets no peer of the imported role, or that repeats an address the node already knows, needs no
+    /// decision and behaves as it always did. Otherwise nothing is stored without one: the result names the decisions
+    /// that make sense (see <see cref="ImportResult.Decision"/>) and the import is repeated with one of them.
+    /// </para>
+    /// <para>
+    /// A node known at another address either gets one more route (<see cref="ImportDecision.AlternativeRoute"/>) or its
+    /// address is replaced (<see cref="ImportDecision.Replace"/>). Another node of a role that is already linked either
+    /// takes the place of one of the links (<see cref="ImportDecision.Replace"/>; the replaced node is forgotten with its
+    /// keys) or, when it is a Relay or this node is one, is added next to them (<see cref="ImportDecision.AddHop"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="imported">The peer configuration.</param>
+    /// <param name="decision">The decision, or <see langword="null"/> when none was made.</param>
+    /// <param name="targetLinkId">
+    /// The link whose peer is replaced by another node; may be <see langword="null"/> when only one link qualifies.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The import result, or a request for a decision.</returns>
+    /// <exception cref="FormatException">
+    /// The configuration is invalid or incomplete, or the decision does not fit the import.
+    /// </exception>
+    public async Task<ImportResult> ImportAsync(ExportedNodeConfiguration imported, ImportDecision? decision, Guid? targetLinkId, CancellationToken cancellationToken = default)
     {
         Validate(imported);
         if (imported.NodeId == _node.Id)
         {
-            throw new FormatException(Texts.Get("Transfer.ThisNode"));
+            throw new FormatException(_localizer.Get("Transfer.ThisNode"));
         }
 
         var existing = await _peers.GetAsync(imported.NodeId, cancellationToken);
         var host = imported.Host ?? existing?.Host
-            ?? throw new FormatException(Texts.Format("Transfer.NoHost", imported.NodeId));
+            ?? throw new FormatException(_localizer.Format("Transfer.NoHost", imported.NodeId));
         var user = imported.SshUser ?? existing?.SshUser
-            ?? throw new FormatException(Texts.Format("Transfer.NoUser", imported.NodeId));
+            ?? throw new FormatException(_localizer.Format("Transfer.NoUser", imported.NodeId));
         var port = imported.SshPort > 0 ? imported.SshPort : existing?.SshPort ?? 22;
 
         PeerDescriptor peer;
@@ -188,7 +224,6 @@ public sealed class NodeConfigurationTransfer
                 imported.NodeId, imported.Name, imported.Role, host, port, user,
                 NormalizeHostKeyFingerprint(imported.HostKeyFingerprint) ?? existing?.HostKeyFingerprint,
                 imported.SigningPublicKey ?? existing?.SigningPublicKey,
-                imported.GitRepoPath ?? existing?.GitRepoPath,
                 imported.SshPublicKey is null ? existing?.SshPublicKey : SshPublicKey.Parse(imported.SshPublicKey).ToLine(),
                 imported.EndpointMode,
                 imported.TlsFingerprint is null
@@ -198,62 +233,194 @@ public sealed class NodeConfigurationTransfer
         }
         catch (ArgumentException ex)
         {
-            throw new FormatException(Texts.Format("Transfer.Invalid", imported.NodeId, ex.Message), ex);
-        }
-
-        await _peers.UpsertAsync(peer, cancellationToken);
-        var links = await _links.GetAllAsync(cancellationToken);
-        var linked = links.Where(link => link.Peer.Id == peer.Id).ToList();
-        foreach (var link in linked)
-        {
-            await _links.UpsertAsync(
-                new ChainLinkConfig(link.Id, link.Name, link.Transport, peer, link.LocalPort, link.RemotePort, link.Priority, link.FallbackTransports, link.TransportSettings),
-                cancellationToken);
-        }
-
-        if (linked.Count > 0)
-        {
-            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, Texts.Format("Transfer.Updated", peer.Id, linked.Count));
+            throw new FormatException(_localizer.Format("Transfer.Invalid", imported.NodeId, _localizer.Describe(ex)), ex);
         }
 
         var counterpart = _node.Role switch
         {
-            NodeRole.Source => NodeRole.Dest,
-            NodeRole.Dest => NodeRole.Source,
+            NodeRole.Workstation => NodeRole.Origin,
+            NodeRole.Origin => NodeRole.Workstation,
             _ => (NodeRole?)null
         };
 
-        int priority;
-        int remotePort;
-        if (peer.Role == NodeRole.Mediator || _node.Role == NodeRole.Mediator)
-        {
-            priority = links.Where(link => link.Priority < EndpointPriority).Select(link => link.Priority + 10).DefaultIfEmpty(10).Max();
-            remotePort = 22;
-        }
-        else if (peer.Role == counterpart)
-        {
-            priority = links.Select(link => link.Priority + 10).Append(EndpointPriority).Max();
+        // The port of the counterpart endpoint a link leads to: its TLS port when it runs no SSH server, otherwise its
+        // loopback endpoint behind the SSH tunnel.
+        var endpointPort = peer.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : imported.ListenPort;
 
-            // A peer without an SSH server is reached on its TLS port instead of its loopback endpoint.
-            remotePort = peer.EndpointMode == EndpointMode.Direct ? imported.EndpointPort : imported.ListenPort;
-        }
-        else
+        var links = await _links.GetAllAsync(cancellationToken);
+        var linked = links.Where(link => link.Peer.Id == peer.Id).ToList();
+
+        // A new export of the counterpart may name another port (it changed its endpoint mode or its listen port);
+        // a link that kept the old one would lead nowhere. The port of a link to a relay is not part of an export.
+        int? linkedPort = peer.Role == counterpart ? endpointPort : null;
+        if (linked.Count > 0)
         {
-            return new ImportResult(peer.Id, peer.Role, false, null, Texts.Format("Transfer.StoredOnly", peer.Id, _node.Role, peer.Role));
+            return await ImportKnownNodeAsync(peer, linked, linkedPort, decision, cancellationToken);
         }
 
-        var name = UniqueName(peer.Id.Value, links);
-        var created = new ChainLinkConfig(Guid.NewGuid(), name, TransportKind.Direct, peer, 0, remotePort, priority);
+        var joinsAsNeighbour = peer.Role == NodeRole.Relay || _node.Role == NodeRole.Relay;
+        if (!joinsAsNeighbour && peer.Role != counterpart)
+        {
+            await _peers.UpsertAsync(peer, cancellationToken);
+            return new ImportResult(peer.Id, peer.Role, false, null, _localizer.Format("Transfer.StoredOnly", peer.Id, _node.Role, peer.Role));
+        }
+
+        var sameRole = links.Where(link => link.Peer.Role == peer.Role).ToList();
+        if (sameRole.Count > 0)
+        {
+            // Two counterpart endpoints cannot share a chain: the last link is the one patches go to.
+            var options = joinsAsNeighbour
+                ? new[] { ImportDecision.AddHop, ImportDecision.Replace }
+                : new[] { ImportDecision.Replace };
+            if (decision is null)
+            {
+                return NeedsDecision(peer, false, options, sameRole);
+            }
+
+            if (!options.Contains(decision.Value))
+            {
+                throw new FormatException(_localizer.Format("Transfer.DecisionNotAllowed", decision.Value, peer.Id));
+            }
+
+            if (decision == ImportDecision.Replace)
+            {
+                return await ReplaceNodeAsync(peer, sameRole, targetLinkId, joinsAsNeighbour ? null : endpointPort, cancellationToken);
+            }
+        }
+
+        var priority = joinsAsNeighbour
+            ? links.Where(link => link.Priority < ENDPOINT_PRIORITY).Select(link => link.Priority + 10).DefaultIfEmpty(10).Max()
+            : links.Select(link => link.Priority + 10).Append(ENDPOINT_PRIORITY).Max();
+        var name = UniqueName(peer.Id.Value, links.Select(link => link.Name));
+        var created = new ChainLinkConfig(Guid.NewGuid(), name, TransportKind.Direct, peer, 0, joinsAsNeighbour ? 22 : endpointPort, priority);
+        await _peers.UpsertAsync(peer, cancellationToken);
         await _links.UpsertAsync(created, cancellationToken);
-        return new ImportResult(peer.Id, peer.Role, true, created.Id, Texts.Format("Transfer.Imported", peer.Role, peer.Id, name));
+        return new ImportResult(peer.Id, peer.Role, true, created.Id, _localizer.Format("Transfer.Imported", peer.Role, peer.Id, name));
     }
+
+    /// <summary>
+    /// Imports a new export of a node the chain already leads to.
+    /// </summary>
+    /// <param name="peer">The imported description of the node.</param>
+    /// <param name="linked">The links that lead to the node.</param>
+    /// <param name="remotePort">The remote port the links get, or <see langword="null"/> to keep theirs.</param>
+    /// <param name="decision">The decision, or <see langword="null"/> when none was made.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The import result, or a request for a decision.</returns>
+    /// <exception cref="FormatException">The decision does not fit the import.</exception>
+    private async Task<ImportResult> ImportKnownNodeAsync(PeerDescriptor peer, IReadOnlyList<ChainLinkConfig> linked, int? remotePort, ImportDecision? decision, CancellationToken cancellationToken)
+    {
+        var address = peer.Ssh;
+        var isKnownAddress = linked.Any(link => LinkRoute.SameAddress(link.Peer.Ssh, address) || link.Routes.Any(route => route.LeadsTo(address)));
+        if (isKnownAddress)
+        {
+            // Keys and ports are refreshed; the address in use stays the one the node chose among the routes.
+            await _peers.UpsertAsync(peer.WithAddress(linked[0].Peer.Ssh), cancellationToken);
+            foreach (var link in linked)
+            {
+                await _links.UpsertAsync(link.WithPeer(peer.WithAddress(link.Peer.Ssh), remotePort), cancellationToken);
+            }
+
+            return new ImportResult(peer.Id, peer.Role, false, linked[0].Id, _localizer.Format("Transfer.Updated", peer.Id, linked.Count));
+        }
+
+        var options = new[] { ImportDecision.AlternativeRoute, ImportDecision.Replace };
+        if (decision is null)
+        {
+            return NeedsDecision(peer, true, options, linked);
+        }
+
+        if (!options.Contains(decision.Value))
+        {
+            throw new FormatException(_localizer.Format("Transfer.DecisionNotAllowed", decision.Value, peer.Id));
+        }
+
+        await _peers.UpsertAsync(
+            decision == ImportDecision.AlternativeRoute ? peer.WithAddress(linked[0].Peer.Ssh) : peer,
+            cancellationToken);
+        foreach (var link in linked)
+        {
+            if (decision == ImportDecision.AlternativeRoute)
+            {
+                // The address the link had so far becomes a route of its own the first time another one is added.
+                var routes = link.Routes.Count > 0
+                    ? link.Routes.ToList()
+                    : new List<LinkRoute> { new(Guid.NewGuid(), link.Peer.Host, link.Peer.Ssh) };
+                routes.Add(new LinkRoute(Guid.NewGuid(), UniqueName(address.Host, routes.Select(route => route.Name)), address));
+                await _links.UpsertAsync(
+                    link.WithPeer(peer.WithAddress(link.Peer.Ssh), remotePort).WithRoutes(routes, link.PinnedRouteId),
+                    cancellationToken);
+            }
+            else
+            {
+                // The route in use moves to the new address; the other routes are kept.
+                var active = link.ActiveRoute;
+                var routes = link.Routes.Select(route => route.Id == active?.Id ? route.WithAddress(address) : route).ToArray();
+                await _links.UpsertAsync(link.WithRoutes(routes, link.PinnedRouteId).WithPeer(peer, remotePort), cancellationToken);
+            }
+        }
+
+        return new ImportResult(
+            peer.Id, peer.Role, false, linked[0].Id,
+            decision == ImportDecision.AlternativeRoute
+                ? _localizer.Format("Transfer.RouteAdded", address.Host, peer.Id)
+                : _localizer.Format("Transfer.Updated", peer.Id, linked.Count));
+    }
+
+    /// <summary>
+    /// Puts an imported node in the place of the peer of a link and forgets the replaced peer.
+    /// </summary>
+    /// <param name="peer">The imported node.</param>
+    /// <param name="candidates">The links to peers of the same role.</param>
+    /// <param name="targetLinkId">The link to change, or <see langword="null"/> when only one qualifies.</param>
+    /// <param name="remotePort">The remote port the link gets, or <see langword="null"/> to keep its own.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The import result.</returns>
+    /// <exception cref="FormatException">The link is not named although several qualify, or it does not qualify.</exception>
+    private async Task<ImportResult> ReplaceNodeAsync(PeerDescriptor peer, IReadOnlyList<ChainLinkConfig> candidates, Guid? targetLinkId, int? remotePort, CancellationToken cancellationToken)
+    {
+        var target = targetLinkId is { } id
+            ? candidates.FirstOrDefault(link => link.Id == id)
+                ?? throw new FormatException(_localizer.Format("Transfer.ReplaceTargetUnknown", id, peer.Role))
+            : candidates.Count == 1
+                ? candidates[0]
+                : throw new FormatException(_localizer.Format("Transfer.ReplaceTargetNeeded", peer.Role));
+
+        var replaced = target.Peer;
+
+        // The routes led to the replaced node; the new one starts with the address of its export.
+        await _peers.UpsertAsync(peer, cancellationToken);
+        await _links.UpsertAsync(target.WithRoutes(null).WithPeer(peer, remotePort), cancellationToken);
+
+        // Otherwise the SSH key of the replaced node would keep its access and its signing key would stay trusted.
+        await _peers.DeleteUnlinkedAsync(replaced.Id, cancellationToken);
+        return new ImportResult(peer.Id, peer.Role, false, target.Id, _localizer.Format("Transfer.Replaced", replaced.Id, peer.Id, target.Name));
+    }
+
+    /// <summary>
+    /// Builds the answer of an import that waits for a decision; nothing was stored.
+    /// </summary>
+    /// <param name="peer">The imported node.</param>
+    /// <param name="sameNode">Whether the node is already known at another address.</param>
+    /// <param name="options">The decisions that make sense.</param>
+    /// <param name="candidates">The links the decision is about.</param>
+    /// <returns>The result.</returns>
+    private ImportResult NeedsDecision(PeerDescriptor peer, bool sameNode, IReadOnlyList<ImportDecision> options, IReadOnlyList<ChainLinkConfig> candidates)
+        => new(peer.Id, peer.Role, false, null, _localizer.Format(sameNode ? "Transfer.NeedsDecisionSameNode" : "Transfer.NeedsDecisionOtherNode", peer.Id, peer.Role, peer.Host))
+        {
+            Decision = new ImportDecisionRequest(
+                sameNode,
+                peer.Host,
+                options,
+                candidates.Select(link => new ImportCandidate(link.Id, link.Name, link.Peer.Id, link.Peer.Name, link.Peer.Role, link.Peer.Host)).ToArray())
+        };
 
     /// <summary>
     /// Serializes an exported configuration to indented JSON.
     /// </summary>
     /// <param name="configuration">The configuration.</param>
     /// <returns>The JSON text.</returns>
-    public static string Serialize(ExportedNodeConfiguration configuration) => JsonSerializer.Serialize(configuration, JsonOptions);
+    public static string Serialize(ExportedNodeConfiguration configuration) => JsonSerializer.Serialize(configuration, _jsonOptions);
 
     /// <summary>
     /// Parses and validates an exported configuration.
@@ -266,11 +433,11 @@ public sealed class NodeConfigurationTransfer
         ExportedNodeConfiguration? configuration;
         try
         {
-            configuration = JsonSerializer.Deserialize<ExportedNodeConfiguration>(json, JsonOptions);
+            configuration = JsonSerializer.Deserialize<ExportedNodeConfiguration>(json, _jsonOptions);
         }
         catch (JsonException ex)
         {
-            throw new FormatException(Texts.Format("Transfer.FileInvalid", ex.Message), ex);
+            throw LocalizedError.Create(message => new FormatException(message, ex), "Transfer.FileInvalid", ex);
         }
 
         Validate(configuration);
@@ -286,39 +453,39 @@ public sealed class NodeConfigurationTransfer
     {
         if (configuration is null)
         {
-            throw new FormatException(Texts.Get("Transfer.FileEmpty"));
+            throw LocalizedError.Format("Transfer.FileEmpty");
         }
 
-        if (configuration.FormatVersion != ExportedNodeConfiguration.CurrentFormatVersion)
+        if (configuration.FormatVersion != ExportedNodeConfiguration.CURRENT_FORMAT_VERSION)
         {
-            throw new FormatException(Texts.Format("Transfer.Version", configuration.FormatVersion));
+            throw LocalizedError.Format("Transfer.Version", configuration.FormatVersion);
         }
 
         if (configuration.NodeId.IsEmpty || string.IsNullOrWhiteSpace(configuration.Name) || !Enum.IsDefined(configuration.Role))
         {
-            throw new FormatException(Texts.Get("Transfer.MissingFields"));
+            throw LocalizedError.Format("Transfer.MissingFields");
         }
 
         if (configuration.ListenPort is < 1 or > 65535)
         {
-            throw new FormatException(Texts.Format("Transfer.ListenPort", configuration.ListenPort));
+            throw LocalizedError.Format("Transfer.ListenPort", configuration.ListenPort);
         }
 
         if (!Enum.IsDefined(configuration.EndpointMode))
         {
-            throw new FormatException(Texts.Format("Transfer.EndpointMode", configuration.EndpointMode));
+            throw LocalizedError.Format("Transfer.EndpointMode", configuration.EndpointMode);
         }
 
         if (configuration.EndpointMode == EndpointMode.Direct)
         {
             if (configuration.EndpointPort is < 1 or > 65535)
             {
-                throw new FormatException(Texts.Format("Transfer.EndpointPort", configuration.EndpointPort));
+                throw LocalizedError.Format("Transfer.EndpointPort", configuration.EndpointPort);
             }
 
             if (NodeCertificateStore.NormalizeFingerprint(configuration.TlsFingerprint) is null)
             {
-                throw new FormatException(Texts.Get("Transfer.NeedsFingerprint"));
+                throw LocalizedError.Format("Transfer.NeedsFingerprint");
             }
         }
 
@@ -333,12 +500,12 @@ public sealed class NodeConfigurationTransfer
             }
             catch (Exception ex) when (ex is CryptographicException or FormatException)
             {
-                throw new FormatException(Texts.Get("Transfer.KeyNotValid"), ex);
+                throw LocalizedError.Create(message => new FormatException(message, ex), "Transfer.KeyNotValid");
             }
 
             if (!isP256)
             {
-                throw new FormatException(Texts.Get("Transfer.KeyMustBeP256"));
+                throw LocalizedError.Format("Transfer.KeyMustBeP256");
             }
         }
 
@@ -349,7 +516,7 @@ public sealed class NodeConfigurationTransfer
 
         if (!string.IsNullOrWhiteSpace(configuration.HostKeyFingerprint) && NormalizeHostKeyFingerprint(configuration.HostKeyFingerprint) is null)
         {
-            throw new FormatException(Texts.Get("Transfer.HostKeyFingerprint"));
+            throw LocalizedError.Format("Transfer.HostKeyFingerprint");
         }
     }
 
@@ -371,14 +538,14 @@ public sealed class NodeConfigurationTransfer
     }
 
     /// <summary>
-    /// Returns a link name that is not used yet.
+    /// Returns a name that is not used yet.
     /// </summary>
     /// <param name="baseName">The preferred name.</param>
-    /// <param name="links">The existing links.</param>
+    /// <param name="taken">The names in use.</param>
     /// <returns>The unique name.</returns>
-    private static string UniqueName(string baseName, IReadOnlyList<ChainLinkConfig> links)
+    private static string UniqueName(string baseName, IEnumerable<string> taken)
     {
-        var names = links.Select(link => link.Name).ToHashSet(StringComparer.Ordinal);
+        var names = taken.ToHashSet(StringComparer.Ordinal);
         var name = baseName;
         for (var i = 2; names.Contains(name); i++)
         {

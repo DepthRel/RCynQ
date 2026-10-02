@@ -11,10 +11,10 @@ namespace RCynQ.Ssh.Tests;
 public sealed class AuthorizedKeysAccessTests : IDisposable
 {
     /// <summary>A public key.</summary>
-    private const string KeyLine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl dev@pc";
+    private const string KEY_LINE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl dev@pc";
 
     /// <summary>Another public key.</summary>
-    private const string OtherKeyLine = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPBzgtLuBSnvmhyPyE/aR3fT7G5Ynge9cP0KZC9vUVUb other";
+    private const string OTHER_KEY_LINE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPBzgtLuBSnvmhyPyE/aR3fT7G5Ynge9cP0KZC9vUVUb other";
 
     /// <summary>The temporary directory.</summary>
     private readonly string _root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rcynq-authkeys", Guid.NewGuid().ToString("N"))).FullName;
@@ -25,13 +25,13 @@ public sealed class AuthorizedKeysAccessTests : IDisposable
     [Fact]
     public void Forward_Line_Allows_Only_Listed_Targets()
     {
-        var key = SshPublicKey.Parse(KeyLine);
+        var key = SshPublicKey.Parse(KEY_LINE);
 
-        var line = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22", "[fd00::5]:22" }, null, "rcynq:source-1");
+        var line = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22", "[fd00::5]:22" }, null, "rcynq:workstation-1");
 
-        line.Should().Be($"restrict,port-forwarding,permitopen=\"192.168.10.20:22\",permitopen=\"[fd00::5]:22\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} rcynq:source-1");
+        line.Should().Be($"restrict,port-forwarding,permitopen=\"192.168.10.20:22\",permitopen=\"[fd00::5]:22\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} rcynq:workstation-1");
         AuthorizedKeysManager.Parse(new[] { line }).Entries.Should().ContainSingle().Which.IsRestricted.Should().BeTrue();
-        AuthorizedKeysManager.BuildForwardLine(key, new[] { "127.0.0.1:18443" }, "/srv/repo", "rcynq:source-1")
+        AuthorizedKeysManager.BuildForwardLine(key, new[] { "127.0.0.1:18443" }, "/srv/repo", "rcynq:workstation-1")
             .Should().Contain("permitopen=\"127.0.0.1:18443\",command=\"git-upload-pack '/srv/repo'\"");
 
         ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, Array.Empty<string>(), null, "rcynq:x"))).Should().Throw<ArgumentException>();
@@ -48,15 +48,15 @@ public sealed class AuthorizedKeysAccessTests : IDisposable
     public async Task Upsert_Replaces_Same_Key_And_Keeps_Others()
     {
         var path = Path.Combine(_root, ".ssh", "authorized_keys");
-        var key = SshPublicKey.Parse(KeyLine);
-        var oldLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, null, "rcynq:source-1");
+        var key = SshPublicKey.Parse(KEY_LINE);
+        var oldLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, null, "rcynq:workstation-1");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllLinesAsync(path, new[] { "# my keys", OtherKeyLine, oldLine });
+        await File.WriteAllLinesAsync(path, new[] { "# my keys", OTHER_KEY_LINE, oldLine });
         var manager = new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = path });
-        var newLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22" }, null, "rcynq:source-1");
+        var newLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22" }, null, "rcynq:workstation-1");
 
         (await manager.UpsertAsync(new[] { newLine })).Should().Be(1);
-        (await File.ReadAllLinesAsync(path)).Should().Equal("# my keys", OtherKeyLine, newLine);
+        (await File.ReadAllLinesAsync(path)).Should().Equal("# my keys", OTHER_KEY_LINE, newLine);
 
         var written = File.GetLastWriteTimeUtc(path);
         (await manager.UpsertAsync(new[] { newLine })).Should().Be(0);

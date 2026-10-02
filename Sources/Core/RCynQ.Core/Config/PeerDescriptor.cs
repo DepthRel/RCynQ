@@ -9,7 +9,7 @@ namespace RCynQ.Core.Config;
 /// Describes a remote node that this node communicates with.
 /// </summary>
 /// <remarks>
-/// A peer is either the counterpart endpoint (Source or Dest) or a Mediator used as SSH jump host.
+/// A peer is either the counterpart endpoint (Workstation or Origin) or a Relay used as SSH jump host.
 /// Peer data is exchanged manually via export/import; there is no central key server.
 /// </remarks>
 public sealed record PeerDescriptor
@@ -29,10 +29,7 @@ public sealed record PeerDescriptor
     /// </param>
     /// <param name="signingPublicKey">
     /// The Base64 DER (SubjectPublicKeyInfo) ECDSA P-256 public key used to verify patches from this peer,
-    /// or <see langword="null"/> when the peer does not send patches (Mediator).
-    /// </param>
-    /// <param name="gitRepoPath">
-    /// The absolute repository path on a Dest peer used for git-over-ssh, or <see langword="null"/>.
+    /// or <see langword="null"/> when the peer does not send patches (Relay).
     /// </param>
     /// <param name="sshPublicKey">
     /// The OpenSSH public key line of the peer, allowed in the local <c>authorized_keys</c>, or <see langword="null"/>.
@@ -57,7 +54,6 @@ public sealed record PeerDescriptor
         string sshUser,
         string? hostKeyFingerprint = null,
         string? signingPublicKey = null,
-        string? gitRepoPath = null,
         string? sshPublicKey = null,
         EndpointMode endpointMode = EndpointMode.SshTunnel,
         string? tlsFingerprint = null,
@@ -71,12 +67,12 @@ public sealed record PeerDescriptor
         {
             if (TlsFingerprint is null)
             {
-                throw new ArgumentException(Texts.Get("Peer.NeedsFingerprint"), nameof(tlsFingerprint));
+                throw LocalizedError.Argument(nameof(tlsFingerprint), "Peer.NeedsFingerprint");
             }
 
             if (EndpointPort == 0)
             {
-                throw new ArgumentException(Texts.Get("Peer.NeedsPort"), nameof(endpointPort));
+                throw LocalizedError.Argument(nameof(endpointPort), "Peer.NeedsPort");
             }
         }
         if (id.IsEmpty)
@@ -90,7 +86,6 @@ public sealed record PeerDescriptor
         Ssh = new SshEndpoint(sshUser, host, sshPort);
         HostKeyFingerprint = Guard.OptionalNotBlank(hostKeyFingerprint, nameof(hostKeyFingerprint));
         SigningPublicKey = ValidateBase64(signingPublicKey, nameof(signingPublicKey));
-        GitRepoPath = Guard.OptionalNotBlank(gitRepoPath, nameof(gitRepoPath));
     }
 
     /// <summary>
@@ -164,9 +159,62 @@ public sealed record PeerDescriptor
     public string? SigningPublicKey { get; }
 
     /// <summary>
-    /// Gets the absolute repository path on a Dest peer, or <see langword="null"/>.
+    /// Returns this description completed with what a stored description of the same peer already knows.
     /// </summary>
-    public string? GitRepoPath { get; }
+    /// <param name="stored">The description stored for the peer, or <see langword="null"/> when the peer is new.</param>
+    /// <returns>The completed description; this instance when there is nothing to take over.</returns>
+    /// <remarks>
+    /// A link written in the configuration file, typed into the application or passed to the CLI names the address of the
+    /// peer and, at most, its host key fingerprint, signing key and repository path. The SSH public key and the endpoint
+    /// mode with its TLS fingerprint and port come only with an import. Saving such a link must not erase what an import
+    /// stored, so those values are taken from <paramref name="stored"/>, and the optional ones are taken from it when this
+    /// description has none.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="stored"/> describes another peer.</exception>
+    public PeerDescriptor WithDetailsFrom(PeerDescriptor? stored)
+    {
+        if (stored is null)
+        {
+            return this;
+        }
+
+        if (stored.Id != Id)
+        {
+            throw new ArgumentException($"Peer '{stored.Id}' is not peer '{Id}'.", nameof(stored));
+        }
+
+        // A description that names a direct endpoint itself is complete; the default mode means "not stated".
+        var statesEndpoint = EndpointMode == EndpointMode.Direct;
+        return new PeerDescriptor(
+            Id,
+            Name,
+            Role,
+            Host,
+            SshPort,
+            SshUser,
+            HostKeyFingerprint ?? stored.HostKeyFingerprint,
+            SigningPublicKey ?? stored.SigningPublicKey,
+            SshPublicKey ?? stored.SshPublicKey,
+            statesEndpoint ? EndpointMode : stored.EndpointMode,
+            statesEndpoint ? TlsFingerprint : stored.TlsFingerprint,
+            statesEndpoint ? EndpointPort : stored.EndpointPort);
+    }
+
+    /// <summary>
+    /// Returns this description of the peer with another address; everything else stays as it is.
+    /// </summary>
+    /// <param name="address">The address the peer is reached at.</param>
+    /// <returns>The description; this instance when the address is the same.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="address"/> is <see langword="null"/>.</exception>
+    public PeerDescriptor WithAddress(SshEndpoint address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        return LinkRoute.SameAddress(Ssh, address)
+            ? this
+            : new PeerDescriptor(
+                Id, Name, Role, address.Host, address.Port, address.User,
+                HostKeyFingerprint, SigningPublicKey, SshPublicKey, EndpointMode, TlsFingerprint, EndpointPort);
+    }
 
     /// <summary>
     /// Validates that an optional value is well-formed Base64.
@@ -186,7 +234,7 @@ public sealed record PeerDescriptor
         var buffer = new byte[trimmed.Length];
         if (!Convert.TryFromBase64String(trimmed, buffer, out _))
         {
-            throw new ArgumentException(Texts.Get("Peer.KeyBase64"), parameterName);
+            throw LocalizedError.Argument(parameterName, "Peer.KeyBase64");
         }
 
         return trimmed;

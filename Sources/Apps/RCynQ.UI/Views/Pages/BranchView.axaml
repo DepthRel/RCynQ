@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
+             xmlns:repos="using:RCynQ.UI.ViewModels.Repositories"
              xmlns:controls="using:RCynQ.UI.Controls"
              x:Class="RCynQ.UI.Views.Pages.BranchView"
              x:DataType="pages:BranchViewModel">
@@ -35,7 +36,44 @@
         </Button>
       </WrapPanel>
       <TextBlock Classes="muted" IsVisible="{Binding !CanPull}" TextWrapping="Wrap"
-                 Text="{loc:Loc Branch.SourceOnlyHint}" />
+                 Text="{loc:Loc Branch.WorkstationOnlyHint}" />
+
+      <!-- The repositories of the node -->
+      <StackPanel Spacing="10" IsVisible="{Binding Repositories.IsAvailable, FallbackValue=False}">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Classes="section" Text="{loc:Loc Repos.Title}" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" IsVisible="{Binding Repositories.CanRegister}"
+                  Content="{loc:Loc Repos.Register}" ToolTip.Tip="{loc:Loc Repos.RegisterTip}" Command="{Binding Repositories.RegisterCommand}" />
+          <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0"
+                  Content="{loc:Loc Common.Refresh}" Command="{Binding Repositories.ReloadCommand}" />
+        </Grid>
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Repositories.CatalogError}" IsVisible="{Binding Repositories.HasCatalogError}" />
+        <ItemsControl ItemsSource="{Binding Repositories.Items}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="repos:RepositoryItemViewModel">
+              <Border Classes="card padded" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                  <StackPanel Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <TextBlock Classes="value" Text="{Binding DisplayName}" />
+                      <TextBlock Classes="muted" Text="{Binding Note}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Classes="secondary mono" Text="{Binding Location}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="outline" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanSwitch}"
+                          Content="{loc:Loc Repos.Switch}"
+                          Command="{Binding $parent[UserControl].((pages:BranchViewModel)DataContext).Repositories.SwitchCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="outline" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanRemove}"
+                          Content="{loc:Loc Repos.Remove}" ToolTip.Tip="{loc:Loc Repos.RemoveTip}"
+                          Command="{Binding $parent[UserControl].((pages:BranchViewModel)DataContext).Repositories.RemoveCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
 
       <StackPanel IsVisible="{Binding HasOutput}">
         <TextBlock Classes="section" Text="{loc:Loc Branch.Output}" />

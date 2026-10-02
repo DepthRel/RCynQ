@@ -1,24 +1,14 @@
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
-using RCynQ.Core.Abstractions.Security;
 using RCynQ.Core.Abstractions.Storage;
-using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
-using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
-using RCynQ.Git.Patches.Diff;
 using RCynQ.Localization;
-using RCynQ.Sync.Apply;
-using RCynQ.Sync.Conflicts;
-using RCynQ.Sync.Content;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
-using RCynQ.Sync.Paths;
 using RCynQ.Sync.Security;
-using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
-using RCynQ.Sync.SyncBase;
 
 namespace RCynQ.Sync.Transfer;
 
@@ -28,32 +18,26 @@ namespace RCynQ.Sync.Transfer;
 /// <remarks>
 /// <para>
 /// A patch arrives as a session. <see cref="OpenSessionAsync"/> validates everything before anything is stored: role, link token
-/// (constant time), sender header, receiver, known counterpart peer with signing key, signature of the manifest, and replay protection
-/// (under the working tree lock, so concurrent duplicates cannot both pass). The manifest is stored as an incoming <see cref="PatchStatus.Pending"/> patch.
+/// (constant time), sender header, receiver, known counterpart peer with signing key and signature of the manifest
+/// (<see cref="PatchAdmission"/>), and replay protection (under the working tree lock, so concurrent duplicates cannot both pass). The manifest is stored as an incoming <see cref="PatchStatus.Pending"/> patch.
 /// A repeated opening of the same session with the same signature resumes it.
 /// </para>
 /// <para>
 /// <see cref="ReceiveContentAsync"/> stores the content of one file only after it matches the size and SHA-256 hash the signed manifest
-/// announces. <see cref="CommitAsync"/> then makes the apply attempt. It is all-or-nothing: when any file conflicts with a local change
+/// announces. <see cref="CommitAsync"/> then makes the apply attempt (<see cref="IncomingPatchApplier"/>). It is all-or-nothing: when any file conflicts with a local change
 /// nothing is written and the patch becomes <see cref="PatchStatus.ConflictPending"/>; otherwise the content is written to the working tree and the sync base.
 /// </para>
 /// </remarks>
 public sealed class DefaultPatchReceiver : IPatchReceiver
 {
-    /// <summary>The local node.</summary>
-    private readonly NodeConfig _node;
+    /// <summary>Decides whether a request is let in.</summary>
+    private readonly PatchAdmission _admission;
 
-    /// <summary>The peer repository.</summary>
-    private readonly IPeerRepository _peers;
-
-    /// <summary>The signature service.</summary>
-    private readonly ISignatureService _signatures;
+    /// <summary>Makes the apply attempt of a patch whose content has arrived.</summary>
+    private readonly IncomingPatchApplier _incoming;
 
     /// <summary>The replay guard.</summary>
     private readonly ReplayGuard _replay;
-
-    /// <summary>The link token provider.</summary>
-    private readonly LinkTokenProvider _tokens;
 
     /// <summary>The patch repository.</summary>
     private readonly IPatchRepository _patches;
@@ -61,26 +45,11 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <summary>The payload storage.</summary>
     private readonly IPatchFileStorage _storage;
 
-    /// <summary>The diff builder.</summary>
-    private readonly IPatchDiffBuilder _diffs;
-
-    /// <summary>The conflict detector.</summary>
-    private readonly ConflictDetector _detector;
-
-    /// <summary>The content applier.</summary>
-    private readonly ContentOverwriteApplier _applier;
-
     /// <summary>The outcome recorder.</summary>
     private readonly PatchOutcomeRecorder _outcomes;
 
     /// <summary>The state tracker.</summary>
     private readonly StateTracker _tracker;
-
-    /// <summary>The sync paths.</summary>
-    private readonly SyncPaths _paths;
-
-    /// <summary>The sync base manager.</summary>
-    private readonly SyncBaseManager _syncBase;
 
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
@@ -88,57 +57,42 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <summary>The clock.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DefaultPatchReceiver"/> class.
     /// </summary>
-    /// <param name="node">The local node.</param>
-    /// <param name="peers">The peer repository.</param>
-    /// <param name="signatures">The signature service.</param>
+    /// <param name="localizer">The localizer of the messages.</param>
+    /// <param name="admission">Decides whether a request is let in.</param>
+    /// <param name="incoming">Makes the apply attempt of a patch whose content has arrived.</param>
     /// <param name="replay">The replay guard.</param>
-    /// <param name="tokens">The link token provider.</param>
     /// <param name="patches">The patch repository.</param>
     /// <param name="storage">The payload storage.</param>
-    /// <param name="diffs">The diff builder.</param>
-    /// <param name="detector">The conflict detector.</param>
-    /// <param name="applier">The content applier.</param>
     /// <param name="outcomes">The outcome recorder.</param>
     /// <param name="tracker">The state tracker.</param>
-    /// <param name="paths">The sync paths.</param>
-    /// <param name="syncBase">The sync base manager.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The clock.</param>
     public DefaultPatchReceiver(
-        NodeConfig node,
-        IPeerRepository peers,
-        ISignatureService signatures,
+        ILocalizer localizer,
+        PatchAdmission admission,
+        IncomingPatchApplier incoming,
         ReplayGuard replay,
-        LinkTokenProvider tokens,
         IPatchRepository patches,
         IPatchFileStorage storage,
-        IPatchDiffBuilder diffs,
-        ConflictDetector detector,
-        ContentOverwriteApplier applier,
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
-        SyncPaths paths,
-        SyncBaseManager syncBase,
         WorkingTreeLock workingTreeLock,
         TimeProvider timeProvider)
     {
-        _node = node;
-        _peers = peers;
-        _signatures = signatures;
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _admission = admission;
+        _incoming = incoming;
         _replay = replay;
-        _tokens = tokens;
         _patches = patches;
         _storage = storage;
-        _diffs = diffs;
-        _detector = detector;
-        _applier = applier;
         _outcomes = outcomes;
         _tracker = tracker;
-        _paths = paths;
-        _syncBase = syncBase;
         _lock = workingTreeLock;
         _timeProvider = timeProvider;
     }
@@ -148,7 +102,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(context);
-        await ValidateAsync(envelope, context, cancellationToken);
+        await _admission.ValidateAsync(envelope, context, cancellationToken);
 
         using (await _lock.AcquireAsync(cancellationToken))
         {
@@ -164,7 +118,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             }
             else
             {
-                throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", envelope.Id));
+                throw new PatchRejectedException(PatchRejectionReason.Replay, _localizer.Format("Replay.Again", envelope.Id));
             }
         }
 
@@ -188,10 +142,10 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         ArgumentNullException.ThrowIfNull(sha256);
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(context);
-        var session = await AuthorizeSessionAsync(patchId, context, cancellationToken);
+        var session = await _admission.AuthorizeSessionAsync(patchId, context, cancellationToken);
         var hash = sha256.Trim().ToLowerInvariant();
         var entry = session.Manifest.FirstOrDefault(change => change.Kind != ChangeKind.Deleted && string.Equals(change.Sha256, hash, StringComparison.Ordinal))
-            ?? throw new PatchRejectedException(PatchRejectionReason.Malformed, Texts.Format("Receive.UnexpectedContent", hash, patchId));
+            ?? throw new PatchRejectedException(PatchRejectionReason.Malformed, _localizer.Format("Receive.UnexpectedContent", hash, patchId));
 
         try
         {
@@ -199,7 +153,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         }
         catch (Exception ex) when (ex is FormatException or InvalidDataException)
         {
-            throw new PatchRejectedException(PatchRejectionReason.Malformed, ex.Message);
+            throw new PatchRejectedException(PatchRejectionReason.Malformed, _localizer.Describe(ex));
         }
     }
 
@@ -207,7 +161,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     public async Task<PatchApplyResult> CommitAsync(Guid patchId, PatchReceiveContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        await AuthorizeSessionAsync(patchId, context, cancellationToken);
+        await _admission.AuthorizeSessionAsync(patchId, context, cancellationToken);
 
         PatchApplyResult result;
         using (await _lock.AcquireAsync(cancellationToken))
@@ -216,13 +170,12 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             var metadata = await _patches.GetAsync(patchId, cancellationToken);
             if (metadata is null || metadata.Direction != PatchDirection.Incoming || metadata.Status != PatchStatus.Pending)
             {
-                throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", patchId));
+                throw new PatchRejectedException(PatchRejectionReason.Replay, _localizer.Format("Replay.Again", patchId));
             }
 
             var envelope = ToEnvelope(metadata);
-            var needed = envelope.ContentHashes;
             var missing = 0;
-            foreach (var hash in needed)
+            foreach (var hash in envelope.ContentHashes)
             {
                 if (!await _storage.HasContentAsync(patchId, hash, cancellationToken))
                 {
@@ -232,48 +185,23 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
 
             if (missing > 0)
             {
-                throw new PatchRejectedException(PatchRejectionReason.Malformed, Texts.Format("Receive.ContentIncomplete", missing, patchId));
+                throw new PatchRejectedException(PatchRejectionReason.Malformed, _localizer.Format("Receive.ContentIncomplete", missing, patchId));
             }
 
-            try
-            {
-                await _storage.StageContentAsync(patchId, needed.ToArray(), cancellationToken);
-                var content = new StoredPatchContent(patchId, _storage);
-                var syncBase = await _syncBase.EnsureAsync(cancellationToken);
-                if (!syncBase.IsReady)
-                {
-                    result = PatchApplyResult.Failed(envelope.Id, LocalizedText.Encode("Receive.NoBaseline", syncBase.Problem ?? string.Empty));
-                }
-                else
-                {
-                    await SaveDisplayDiffAsync(envelope, content, cancellationToken);
-                    var conflicts = await _detector.DetectAsync(envelope.Manifest, _paths.Workdir, _paths.SyncBase, cancellationToken);
-                    if (conflicts.Count > 0)
-                    {
-                        result = PatchApplyResult.Conflict(envelope.Id, conflicts);
-                    }
-                    else
-                    {
-                        result = await _applier.ApplyAsync(envelope, content, _paths.Workdir, cancellationToken);
-
-                        // Both nodes now have the incoming content, so it becomes the base on this side too.
-                        await _applier.ApplyAsync(envelope, content, _paths.SyncBase, cancellationToken);
-                        await _syncBase.RecordExchangeAsync(envelope.Manifest.Select(change => change.Path), cancellationToken);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is PatchApplyException or SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
-            {
-                result = PatchApplyResult.Failed(envelope.Id, ex.Message);
-            }
+            // From here the patch is decided: its content is staged, the working tree and the base are written and the
+            // outcome is recorded. A sender that gives up meanwhile (its request times out, the tunnel drops) aborts the
+            // request, and stopping here on that signal would leave a half-written tree and a patch that stays "pending"
+            // although files of it are already in place. So the commit runs to its end once it has started.
+            var uninterrupted = CancellationToken.None;
+            result = await _incoming.ApplyAsync(envelope, uninterrupted);
 
             // Content of a patch that is done is dropped; a patch that waits for a decision keeps it for the resolution.
             if (result.Status == PatchStatus.Applied)
             {
-                await _storage.DeleteContentAsync(patchId, cancellationToken);
+                await _storage.DeleteContentAsync(patchId, uninterrupted);
             }
 
-            await _outcomes.RecordAsync(metadata, result, null, cancellationToken);
+            await _outcomes.RecordAsync(metadata, result, null, uninterrupted);
         }
 
         // Outside the lock: the tracker takes it itself to read the sync base. The patch is already decided and recorded, so a
@@ -282,98 +210,12 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         {
             await _tracker.MarkReceivedAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             // The next status request refreshes the state again.
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Validates a manifest before anything is stored.
-    /// </summary>
-    /// <param name="envelope">The envelope.</param>
-    /// <param name="context">The request context.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that completes when the request is valid.</returns>
-    /// <exception cref="PatchRejectedException">The request is refused.</exception>
-    private async Task ValidateAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken)
-    {
-        await EnsureAuthorizedAsync(context, cancellationToken);
-        if (!NodeId.TryParse(context.SenderNodeId, out var headerSender) || headerSender != envelope.SourceNode)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.SenderMismatch, Texts.Get("Receive.SenderMismatch"));
-        }
-
-        if (envelope.TargetNode != _node.Id)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.WrongReceiver, Texts.Format("Receive.WrongReceiver", envelope.TargetNode, _node.Id));
-        }
-
-        var expectedRole = _node.Role == NodeRole.Source ? NodeRole.Dest : NodeRole.Source;
-        var peer = await _peers.GetAsync(envelope.SourceNode, cancellationToken);
-        if (peer?.SigningPublicKey is null || peer.Role != expectedRole)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.UnknownSender, $"{envelope.SourceNode} is not a known {expectedRole} peer with a signing key.");
-        }
-
-        if (!envelope.IsSigned
-            || !_signatures.Verify(PayloadCanonicalizer.Build(envelope), envelope.Signature, Convert.FromBase64String(peer.SigningPublicKey)))
-        {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidSignature, Texts.Get("Receive.InvalidSignature"));
-        }
-    }
-
-    /// <summary>
-    /// Checks the role and the link token of a request.
-    /// </summary>
-    /// <param name="context">The request context.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that completes when the request is allowed.</returns>
-    /// <exception cref="PatchRejectedException">The node does not accept patches or the token is wrong.</exception>
-    private async Task EnsureAuthorizedAsync(PatchReceiveContext context, CancellationToken cancellationToken)
-    {
-        if (!_node.ParticipatesInPatchChannel)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, Texts.Format("Receive.RoleNotAllowed", _node.Role));
-        }
-
-        if (!LinkTokenProvider.Matches(await _tokens.GetTokenAsync(cancellationToken), context.LinkToken))
-        {
-            throw new PatchRejectedException(PatchRejectionReason.InvalidToken, Texts.Get("Receive.InvalidToken"));
-        }
-    }
-
-    /// <summary>
-    /// Checks a request that belongs to an open session: the token, the sender and the session itself.
-    /// </summary>
-    /// <param name="patchId">The patch identifier.</param>
-    /// <param name="context">The request context.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The stored patch of the session.</returns>
-    /// <exception cref="PatchRejectedException">The request is not allowed or the session is unknown.</exception>
-    private async Task<PatchMetadata> AuthorizeSessionAsync(Guid patchId, PatchReceiveContext context, CancellationToken cancellationToken)
-    {
-        await EnsureAuthorizedAsync(context, cancellationToken);
-        var metadata = await _patches.GetAsync(patchId, cancellationToken)
-            ?? throw new PatchRejectedException(PatchRejectionReason.Malformed, Texts.Format("Receive.UnknownSession", patchId));
-        if (metadata.Direction != PatchDirection.Incoming)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.Malformed, Texts.Format("Receive.UnknownSession", patchId));
-        }
-
-        if (!NodeId.TryParse(context.SenderNodeId, out var sender) || sender != metadata.SourceNode)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.SenderMismatch, Texts.Get("Receive.SenderMismatch"));
-        }
-
-        if (metadata.Status != PatchStatus.Pending)
-        {
-            throw new PatchRejectedException(PatchRejectionReason.Replay, Texts.Format("Replay.Again", patchId));
-        }
-
-        return metadata;
     }
 
     /// <summary>
@@ -383,24 +225,4 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <returns>The envelope.</returns>
     private static PatchEnvelope ToEnvelope(PatchMetadata metadata)
         => new(metadata.Id, metadata.SourceNode, metadata.TargetNode, metadata.CreatedAtUtc, metadata.BaseStateHash, metadata.IncomingStateHash, metadata.Manifest, metadata.Signature);
-
-    /// <summary>
-    /// Builds and stores the diff shown to the user, before the patch changes the sync base it is built from.
-    /// </summary>
-    /// <param name="envelope">The patch.</param>
-    /// <param name="content">The staged content.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>A task that completes when the diff is stored, or skipped because Git is not available.</returns>
-    private async Task SaveDisplayDiffAsync(PatchEnvelope envelope, IPatchContent content, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var diff = await _diffs.BuildAsync(envelope.Manifest, _paths.SyncBase, content, PatchDiffLimits.Display, cancellationToken);
-            await _storage.SaveDiffAsync(envelope.Id, diff, cancellationToken);
-        }
-        catch (GitExecutionException)
-        {
-            // The diff is a convenience for the user; a missing Git must not stop the patch.
-        }
-    }
 }

@@ -56,4 +56,12 @@ public interface ISnapshotRepository
     /// otherwise <see langword="false"/>.
     /// </returns>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the snapshot records created before a moment, except the newest record of every node.
+    /// </summary>
+    /// <param name="createdBeforeUtc">Records created before this moment are deleted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of deleted records.</returns>
+    Task<int> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, CancellationToken cancellationToken = default);
 }

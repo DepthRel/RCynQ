@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using RCynQ.Localization;
+using RCynQ.Service.Localization;
 
 namespace RCynQ.Service.Security;
 
@@ -11,22 +11,24 @@ namespace RCynQ.Service.Security;
 public sealed class RequestLanguageMiddleware
 {
     /// <summary>
-    /// The languages the application has texts for.
-    /// </summary>
-    private static readonly LanguageCatalog Catalog = LanguageCatalog.LoadEmbedded();
-
-    /// <summary>
     /// The next middleware.
     /// </summary>
     private readonly RequestDelegate _next;
 
     /// <summary>
+    /// The localizer of the service.
+    /// </summary>
+    private readonly RequestLocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="RequestLanguageMiddleware"/> class.
     /// </summary>
     /// <param name="next">The next middleware.</param>
-    public RequestLanguageMiddleware(RequestDelegate next)
+    /// <param name="localizer">The localizer of the service.</param>
+    public RequestLanguageMiddleware(RequestDelegate next, RequestLocalizer localizer)
     {
         _next = next ?? throw new ArgumentNullException(nameof(next));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
     }
 
     /// <summary>
@@ -37,31 +39,16 @@ public sealed class RequestLanguageMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var requested = Choose(context.Request.GetTypedHeaders().AcceptLanguage.Select(value => (value.Value.Value, value.Quality ?? 1.0)));
+        var requested = _localizer.Choose(context.Request.GetTypedHeaders().AcceptLanguage.Select(value => (value.Value.Value, value.Quality ?? 1.0)));
         if (requested is null)
         {
             await _next(context);
             return;
         }
 
-        using (Texts.Scope(new Localizer(Catalog, requested)))
+        using (_localizer.Use(requested))
         {
             await _next(context);
         }
-    }
-
-    /// <summary>
-    /// Chooses the first language, best quality first, that the application has texts for.
-    /// </summary>
-    /// <param name="requested">The languages of the header with their quality.</param>
-    /// <returns>The language code, or <see langword="null"/> when none is available.</returns>
-    public static string? Choose(IEnumerable<(string? Language, double Quality)> requested)
-    {
-        ArgumentNullException.ThrowIfNull(requested);
-        return requested
-            .Where(item => item.Quality > 0 && !string.IsNullOrWhiteSpace(item.Language))
-            .OrderByDescending(item => item.Quality)
-            .Select(item => Catalog.Find(item.Language!.Split('-')[0]))
-            .FirstOrDefault(pack => pack is not null)?.Language.Code;
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Items;
 
@@ -17,8 +18,10 @@ public sealed partial class TunnelViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="TunnelViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public TunnelViewModel(IServiceApiClient api)
+    public TunnelViewModel(ILocalizer localizer, IServiceApiClient api)
+        : base(localizer)
     {
         _api = api;
         Links.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoLinks));
@@ -31,13 +34,13 @@ public sealed partial class TunnelViewModel : PageViewModelBase
     public bool HasNoLinks => Links.Count == 0;
 
     /// <inheritdoc />
-    public override Task RefreshAsync() => RunSafeAsync(async () =>
+    protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
         var links = await _api.GetLinksAsync();
         Links.Clear();
         foreach (var link in links)
         {
-            Links.Add(new TunnelLinkItemViewModel(link));
+            Links.Add(new TunnelLinkItemViewModel(Localizer, link));
         }
 
         foreach (var state in await _api.GetLinkStatusAsync())

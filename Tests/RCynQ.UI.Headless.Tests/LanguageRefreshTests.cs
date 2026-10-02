@@ -1,8 +1,5 @@
 using System.Text.RegularExpressions;
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NSubstitute;
 using RCynQ.Core.Api;
@@ -11,6 +8,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Events;
@@ -21,23 +19,9 @@ using RCynQ.UI.ViewModels.Navigation;
 using RCynQ.UI.ViewModels.Pages;
 using RCynQ.UI.ViewModels.Setup;
 using RCynQ.UI.Views;
+using static RCynQ.UI.Headless.Tests.HeadlessSession;
 
 namespace RCynQ.UI.Headless.Tests;
-
-/// <summary>
-/// Builds the application for the headless platform.
-/// </summary>
-public static class TestApp
-{
-    /// <summary>
-    /// Configures Avalonia without a screen.
-    /// </summary>
-    /// <returns>The application builder.</returns>
-    public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .WithInterFont()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
-}
 
 /// <summary>
 /// Opens the real main window and switches the language while every tab is shown: no text of the previous language may
@@ -45,11 +29,6 @@ public static class TestApp
 /// </summary>
 public sealed partial class LanguageRefreshTests
 {
-    /// <summary>
-    /// The headless session shared by the tests (Avalonia starts once per process).
-    /// </summary>
-    private static readonly Lazy<HeadlessUnitTestSession> Session = new(() => HeadlessUnitTestSession.StartNew(typeof(TestApp)));
-
     /// <summary>
     /// Finds Cyrillic letters.
     /// </summary>
@@ -62,10 +41,10 @@ public sealed partial class LanguageRefreshTests
     /// </summary>
     /// <returns>A task that completes when the test is done.</returns>
     [Fact]
-    public Task Every_Tab_Follows_The_Language() => Session.Value.Dispatch(
+    public Task Every_Tab_Follows_The_Language() => HeadlessSession.Value.Dispatch(
         async () =>
         {
-            var localizer = Texts.Localizer;
+            var localizer = AppLocalizer;
             var catalog = LanguageCatalog.LoadEmbedded();
             var english = TextsOf(catalog, "en");
             var russian = TextsOf(catalog, "ru");
@@ -106,10 +85,10 @@ public sealed partial class LanguageRefreshTests
     /// </summary>
     /// <returns>A task that completes when the test is done.</returns>
     [Fact]
-    public Task Setup_Follows_The_Language() => Session.Value.Dispatch(
+    public Task Setup_Follows_The_Language() => HeadlessSession.Value.Dispatch(
         async () =>
         {
-            var localizer = Texts.Localizer;
+            var localizer = AppLocalizer;
             var catalog = LanguageCatalog.LoadEmbedded();
             var english = TextsOf(catalog, "en");
             var russian = TextsOf(catalog, "ru");
@@ -141,15 +120,6 @@ public sealed partial class LanguageRefreshTests
         CancellationToken.None);
 
     /// <summary>
-    /// Lets the pending bindings and layout passes run.
-    /// </summary>
-    private static void Settle()
-    {
-        Dispatcher.UIThread.RunJobs();
-        Dispatcher.UIThread.RunJobs();
-    }
-
-    /// <summary>
     /// Returns the texts of a language without the names of the languages themselves, which are shown in their own language.
     /// </summary>
     /// <param name="catalog">The languages.</param>
@@ -159,7 +129,7 @@ public sealed partial class LanguageRefreshTests
     {
         var pack = catalog.Find(code)!;
         return pack.Keys
-            .Where(key => key is not (LanguagePack.CodeKey or LanguagePack.NameKey))
+            .Where(key => key is not (LanguagePack.CODE_KEY or LanguagePack.NAME_KEY))
             .ToDictionary(key => key, key => pack.TryGet(key, out var text) ? text : string.Empty);
     }
 
@@ -217,7 +187,7 @@ public sealed partial class LanguageRefreshTests
     /// <summary>
     /// Opens the main window over a service double that answers with data for every tab.
     /// </summary>
-    /// <param name="configPath">The configuration file; a file with a Source node is written when it is <see langword="null"/>.</param>
+    /// <param name="configPath">The configuration file; a file with a Workstation node is written when it is <see langword="null"/>.</param>
     /// <returns>The view model and the window.</returns>
     private static async Task<(MainViewModel Main, MainWindow Window)> OpenAsync(string? configPath = null)
     {
@@ -226,14 +196,14 @@ public sealed partial class LanguageRefreshTests
         var controller = Substitute.For<IServiceController>();
         var dialogs = Substitute.For<IDialogService>();
 
-        var mediator = TestData.Link("relay", "mediator-1", NodeRole.Mediator, "203.0.113.4", TransportKind.AmneziaWG);
-        var dest = TestData.Link("dest", "dest-1", NodeRole.Dest, "203.0.113.5");
-        api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Source));
+        var relay = TestData.Link("relay", "relay-1", NodeRole.Relay, "203.0.113.4", TransportKind.AmneziaWG);
+        var origin = TestData.Link("origin", "origin-1", NodeRole.Origin, "203.0.113.5");
+        api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
         api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
-        api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { mediator, dest });
-        api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(new[] { TestData.State(mediator, LinkStatus.Ready), TestData.State(dest, LinkStatus.Failed) });
+        api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { relay, origin });
+        api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(new[] { TestData.State(relay, LinkStatus.Ready), TestData.State(origin, LinkStatus.Failed) });
         api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { TestData.ConflictPatch() });
-        api.GetBranchAsync(Arg.Any<CancellationToken>()).Returns(new GitBranchInfo(true, "main", "refs/remotes/dest/main", 1, 2));
+        api.GetBranchAsync(Arg.Any<CancellationToken>()).Returns(new GitBranchInfo(true, "main", "refs/remotes/rcynq/main", 1, 2));
         api.GetLogsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new LogEntryDto(DateTimeOffset.UtcNow, "Information", "started", null) });
 
@@ -242,33 +212,34 @@ public sealed partial class LanguageRefreshTests
         {
             var directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rcynq-headless-tests", Guid.NewGuid().ToString("N"))).FullName;
             configFile = Path.Combine(directory, "syncbridge.json");
-            await File.WriteAllTextAsync(configFile, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Source", "WorkdirPath": "/home/dev/projects/app" } }""");
+            await File.WriteAllTextAsync(configFile, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Workstation", "WorkdirPath": "/home/dev/projects/app" } }""");
         }
 
         controller.ConfigPath.Returns(configFile);
         controller.EnsureRunningAsync(Arg.Any<CancellationToken>()).Returns(new ServiceStartResult(ServiceStartOutcome.AlreadyRunning, "running"));
 
-        var language = new LanguageViewModel(new FakeLanguageService());
+        var language = new LanguageViewModel(AppLocalizer, new FakeLanguageService());
         var main = new MainViewModel(
+            AppLocalizer,
             api,
             events,
             new ImmediateUiDispatcher(),
             new RoleAdapter(),
             controller,
-            new SetupViewModel(configFile, dialogs, language),
-            new OverviewViewModel(api),
-            new RoleAndNodesViewModel(api, dialogs),
-            new SyncViewModel(api, dialogs),
-            new TunnelViewModel(api),
-            new DiagnosticsViewModel(api, dialogs),
-            new BranchViewModel(api),
-            new LogsViewModel(api, dialogs),
-            new SettingsViewModel(language, configFile));
+            new SetupViewModel(AppLocalizer, configFile, dialogs, language),
+            new OverviewViewModel(AppLocalizer, api),
+            new RoleAndNodesViewModel(AppLocalizer, api, dialogs),
+            new SyncViewModel(AppLocalizer, api, dialogs),
+            new TunnelViewModel(AppLocalizer, api),
+            new DiagnosticsViewModel(AppLocalizer, api, dialogs),
+            new BranchViewModel(AppLocalizer, api),
+            new LogsViewModel(AppLocalizer, api, dialogs),
+            new SettingsViewModel(AppLocalizer, language, api, dialogs, configFile));
         await main.InitializeAsync();
 
         // A finished check with a failed result fills the diagnostics tab and the problems of the overview.
         var failed = new DiagnosticResult("GitInstalled", false, "git not found", "install git");
-        main.Diagnostics.ApplyDiagnostics(new DiagnosticsEvent(NodeRole.Source, [failed], DateTimeOffset.UtcNow));
+        main.Diagnostics.ApplyDiagnostics(new DiagnosticsEvent(NodeRole.Workstation, [failed], DateTimeOffset.UtcNow));
 
         var window = new MainWindow { DataContext = main };
         window.Show();

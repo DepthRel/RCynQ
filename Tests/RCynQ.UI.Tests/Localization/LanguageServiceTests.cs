@@ -28,31 +28,39 @@ public sealed class LanguageServiceTests
     private LanguageService Create(string culture) => new(_localizer, _settings, () => CultureInfo.GetCultureInfo(culture));
 
     /// <summary>
-    /// Verifies that on the first start a Russian system gets Russian and the choice is stored.
+    /// Verifies that on the first start a system in a language the application speaks gets that language and the
+    /// choice is stored.
     /// </summary>
-    [Fact]
-    public void First_Start_On_Russian_System_Selects_And_Stores_Russian()
+    /// <param name="culture">The culture of the operating system.</param>
+    /// <param name="expected">The language the application chooses.</param>
+    [Theory]
+    [InlineData("ru-RU", "ru")]
+    [InlineData("de-DE", "de")]
+    [InlineData("es-ES", "es")]
+    [InlineData("fr-FR", "fr")]
+    [InlineData("pt-PT", "pt")]
+    public void First_Start_Selects_And_Stores_The_Language_Of_The_System(string culture, string expected)
     {
-        Create("ru-RU").Initialize();
+        Create(culture).Initialize();
 
-        _localizer.Current.Code.Should().Be("ru");
-        _settings.Received(1).Set(LanguageService.Setting, "ru");
+        _localizer.Current.Code.Should().Be(expected);
+        _settings.Received(1).Set(LanguageService.SETTING, expected);
     }
 
     /// <summary>
-    /// Verifies that on the first start any other system gets English.
+    /// Verifies that on the first start a system in a language the application does not speak gets English.
     /// </summary>
     /// <param name="culture">The culture of the operating system.</param>
     [Theory]
     [InlineData("en-US")]
-    [InlineData("de-DE")]
     [InlineData("ja-JP")]
+    [InlineData("zh-CN")]
     public void First_Start_On_Other_Systems_Selects_English(string culture)
     {
         Create(culture).Initialize();
 
         _localizer.Current.Code.Should().Be("en");
-        _settings.Received(1).Set(LanguageService.Setting, "en");
+        _settings.Received(1).Set(LanguageService.SETTING, "en");
     }
 
     /// <summary>
@@ -61,7 +69,7 @@ public sealed class LanguageServiceTests
     [Fact]
     public void Stored_Language_Is_Used_And_System_Is_Not_Asked_Again()
     {
-        _settings.Get(LanguageService.Setting).Returns("en");
+        _settings.Get(LanguageService.SETTING).Returns("en");
         var service = Create("ru-RU");
 
         service.Initialize();
@@ -76,12 +84,12 @@ public sealed class LanguageServiceTests
     [Fact]
     public void Unknown_Stored_Language_Falls_Back_To_Detection()
     {
-        _settings.Get(LanguageService.Setting).Returns("xx");
+        _settings.Get(LanguageService.SETTING).Returns("xx");
 
         Create("ru-RU").Initialize();
 
         _localizer.Current.Code.Should().Be("ru");
-        _settings.Received(1).Set(LanguageService.Setting, "ru");
+        _settings.Received(1).Set(LanguageService.SETTING, "ru");
     }
 
     /// <summary>
@@ -108,8 +116,8 @@ public sealed class LanguageServiceTests
         service.Select("ru");
 
         _localizer.Get("Common.Cancel").Should().Be("Отмена");
-        _settings.Received(1).Set(LanguageService.Setting, "ru");
-        service.Languages.Select(language => language.Code).Should().Equal("en", "ru");
+        _settings.Received(1).Set(LanguageService.SETTING, "ru");
+        service.Languages.Select(language => language.Code).Should().Equal("en", "de", "es", "fr", "pt", "ru");
     }
 
     /// <summary>
@@ -119,7 +127,7 @@ public sealed class LanguageServiceTests
     public void Selector_Shows_Current_Language_And_Applies_A_Pick()
     {
         var service = new FakeLanguageService();
-        var selector = new LanguageViewModel(service);
+        var selector = new LanguageViewModel(TestTexts.Russian, service);
 
         selector.Selected.Code.Should().Be("en");
         selector.Options.Select(option => option.Name).Should().Equal("English", "Русский");
@@ -137,7 +145,7 @@ public sealed class LanguageServiceTests
     public void Selector_Reports_A_Failure_To_Store()
     {
         var service = new FakeLanguageService { SelectFailure = new IOException("disk full") };
-        var selector = new LanguageViewModel(service);
+        var selector = new LanguageViewModel(TestTexts.Russian, service);
 
         selector.Selected = selector.Options[1];
 

@@ -21,7 +21,7 @@ public sealed class GitCommandService
     }
 
     /// <summary>
-    /// Fetches branches from Dest.
+    /// Fetches branches from Origin.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The report and whether the fetch succeeded.</returns>
@@ -38,7 +38,7 @@ public sealed class GitCommandService
         {
             text.Append("Branch ").Append(branch);
             text.Append(info.TrackingRef is null
-                ? " has no counterpart on Dest.\n"
+                ? " has no counterpart on Origin.\n"
                 : $": {info.Ahead} ahead, {info.Behind} behind {info.TrackingRef}.\n");
         }
 

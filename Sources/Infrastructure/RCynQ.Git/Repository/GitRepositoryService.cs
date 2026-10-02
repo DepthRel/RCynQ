@@ -20,11 +20,18 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     private readonly IGitCommandRunner _git;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GitRepositoryService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="git">The git command runner.</param>
-    public GitRepositoryService(IGitCommandRunner git)
+    public GitRepositoryService(ILocalizer localizer, IGitCommandRunner git)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _git = git;
     }
 
@@ -46,7 +53,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         Guard.NotBlank(directory, nameof(directory));
         ValidateRemoteUrl(remoteUrl);
         ValidateRemoteName(remoteName);
-        var environment = sshCommand is null ? null : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand };
+        var environment = SshEnvironment(sshCommand);
         var result = await _git.RunAsync(
             new[] { "fetch", "--prune", "--no-tags", "--no-write-fetch-head", remoteUrl, $"+refs/heads/*:refs/remotes/{remoteName}/*" },
             directory,
@@ -63,7 +70,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var info = await GetBranchInfoAsync(directory, remoteName, cancellationToken);
         if (info.Branch is null || info.TrackingRef is null)
         {
-            throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
+            throw new GitExecutionException(_localizer.Format("Git.NotFetched", remoteName));
         }
 
         var result = await _git.RunInWorkingTreeAsync(new[] { "merge", "--ff-only", info.TrackingRef }, directory, cancellationToken: cancellationToken);
@@ -99,7 +106,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var parts = counts.StandardOutput.Split(new[] { '\t', ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 2 || !int.TryParse(parts[0], out var ahead) || !int.TryParse(parts[1], out var behind))
         {
-            throw new GitExecutionException(Texts.Format("Git.RevListOutput", counts.StandardOutput.Trim()));
+            throw new GitExecutionException(_localizer.Format("Git.RevListOutput", counts.StandardOutput.Trim()));
         }
 
         return new GitBranchInfo(true, branch, tracking, ahead, behind);
@@ -115,11 +122,11 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     }
 
     /// <summary>
-    /// Builds an <c>ssh://</c> URL for a repository on a Dest peer.
+    /// Builds an <c>ssh://</c> URL for a repository on an Origin peer.
     /// </summary>
-    /// <param name="endpoint">The SSH endpoint of Dest.</param>
-    /// <param name="repoPath">The absolute repository path on Dest.</param>
-    /// <returns>The URL, for example <c>ssh://git@dest:22/srv/repo</c>.</returns>
+    /// <param name="endpoint">The SSH endpoint of Origin.</param>
+    /// <param name="repoPath">The absolute repository path on Origin.</param>
+    /// <returns>The URL, for example <c>ssh://git@origin:22/srv/repo</c>.</returns>
     /// <exception cref="ArgumentException">The repository path contains unsafe characters.</exception>
     public static string BuildSshUrl(SshEndpoint endpoint, string repoPath)
     {
@@ -147,9 +154,9 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     public static void ValidateRemoteUrl(string remoteUrl)
     {
         var url = Guard.NotBlank(remoteUrl, nameof(remoteUrl));
-        var allowed = url.StartsWith("ssh://", StringComparison.Ordinal)
-            || url.StartsWith("file://", StringComparison.Ordinal)
-            || Path.IsPathFullyQualified(url);
+        var allowed = url.StartsWith("ssh://", StringComparison.Ordinal) ||
+            url.StartsWith("file://", StringComparison.Ordinal) ||
+            Path.IsPathFullyQualified(url);
         if (!allowed || url.StartsWith('-') || url.Any(char.IsControl))
         {
             throw new ArgumentException($"Remote URL '{remoteUrl}' is not an allowed ssh://, file:// or absolute path remote.", nameof(remoteUrl));
@@ -168,6 +175,20 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
             throw new ArgumentException($"Remote name '{remoteName}' may contain only letters, digits, '.', '_' and '-'.", nameof(remoteName));
         }
     }
+
+    /// <summary>
+    /// Builds the environment that makes Git reach a remote with the given SSH command.
+    /// </summary>
+    /// <param name="sshCommand">The SSH command, or <see langword="null"/> to leave the choice to Git.</param>
+    /// <returns>The environment variables, or <see langword="null"/> when there is no command.</returns>
+    /// <remarks>
+    /// Git guesses from the first word of the command which options the client takes. The command may start with a change
+    /// of directory, so the guess is replaced by the answer: it is OpenSSH.
+    /// </remarks>
+    private static Dictionary<string, string>? SshEnvironment(string? sshCommand)
+        => sshCommand is null
+            ? null
+            : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand, ["GIT_SSH_VARIANT"] = "ssh" };
 
     /// <summary>
     /// Throws when a git command failed.
@@ -240,7 +261,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         ArgumentNullException.ThrowIfNull(commits);
         var existing = new List<string>();
-        foreach (var commit in commits.Where(commit => commit is not null && CommitName().IsMatch(commit)).Distinct(StringComparer.Ordinal).Take(MaxKnownCommits))
+        foreach (var commit in commits.Where(commit => commit is not null && CommitName().IsMatch(commit)).Distinct(StringComparer.Ordinal).Take(MAX_KNOWN_COMMITS))
         {
             var check = await _git.RunAsync(new[] { "cat-file", "-e", commit + "^{commit}" }, directory, cancellationToken: cancellationToken);
             if (check.ExitCode == 0)
@@ -307,6 +328,37 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     }
 
     /// <inheritdoc />
+    public async Task<bool> RenameRemoteAsync(string directory, string oldName, string newName, string placeholderUrl, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateRemoteName(oldName);
+        ValidateRemoteName(newName);
+        ValidateRemoteUrl(placeholderUrl);
+
+        var target = await _git.RunAsync(new[] { "remote", "get-url", newName }, directory, cancellationToken: cancellationToken);
+        if (target.ExitCode == 0)
+        {
+            return false;
+        }
+
+        var remote = await _git.RunAsync(new[] { "remote", "get-url", oldName }, directory, cancellationToken: cancellationToken);
+        if (remote.ExitCode != 0)
+        {
+            var branches = await _git.RunAsync(new[] { "for-each-ref", "--count=1", "--format=%(refname)", $"refs/remotes/{oldName}/" }, directory, cancellationToken: cancellationToken);
+            if (branches.ExitCode != 0 || string.IsNullOrWhiteSpace(branches.StandardOutput))
+            {
+                return false;
+            }
+
+            // "git remote rename" moves the branches only of a remote that is configured.
+            EnsureSuccess(await _git.RunAsync(new[] { "remote", "add", oldName, placeholderUrl }, directory, cancellationToken: cancellationToken), "git remote add");
+        }
+
+        EnsureSuccess(await _git.RunAsync(new[] { "remote", "rename", oldName, newName }, directory, cancellationToken: cancellationToken), "git remote rename");
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task InitializeAsync(string directory, string initialBranch, CancellationToken cancellationToken = default)
     {
         Guard.NotBlank(directory, nameof(directory));
@@ -325,7 +377,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         var exists = await _git.RunAsync(new[] { "rev-parse", "--verify", "--quiet", tracking }, directory, cancellationToken: cancellationToken);
         if (exists.ExitCode != 0)
         {
-            throw new GitExecutionException(Texts.Format("Git.NotFetched", remoteName));
+            throw new GitExecutionException(_localizer.Format("Git.NotFetched", remoteName));
         }
 
         var head = await _git.RunAsync(new[] { "symbolic-ref", "HEAD", "refs/heads/" + branch }, directory, cancellationToken: cancellationToken);
@@ -570,7 +622,12 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
 
             var unstage = await _git.RunAsync(new[] { "rm", "--cached", "--quiet", "--ignore-unmatch", "--", ":(literal)" + path }, directory, cancellationToken: cancellationToken);
             EnsureSuccess(unstage, "git rm --cached");
-            if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
+            if (new DirectoryInfo(full) is { Exists: true, LinkTarget: not null })
+            {
+                // A link to a directory is removed as a directory: File.Delete refuses it on Windows.
+                Directory.Delete(full);
+            }
+            else if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
             {
                 File.Delete(full);
             }
@@ -582,19 +639,19 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         Guard.NotBlank(directory, nameof(directory));
         ValidateRemoteUrl(remoteUrl);
-        var environment = sshCommand is null ? null : new Dictionary<string, string> { ["GIT_SSH_COMMAND"] = sshCommand };
+        var environment = SshEnvironment(sshCommand);
         var result = await _git.RunAsync(new[] { "ls-remote", "--symref", remoteUrl, "HEAD" }, directory, environment, cancellationToken);
         EnsureSuccess(result, "git ls-remote");
 
         // The answer starts with "ref: refs/heads/<branch>\tHEAD" when HEAD is a branch.
-        const string prefix = "ref: refs/heads/";
-        var line = result.StandardOutput.Split('\n', StringSplitOptions.TrimEntries).FirstOrDefault(entry => entry.StartsWith(prefix, StringComparison.Ordinal));
+        const string PREFIX = "ref: refs/heads/";
+        var line = result.StandardOutput.Split('\n', StringSplitOptions.TrimEntries).FirstOrDefault(entry => entry.StartsWith(PREFIX, StringComparison.Ordinal));
         if (line is null)
         {
             return null;
         }
 
-        var branch = line[prefix.Length..].Split('\t')[0].Trim();
+        var branch = line[PREFIX.Length..].Split('\t')[0].Trim();
         return SafeBranchName().IsMatch(branch) && !branch.Contains("..", StringComparison.Ordinal) ? branch : null;
     }
 
@@ -615,9 +672,10 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
 
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        // The same notion of "Git metadata" and of path comparison as everywhere else: also the 8.3 short name of .git
+        // on NTFS, and a case-insensitive file system on macOS.
         var segments = relative.Split('/', '\\');
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, comparison) || segments.Any(segment => segment.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, Paths.PathUtility.PlatformComparison) || segments.Any(Paths.PathUtility.IsGitMetadataName))
         {
             throw new ArgumentException($"'{path}' leaves the working tree or points into Git metadata.", nameof(path));
         }
@@ -655,14 +713,28 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     /// <summary>
     /// The largest number of commits a peer may name as known.
     /// </summary>
-    private const int MaxKnownCommits = 200;
+    private const int MAX_KNOWN_COMMITS = 200;
 
+    /// <summary>
+    /// Matches a branch name that is safe to pass to Git: up to 100 characters of letters, digits and <c>. _ / -</c>,
+    /// not starting with a punctuation mark.
+    /// </summary>
+    /// <returns>The compiled pattern.</returns>
     [GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9._/-]{0,99}$")]
     private static partial Regex SafeBranchName();
 
+    /// <summary>
+    /// Matches a full commit name: 40 (SHA-1) or 64 (SHA-256) lower-case hexadecimal digits.
+    /// </summary>
+    /// <returns>The compiled pattern.</returns>
     [GeneratedRegex("^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
     private static partial Regex CommitName();
 
+    /// <summary>
+    /// Matches a remote name that is safe to pass to Git: up to 64 characters of letters, digits and <c>. _ -</c>, not
+    /// starting with a punctuation mark.
+    /// </summary>
+    /// <returns>The compiled pattern.</returns>
     [GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")]
     private static partial Regex SafeRemoteName();
 

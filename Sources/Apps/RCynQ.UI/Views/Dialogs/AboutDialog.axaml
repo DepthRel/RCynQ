@@ -1,0 +1,82 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     x:Class="RCynQ.UI.Views.Dialogs.AboutDialog"
+                     x:DataType="vm:AboutViewModel"
+                     Title="{Binding Title}"
+                     Width="540" SizeToContent="Height" MaxHeight="820" CanResize="False"
+                     WindowStartupLocation="CenterOwner" Icon="avares://RCynQ.UI/Assets/rcynq.ico">
+  <!--
+    One window about the application: the brand and the slogan of the project page on top, the links to the website
+    and the source code, a word on the license, then how to write to the project. The letters R, C and Q of the name carry the blue of the
+    bar of the logo and the violet of its ring, as on the project page.
+  -->
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource NavBackgroundBrush}"
+            BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="22,12">
+      <Button HorizontalAlignment="Right" Classes="accent" Content="{loc:Loc Common.Close}"
+              IsDefault="True" IsCancel="True" Command="{Binding CloseWindowCommand}" />
+    </Border>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="28,22,28,24" Spacing="16">
+
+        <!-- The brand: the icon, the name, what the name stands for, the slogan and the version. -->
+        <StackPanel HorizontalAlignment="Center" Spacing="6">
+          <Image Source="avares://RCynQ.UI/Assets/rcynq-256.png" Width="64" Height="64" HorizontalAlignment="Center" />
+          <TextBlock HorizontalAlignment="Center" FontSize="30" FontWeight="Bold" Margin="0,4,0,0">
+            <Run Text="RC" Foreground="{StaticResource BrandBlueBrush}" /><Run Text="yn" /><Run Text="Q" Foreground="{StaticResource BrandVioletBrush}" />
+          </TextBlock>
+          <TextBlock Classes="muted mono" FontSize="12" HorizontalAlignment="Center" Text="{loc:Loc About.Acronym}" />
+          <TextBlock HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" FontSize="18"
+                     FontWeight="SemiBold" Margin="0,12,0,2" Text="{loc:Loc About.Slogan}" />
+          <TextBlock HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" FontSize="18"
+                     FontWeight="SemiBold" Foreground="{StaticResource BrandMixBrush}" Text="{loc:Loc About.SloganAccent}" />
+          <TextBlock Classes="muted mono" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0" Text="{Binding Version}" />
+        </StackPanel>
+
+        <!-- The website (GitHub Pages) and the source code (GitHub), with their addresses under the buttons. -->
+        <Grid ColumnDefinitions="*,12,*">
+          <StackPanel Spacing="4">
+            <Button Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Content="{loc:Loc About.Website}" Command="{Binding OpenWebsiteCommand}" />
+            <TextBlock Classes="muted mono" FontSize="11" HorizontalAlignment="Center" Text="{Binding WebsiteAddress}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" Spacing="4">
+            <Button Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Content="{loc:Loc About.Code}" Command="{Binding OpenSourceCommand}" />
+            <TextBlock Classes="muted mono" FontSize="11" HorizontalAlignment="Center" Text="{Binding SourceAddress}" />
+          </StackPanel>
+        </Grid>
+
+        <Border Height="1" Background="{StaticResource DividerBrush}" />
+
+        <!-- License -->
+        <StackPanel Spacing="8">
+          <TextBlock FontSize="15" FontWeight="SemiBold" Text="{loc:Loc About.License}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc About.License.Text}" />
+          <WrapPanel Margin="0,4,0,-8">
+            <Button Classes="outline" Margin="0,0,8,8" Content="{loc:Loc About.License.Open}" Command="{Binding OpenLicenseCommand}" />
+            <Button Classes="outline" Margin="0,0,8,8" Content="{loc:Loc About.License.Notices}" Command="{Binding OpenNoticesCommand}" />
+          </WrapPanel>
+        </StackPanel>
+
+        <Border Height="1" Background="{StaticResource DividerBrush}" />
+
+        <!-- Problems and ideas -->
+        <StackPanel Spacing="8">
+          <TextBlock FontSize="15" FontWeight="SemiBold" Text="{loc:Loc About.Feedback}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc About.Feedback.Text}" />
+          <DockPanel Margin="0,4,0,0">
+            <Button DockPanel.Dock="Right" Classes="outline" Content="{loc:Loc Common.Copy}" Command="{Binding CopyEmailCommand}"
+                    AutomationProperties.Name="{loc:Loc About.Feedback.CopyName}" />
+            <SelectableTextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding FeedbackEmail}" />
+          </DockPanel>
+          <Button Classes="accent" HorizontalAlignment="Left" Margin="0,4,0,0" Content="{loc:Loc Problem.Report}"
+                  ToolTip.Tip="{loc:Loc Problem.ReportTip}" Command="{Binding ReportProblemCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</dialogs:DialogWindow>

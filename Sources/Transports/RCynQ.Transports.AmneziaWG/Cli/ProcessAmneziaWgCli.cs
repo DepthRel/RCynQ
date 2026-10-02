@@ -20,13 +20,18 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
     /// <summary>The options.</summary>
     private readonly AmneziaWgOptions _options;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessAmneziaWgCli"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="processRunner">The process runner.</param>
     /// <param name="options">The options.</param>
-    public ProcessAmneziaWgCli(IProcessRunner processRunner, AmneziaWgOptions options)
+    public ProcessAmneziaWgCli(ILocalizer localizer, IProcessRunner processRunner, AmneziaWgOptions options)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _processRunner = processRunner;
         _options = options;
     }
@@ -40,7 +45,7 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
             : await RunAsync(_options.QuickExecutable, cancellationToken, "up", path);
         if (result.ExitCode != 0 && !result.StandardError.Contains("already exists", StringComparison.OrdinalIgnoreCase))
         {
-            throw new SyncBridgeException(Texts.Format("Awg.StartFailed", name, result.StandardError.Trim()));
+            throw new SyncBridgeException(_localizer.Format("Awg.StartFailed", name, result.StandardError.Trim()));
         }
 
         return await GetStatusAsync(path, cancellationToken);
@@ -53,11 +58,11 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
         var result = _options.UseWindowsTunnelService
             ? await RunAsync(_options.WindowsExecutable, cancellationToken, "/uninstalltunnelservice", name)
             : await RunAsync(_options.QuickExecutable, cancellationToken, "down", path);
-        var notRunning = result.StandardError.Contains("is not a", StringComparison.OrdinalIgnoreCase)
-            || result.StandardError.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+        var notRunning = result.StandardError.Contains("is not a", StringComparison.OrdinalIgnoreCase) ||
+            result.StandardError.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
         if (result.ExitCode != 0 && !notRunning)
         {
-            throw new SyncBridgeException(Texts.Format("Awg.StopFailed", name, result.StandardError.Trim()));
+            throw new SyncBridgeException(_localizer.Format("Awg.StopFailed", name, result.StandardError.Trim()));
         }
     }
 
@@ -70,11 +75,11 @@ public sealed partial class ProcessAmneziaWgCli : IAmneziaWgCli
         {
             var result = await RunAsync(_options.ShowExecutable, cancellationToken, "show", name);
             var running = result.ExitCode == 0 && result.StandardOutput.Contains("interface:", StringComparison.OrdinalIgnoreCase);
-            return new AmneziaWgStatus(running, name, localIp, running ? null : NonEmpty(result.StandardError, Texts.Format("Awg.NotUp", name)));
+            return new AmneziaWgStatus(running, name, localIp, running ? null : NonEmpty(result.StandardError, _localizer.Format("Awg.NotUp", name)));
         }
         catch (SyncBridgeException ex)
         {
-            return new AmneziaWgStatus(false, name, localIp, Texts.Format("Awg.ToolsMissing", ex.Message));
+            return new AmneziaWgStatus(false, name, localIp, _localizer.Format("Awg.ToolsMissing", _localizer.Describe(ex)));
         }
     }
 

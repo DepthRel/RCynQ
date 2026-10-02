@@ -11,6 +11,11 @@ namespace RCynQ.Ssh.Commands;
 /// All connections use <c>BatchMode=yes</c> (never prompt), <c>StrictHostKeyChecking=accept-new</c> (pin on first use,
 /// refuse changed keys) and a connect timeout. The destination is preceded by <c>--</c>, so even a malformed value can
 /// never be parsed as an option; endpoints are additionally validated by <see cref="SshEndpoint"/>.
+/// <para>
+/// The same settings are also written to a configuration file passed with <c>-F</c> (see
+/// <see cref="SshClientConfigFile"/>): the options of the command line reach only the destination, the file reaches the
+/// jump hosts of a chain too.
+/// </para>
 /// </remarks>
 public sealed class SshCommandBuilder
 {
@@ -20,12 +25,22 @@ public sealed class SshCommandBuilder
     private readonly SshClientOptions _options;
 
     /// <summary>
+    /// The configuration file passed to every connection, or <see langword="null"/>.
+    /// </summary>
+    private readonly SshClientConfigFile? _configFile;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SshCommandBuilder"/> class.
     /// </summary>
     /// <param name="options">The SSH client options.</param>
-    public SshCommandBuilder(SshClientOptions options)
+    /// <param name="configFile">
+    /// The configuration file passed to every connection, or <see langword="null"/> to carry the settings on the command
+    /// line only (they then do not reach jump hosts).
+    /// </param>
+    public SshCommandBuilder(SshClientOptions options, SshClientConfigFile? configFile = null)
     {
         _options = options;
+        _configFile = configFile;
     }
 
     /// <summary>
@@ -34,24 +49,53 @@ public sealed class SshCommandBuilder
     public string Executable => _options.SshExecutable;
 
     /// <summary>
-    /// Builds the options shared by every connection.
+    /// Gets the directory <c>ssh</c> has to be started in: the one that holds the configuration file, which the
+    /// arguments name without a directory. <see langword="null"/> when there is no configuration file, and any
+    /// directory will do.
+    /// </summary>
+    /// <remarks>
+    /// The client hands the <c>-F</c> argument on to the process that contacts a jump host through a shell and does not
+    /// quote it. A bare file name survives that; a full path with a space does not. The process that contacts the jump
+    /// host is started in the same directory, so the name leads it to the same file.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The name of the configured file cannot be handed on to a jump host.</exception>
+    /// <exception cref="IOException">The configuration file cannot be written.</exception>
+    public string? WorkingDirectory => _configFile?.Ensure() is { } config ? Path.GetDirectoryName(config) : null;
+
+    /// <summary>
+    /// Builds the options shared by every connection. They are meant for an <c>ssh</c> started in
+    /// <see cref="WorkingDirectory"/>.
     /// </summary>
     /// <returns>The arguments.</returns>
+    /// <exception cref="ArgumentException">The name of the configured file cannot be handed on to a jump host.</exception>
+    /// <exception cref="IOException">The configuration file cannot be written.</exception>
     public IReadOnlyList<string> BuildCommonOptions()
     {
-        var args = new List<string>
+        var args = new List<string>();
+        var config = _configFile?.Ensure();
+        if (config is not null)
+        {
+            args.AddRange(new[] { "-F", Path.GetFileName(config) });
+        }
+
+        args.AddRange(new[]
         {
             "-o", "BatchMode=yes",
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", $"ConnectTimeout={_options.ConnectTimeoutSeconds}"
-        };
+        });
 
+        // With a configuration file ssh runs in the directory of that file, so a relative path would point elsewhere.
         if (!string.IsNullOrWhiteSpace(_options.IdentityFile))
         {
-            args.AddRange(new[] { "-i", _options.IdentityFile, "-o", "IdentitiesOnly=yes" });
+            var identity = config is null ? _options.IdentityFile : SshClientConfigFile.Absolute(_options.IdentityFile);
+            args.AddRange(new[] { "-i", identity, "-o", "IdentitiesOnly=yes" });
         }
 
-        if (KnownHostsOption(_options.KnownHostsFile) is { } knownHosts)
+        var knownHostsFile = config is null || string.IsNullOrWhiteSpace(_options.KnownHostsFile)
+            ? _options.KnownHostsFile
+            : SshClientConfigFile.Absolute(_options.KnownHostsFile);
+        if (KnownHostsOption(knownHostsFile) is { } knownHosts)
         {
             args.AddRange(new[] { "-o", knownHosts });
         }
@@ -102,6 +146,66 @@ public sealed class SshCommandBuilder
     }
 
     /// <summary>
+    /// Builds the connection that asks a host for its host key of one kind and logs in nowhere.
+    /// </summary>
+    /// <param name="target">The host to ask.</param>
+    /// <param name="jumps">The jump hosts the question passes.</param>
+    /// <param name="hostKeyAlgorithms">The kinds of key to ask for, as a <c>HostKeyAlgorithms</c> value.</param>
+    /// <param name="knownHostsFileName">
+    /// The name of the file, in the directory <c>ssh</c> is started in, that receives the key the host presents.
+    /// </param>
+    /// <returns>The arguments.</returns>
+    /// <remarks>
+    /// <para>
+    /// The client records the key a host presents during the key exchange, before anybody logs in, so the connection
+    /// offers no way to log in (<c>PreferredAuthentications=none</c>) and ends there: the key is learned and nothing is
+    /// sent. The file of its own keeps the answer apart from the keys the node trusts, and the file of the system is
+    /// left out, so a key recorded there cannot stand in for the one the host presents now.
+    /// </para>
+    /// <para>
+    /// The options of the question come first: <c>ssh</c> takes the first value given for an option. The jump hosts are
+    /// reached with the settings of the configuration file, the trusted keys of the node included.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">An argument is invalid.</exception>
+    public IReadOnlyList<string> BuildHostKeyProbe(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string hostKeyAlgorithms, string knownHostsFileName)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (string.IsNullOrEmpty(hostKeyAlgorithms) || !hostKeyAlgorithms.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or ',' or '@' or '.'))
+        {
+            throw new ArgumentException($"Host key algorithms '{hostKeyAlgorithms}' are invalid.", nameof(hostKeyAlgorithms));
+        }
+
+        if (!SshClientOptions.IsValidConfigFileName(knownHostsFileName))
+        {
+            throw new ArgumentException($"File name '{knownHostsFileName}' is invalid.", nameof(knownHostsFileName));
+        }
+
+        var args = new List<string>();
+        if (_configFile?.Ensure() is { } config)
+        {
+            args.AddRange(new[] { "-F", Path.GetFileName(config) });
+        }
+
+        args.AddRange(new[]
+        {
+            "-o", "UserKnownHostsFile=" + knownHostsFileName,
+            "-o", "GlobalKnownHostsFile=" + knownHostsFileName + ".global",
+            "-o", "HostKeyAlgorithms=" + hostKeyAlgorithms,
+            "-o", "PreferredAuthentications=none",
+            "-o", "BatchMode=yes",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "HashKnownHosts=no",
+            "-o", "UpdateHostKeys=no",
+            "-o", $"ConnectTimeout={_options.ConnectTimeoutSeconds}",
+            "-T", "-n"
+        });
+        args.AddRange(ProxyJumpBuilder.Build(jumps));
+        args.AddRange(new[] { "-p", target.Port.ToString(System.Globalization.CultureInfo.InvariantCulture), "--", target.Destination, "true" });
+        return args;
+    }
+
+    /// <summary>
     /// Builds a background local port forward bound to the loopback interface.
     /// </summary>
     /// <param name="target">The SSH endpoint that opens the forwarded connection.</param>
@@ -141,11 +245,23 @@ public sealed class SshCommandBuilder
     /// Builds the <c>GIT_SSH_COMMAND</c> value for git-over-ssh through the jump hosts.
     /// </summary>
     /// <param name="jumps">The jump hosts.</param>
-    /// <returns>The command string. Git evaluates it through a shell, so every component is validated or single-quoted.</returns>
-    /// <exception cref="ArgumentException">The executable or identity path contains a quote or control character.</exception>
+    /// <returns>
+    /// The command string. Git evaluates it through a shell, so every component is validated or single-quoted. With a
+    /// configuration file the command first changes to <see cref="WorkingDirectory"/>: Git starts <c>ssh</c> in the
+    /// working tree, where the name of the file would lead nowhere.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The executable, the identity path or the directory of the configuration file contains a quote or control character.
+    /// </exception>
     public string BuildGitSshCommand(IReadOnlyList<SshEndpoint> jumps)
     {
-        var parts = new List<string> { ShellQuote(_options.SshExecutable) };
+        var parts = new List<string>();
+        if (WorkingDirectory is { } directory)
+        {
+            parts.AddRange(new[] { "cd", ShellQuote(directory), "&&" });
+        }
+
+        parts.Add(ShellQuote(_options.SshExecutable));
         foreach (var option in BuildCommonOptions())
         {
             parts.Add(option.StartsWith('-') ? option : ShellQuote(option));

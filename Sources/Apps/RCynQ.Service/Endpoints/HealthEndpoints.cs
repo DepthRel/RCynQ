@@ -18,7 +18,7 @@ public static class HealthEndpoints
     /// <returns>The same route builder.</returns>
     public static IEndpointRouteBuilder MapHealthEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet(ApiRoutes.Health, (NodeConfig node) => Results.Ok(new { status = "ok", role = node.Role.ToString() }));
+        app.MapGet(ApiRoutes.HEALTH, (NodeConfig node) => Results.Ok(new { status = "ok", role = node.Role.ToString() }));
         return app;
     }
 }

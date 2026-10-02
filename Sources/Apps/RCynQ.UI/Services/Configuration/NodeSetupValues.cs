@@ -8,9 +8,9 @@ namespace RCynQ.UI.Services.Configuration;
 /// <param name="NodeId">The node identifier.</param>
 /// <param name="Name">The display name.</param>
 /// <param name="Role">The node role.</param>
-/// <param name="Path">The repository path (Dest) or working copy (Source); ignored for a Mediator.</param>
+/// <param name="Path">The repository path (Origin) or working copy (Workstation); ignored for a Relay.</param>
 /// <param name="ListenPort">The loopback port of the local service.</param>
-/// <param name="LinkToken">The shared token of Source and Dest; ignored for a Mediator.</param>
+/// <param name="LinkToken">The shared token of Workstation and Origin; ignored for a Relay.</param>
 /// <param name="EndpointMode">How neighbours reach this node.</param>
 /// <param name="EndpointPort">The TCP port of the direct endpoint.</param>
 /// <param name="EndpointBindAddress">The address the direct endpoint binds to.</param>

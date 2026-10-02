@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Enums;
+using RCynQ.UI.Enums;
 using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Navigation;
 
@@ -18,13 +19,13 @@ public sealed class RoleAdapterTests
     /// <param name="tab">The tab.</param>
     /// <param name="expected">Whether the tab is visible.</param>
     [Theory]
-    [InlineData(NodeRole.Mediator, TabKey.Sync, false)]
-    [InlineData(NodeRole.Mediator, TabKey.Branches, false)]
-    [InlineData(NodeRole.Mediator, TabKey.Tunnel, true)]
-    [InlineData(NodeRole.Source, TabKey.Sync, true)]
-    [InlineData(NodeRole.Source, TabKey.Branches, true)]
-    [InlineData(NodeRole.Dest, TabKey.Sync, true)]
-    [InlineData(NodeRole.Dest, TabKey.Diagnostics, true)]
+    [InlineData(NodeRole.Relay, TabKey.Sync, false)]
+    [InlineData(NodeRole.Relay, TabKey.Branches, false)]
+    [InlineData(NodeRole.Relay, TabKey.Tunnel, true)]
+    [InlineData(NodeRole.Workstation, TabKey.Sync, true)]
+    [InlineData(NodeRole.Workstation, TabKey.Branches, true)]
+    [InlineData(NodeRole.Origin, TabKey.Sync, true)]
+    [InlineData(NodeRole.Origin, TabKey.Diagnostics, true)]
     public void Visibility_Follows_Role(NodeRole role, TabKey tab, bool expected)
         => new RoleAdapter().IsAvailable(tab, role).Should().Be(expected);
 
@@ -34,11 +35,11 @@ public sealed class RoleAdapterTests
     [Fact]
     public void Apply_Moves_Selection_Away_From_Hidden_Tab()
     {
-        var page = Substitute.For<PageViewModelBase>();
-        var overview = new NavigationItemViewModel(TabKey.Overview, "Icon.Home", page);
-        var sync = new NavigationItemViewModel(TabKey.Sync, "Icon.Sync", page) { IsSelected = true };
+        var page = Substitute.For<PageViewModelBase>(TestTexts.Russian);
+        var overview = new NavigationItemViewModel(TestTexts.Russian, TabKey.Overview, "Icon.Home", page);
+        var sync = new NavigationItemViewModel(TestTexts.Russian, TabKey.Sync, "Icon.Sync", page) { IsSelected = true };
 
-        var selected = new RoleAdapter().Apply(new[] { overview, sync }, NodeRole.Mediator);
+        var selected = new RoleAdapter().Apply(new[] { overview, sync }, NodeRole.Relay);
 
         sync.IsAvailable.Should().BeFalse();
         selected.Should().BeSameAs(overview);

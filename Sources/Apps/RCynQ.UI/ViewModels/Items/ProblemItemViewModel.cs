@@ -1,4 +1,4 @@
-using RCynQ.UI.ViewModels.Navigation;
+using RCynQ.UI.Enums;
 
 namespace RCynQ.UI.ViewModels.Items;
 

@@ -61,5 +61,17 @@ public enum PatchRejectionReason
     /// The local node role does not accept patches.
     /// </summary>
     [Description("Local role does not accept patches.")]
-    RoleNotAllowed = 9
+    RoleNotAllowed = 9,
+
+    /// <summary>
+    /// The patch belongs to a repository the receiving node does not work with now.
+    /// </summary>
+    [Description("The receiving node works with another repository.")]
+    RepositoryMismatch = 10,
+
+    /// <summary>
+    /// The request names a repository the answering node has not registered.
+    /// </summary>
+    [Description("The node has no repository of that name.")]
+    UnknownRepository = 11
 }

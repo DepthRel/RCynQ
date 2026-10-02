@@ -77,8 +77,8 @@ public sealed class PatchDiffBuilder : IPatchDiffBuilder
                 cancellationToken.ThrowIfCancellationRequested();
                 var oldFile = change.Kind is ChangeKind.Modified or ChangeKind.Deleted ? _paths.ResolveWithinRoot(baseDirectory, change.Path) : null;
                 var size = Math.Max(change.SizeBytes ?? 0, oldFile is not null && File.Exists(oldFile) ? new FileInfo(oldFile).Length : 0);
-                if (limits.MaxFileBytes is { } maxFile && size > maxFile
-                    || limits.MaxTotalBytes is { } maxTotal && total + size > maxTotal)
+                if (limits.MaxFileBytes is { } maxFile && size > maxFile ||
+                    limits.MaxTotalBytes is { } maxTotal && total + size > maxTotal)
                 {
                     skipped.Append("# rcynq: ").Append(change.Path).Append(" (").Append(size).Append(" bytes) is not shown in this diff.\n");
                     continue;

@@ -65,5 +65,21 @@ public sealed class Localizer : ILocalizer
     }
 
     /// <inheritdoc />
-    public string Format(string key, params object?[] args) => string.Format(Culture, Get(key), args);
+    /// <remarks>
+    /// A text that asks for more values than it is given is returned as it is written, with its placeholders. That happens
+    /// when a text encoded by a node of another version is rendered here (see <see cref="LocalizedText"/>), and a message
+    /// with a visible <c>{1}</c> is better than a failure in the middle of reporting something to the user.
+    /// </remarks>
+    public string Format(string key, params object?[] args)
+    {
+        var text = Get(key);
+        try
+        {
+            return string.Format(Culture, text, args);
+        }
+        catch (FormatException)
+        {
+            return text;
+        }
+    }
 }

@@ -1,0 +1,69 @@
+# Builds the solution and runs every test on Windows and on Linux for each push to main and each pull request.
+#
+# The build treats the code rules of .editorconfig and the missing XML comments as errors, and
+# Tests/RCynQ.Conventions.Tests checks the rest of AGENTS.md, so a red run also means a broken rule. The Git and SSH
+# integration tests use the git and ssh-keygen of the runners.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  test:
+    name: Build and test, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      # Tests make commits in temporary repositories; a runner has no Git identity of its own.
+      - name: Git identity
+        run: |
+          git config --global user.name "RCynQ CI"
+          git config --global user.email "ci@rcynq.invalid"
+      - name: Build
+        run: dotnet build RCynQ.slnx -c Release
+      - name: Test
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet test RCynQ.slnx -c Release --no-build 2>&1 | tee test-output.log
+      # A failed test becomes an annotation of the run, readable on its page without the whole log; the whole output
+      # of the tests is kept as an artifact.
+      - name: Report what failed
+        if: failure()
+        shell: bash
+        run: |
+          sed 's/\x1b\[[0-9;]*m//g' test-output.log \
+            | grep -E '^\s+Failed |Failed!|aborted|crashed|Unhandled exception|error ' | head -n 40 \
+            | sed 's/^/::error title=Test (${{ matrix.os }})::/' || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-output-${{ matrix.os }}
+          path: test-output.log

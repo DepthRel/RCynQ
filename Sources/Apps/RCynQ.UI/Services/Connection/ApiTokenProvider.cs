@@ -10,7 +10,7 @@ namespace RCynQ.UI.Services.Connection;
 public sealed class ApiTokenProvider
 {
     /// <summary>The <see cref="ServiceConnectionSettings.TokenSource"/> of an explicitly passed token.</summary>
-    public const string ArgumentSource = "argument";
+    public const string ARGUMENT_SOURCE = "argument";
 
     /// <summary>The connection settings.</summary>
     private readonly ServiceConnectionSettings _settings;
@@ -34,7 +34,7 @@ public sealed class ApiTokenProvider
     /// <summary>
     /// Gets a value indicating whether the token comes from a file.
     /// </summary>
-    public bool IsFileBacked => !string.Equals(_settings.TokenSource, ArgumentSource, StringComparison.Ordinal);
+    public bool IsFileBacked => !string.Equals(_settings.TokenSource, ARGUMENT_SOURCE, StringComparison.Ordinal);
 
     /// <summary>
     /// Gets the current token.

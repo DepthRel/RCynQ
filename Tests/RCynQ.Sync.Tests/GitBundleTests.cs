@@ -21,15 +21,15 @@ using RCynQ.Sync.Transfer;
 namespace RCynQ.Sync.Tests;
 
 /// <summary>
-/// Tests for the two ends of the bundle pull: the service that answers on Dest and the client that asks from Source.
+/// Tests for the two ends of the bundle pull: the service that answers on Origin and the client that asks from Workstation.
 /// </summary>
 public sealed class GitBundleTests : IDisposable
 {
     /// <summary>The shared link token.</summary>
-    private const string Token = "bundle-tests-link-token-0123456789";
+    private const string TOKEN = "bundle-tests-link-token-0123456789";
 
     /// <summary>A commit name.</summary>
-    private static readonly string Commit = new('a', 40);
+    private static readonly string _commit = new('a', 40);
 
     /// <summary>The temporary root.</summary>
     private readonly string _root = Path.Combine(Path.GetTempPath(), "rcynq-bundle-tests", Guid.NewGuid().ToString("N"));
@@ -44,7 +44,7 @@ public sealed class GitBundleTests : IDisposable
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GitBundleTests"/> class: a Dest node with a repository that knows one Source peer.
+    /// Initializes a new instance of the <see cref="GitBundleTests"/> class: an Origin node with a repository that knows one Workstation peer.
     /// </summary>
     public GitBundleTests()
     {
@@ -52,17 +52,17 @@ public sealed class GitBundleTests : IDisposable
         _git.IsWorkTreeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
         _git.GetCurrentBranchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("main");
         _git.FilterExistingCommitsAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.Arg<IEnumerable<string>>().Where(commit => commit == Commit).ToArray());
+            .Returns(call => call.Arg<IEnumerable<string>>().Where(commit => commit == _commit).ToArray());
         _git.CreateBundleAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 File.WriteAllText(call.ArgAt<string>(1), "bundle bytes");
                 return true;
             });
-        _peers.GetAsync(new NodeId("source-1"), Arg.Any<CancellationToken>())
-            .Returns(new PeerDescriptor(new NodeId("source-1"), "Source", NodeRole.Source, "source.local", 22, "rcynq"));
-        _peers.GetAsync(new NodeId("other-dest"), Arg.Any<CancellationToken>())
-            .Returns(new PeerDescriptor(new NodeId("other-dest"), "Other", NodeRole.Dest, "other.local", 22, "rcynq"));
+        _peers.GetAsync(new NodeId("workstation-1"), Arg.Any<CancellationToken>())
+            .Returns(new PeerDescriptor(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, "workstation.local", 22, "rcynq"));
+        _peers.GetAsync(new NodeId("other-origin"), Arg.Any<CancellationToken>())
+            .Returns(new PeerDescriptor(new NodeId("other-origin"), "Other", NodeRole.Origin, "other.local", 22, "rcynq"));
     }
 
     /// <summary>
@@ -74,11 +74,11 @@ public sealed class GitBundleTests : IDisposable
     {
         var service = CreateService();
 
-        await using var bundle = (await service.CreateAsync(new[] { Commit, new string('b', 40), "not a commit" }, Context()))!;
+        await using var bundle = (await service.CreateAsync(new[] { _commit, new string('b', 40), "not a commit" }, Context()))!;
 
         bundle.Head.Should().Be("main");
         File.ReadAllText(bundle.Path).Should().Be("bundle bytes");
-        await _git.Received(1).CreateBundleAsync(Arg.Any<string>(), bundle.Path, Arg.Is<IReadOnlyCollection<string>>(have => have.Single() == Commit), Arg.Any<CancellationToken>());
+        await _git.Received(1).CreateBundleAsync(Arg.Any<string>(), bundle.Path, Arg.Is<IReadOnlyCollection<string>>(have => have.Single() == _commit), Arg.Any<CancellationToken>());
         var path = bundle.Path;
         await bundle.DisposeAsync();
         File.Exists(path).Should().BeFalse();
@@ -93,23 +93,23 @@ public sealed class GitBundleTests : IDisposable
     {
         _git.CreateBundleAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        (await CreateService().CreateAsync(new[] { Commit }, Context())).Should().BeNull();
+        (await CreateService().CreateAsync(new[] { _commit }, Context())).Should().BeNull();
     }
 
     /// <summary>
-    /// Verifies that the request is refused for a node that is not Dest, a wrong token and a peer that is not a known Source, and that
-    /// a Dest without a repository reports it.
+    /// Verifies that the request is refused for a node that is not Origin, a wrong token and a peer that is not a known Workstation, and that
+    /// an Origin without a repository reports it.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Service_Authorizes_Role_Token_And_Peer()
     {
-        var source = new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _root);
-        (await Reason(() => CreateService(source).CreateAsync(Array.Empty<string>(), Context()))).Should().Be(PatchRejectionReason.RoleNotAllowed);
-        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("source-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
-        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("stranger", Token)))).Should().Be(PatchRejectionReason.UnknownSender);
-        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("other-dest", Token)))).Should().Be(PatchRejectionReason.UnknownSender, "only a Source may read the repository");
-        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext(null, Token)))).Should().Be(PatchRejectionReason.UnknownSender);
+        var workstation = new NodeConfig(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, _root);
+        (await Reason(() => CreateService(workstation).CreateAsync(Array.Empty<string>(), Context()))).Should().Be(PatchRejectionReason.RoleNotAllowed);
+        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("workstation-1", "wrong")))).Should().Be(PatchRejectionReason.InvalidToken);
+        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("stranger", TOKEN)))).Should().Be(PatchRejectionReason.UnknownSender);
+        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext("other-origin", TOKEN)))).Should().Be(PatchRejectionReason.UnknownSender, "only a Workstation may read the repository");
+        (await Reason(() => CreateService().CreateAsync(Array.Empty<string>(), new PatchReceiveContext(null, TOKEN)))).Should().Be(PatchRejectionReason.UnknownSender);
 
         _git.IsWorkTreeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         var noRepository = () => CreateService().CreateAsync(Array.Empty<string>(), Context());
@@ -140,7 +140,7 @@ public sealed class GitBundleTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies that the client sends what it has, stores the answer in a file and reads the branch of Dest from the header.
+    /// Verifies that the client sends what it has, stores the answer in a file and reads the branch of Origin from the header.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -149,20 +149,20 @@ public sealed class GitBundleTests : IDisposable
         var handler = new FakeHandler(_ =>
         {
             var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.UTF8.GetBytes("# v2 git bundle\n...")) };
-            response.Headers.Add(ApiHeaders.GitHead, "release");
+            response.Headers.Add(ApiHeaders.GIT_HEAD, "release");
             return response;
         });
 
-        var download = await CreateClient(handler).DownloadAsync(Chain(), new[] { Commit }, _root);
+        var download = await CreateClient(handler).DownloadAsync(Chain(), new[] { _commit }, _root);
 
         download.Should().NotBeNull();
         download!.Head.Should().Be("release");
         File.ReadAllText(download.Path).Should().StartWith("# v2 git bundle");
         var request = handler.Requests.Should().ContainSingle().Subject;
         request.Uri.Should().Be(new Uri("http://127.0.0.1:45555/git/bundle"));
-        request.Headers[ApiHeaders.NodeId].Should().Be("source-1");
-        request.Headers[ApiHeaders.LinkToken].Should().Be(Token);
-        JsonSerializer.Deserialize<GitBundleRequest>(request.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Have.Should().Equal(Commit);
+        request.Headers[ApiHeaders.NODE_ID].Should().Be("workstation-1");
+        request.Headers[ApiHeaders.LINK_TOKEN].Should().Be(TOKEN);
+        JsonSerializer.Deserialize<GitBundleRequest>(request.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Have.Should().Equal(_commit);
         await _forwards.Received(1).StopAsync(45555, Arg.Any<CancellationToken>());
     }
 
@@ -220,30 +220,31 @@ public sealed class GitBundleTests : IDisposable
     }
 
     /// <summary>
-    /// Creates the request context of a valid Source.
+    /// Creates the request context of a valid Workstation.
     /// </summary>
     /// <returns>The context.</returns>
-    private static PatchReceiveContext Context() => new("source-1", Token);
+    private static PatchReceiveContext Context() => new("workstation-1", TOKEN);
 
     /// <summary>
-    /// Creates the service of a Dest node.
+    /// Creates the service of an Origin node.
     /// </summary>
-    /// <param name="node">The node, or <see langword="null"/> for a Dest with a repository.</param>
+    /// <param name="node">The node, or <see langword="null"/> for an Origin with a repository.</param>
     /// <returns>The service.</returns>
     private GitBundleService CreateService(NodeConfig? node = null)
     {
         var appData = Substitute.For<IAppDataFactory>();
         appData.Create().Returns(AppDataPaths.FromRoot(Path.Combine(_root, "data")));
         return new GitBundleService(
-            node ?? new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, _root, null),
+            TestTexts.English,
+            node ?? new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, _root, null),
             _peers,
-            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = Token }, new InMemorySecretStore()),
+            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = TOKEN }, new InMemorySecretStore()),
             _git,
             appData);
     }
 
     /// <summary>
-    /// Creates the client of a Source node whose HTTP traffic goes through a handler.
+    /// Creates the client of a Workstation node whose HTTP traffic goes through a handler.
     /// </summary>
     /// <param name="handler">The HTTP handler.</param>
     /// <returns>The client.</returns>
@@ -251,20 +252,21 @@ public sealed class GitBundleTests : IDisposable
     {
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(45555);
         return new GitBundleClient(
+            TestTexts.English,
             new PeerLinkFactory(handler, _forwards),
-            new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _root),
-            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = Token }, new InMemorySecretStore()));
+            new NodeConfig(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, _root),
+            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = TOKEN }, new InMemorySecretStore()));
     }
 
     /// <summary>
-    /// Creates a chain from Source through one mediator to a Dest that has an SSH server.
+    /// Creates a chain from Workstation through one relay to an Origin that has an SSH server.
     /// </summary>
     /// <returns>The chain.</returns>
     private static IReadOnlyList<ChainLinkConfig> Chain()
         => new[]
         {
-            new ChainLinkConfig(Guid.NewGuid(), "hop", TransportKind.Direct, new PeerDescriptor(new NodeId("mediator-1"), "Relay", NodeRole.Mediator, "relay.example", 22, "jump"), 0, 22, 0),
-            new ChainLinkConfig(Guid.NewGuid(), "endpoint", TransportKind.Direct, new PeerDescriptor(new NodeId("dest-1"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq"), 0, 18443, 1)
+            new ChainLinkConfig(Guid.NewGuid(), "hop", TransportKind.Direct, new PeerDescriptor(new NodeId("relay-1"), "Relay", NodeRole.Relay, "relay.example", 22, "jump"), 0, 22, 0),
+            new ChainLinkConfig(Guid.NewGuid(), "endpoint", TransportKind.Direct, new PeerDescriptor(new NodeId("origin-1"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq"), 0, 18443, 1)
         };
 
     /// <summary>

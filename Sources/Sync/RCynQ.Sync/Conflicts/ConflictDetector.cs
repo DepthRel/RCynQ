@@ -1,8 +1,8 @@
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
-using RCynQ.Sync.State;
 using RCynQ.Localization;
+using RCynQ.Sync.State;
 
 namespace RCynQ.Sync.Conflicts;
 
@@ -65,11 +65,11 @@ public sealed class ConflictDetector
             var detail = local switch
             {
                 null => LocalizedText.Encode("Conflict.DeletedLocally"),
-                FileState.DirectoryMarker => LocalizedText.Encode("Conflict.DirectoryLocally"),
+                FileState.DIRECTORY_MARKER => LocalizedText.Encode("Conflict.DirectoryLocally"),
                 _ when localBase is null => LocalizedText.Encode("Conflict.CreatedLocally"),
                 _ => LocalizedText.Encode("Conflict.ModifiedLocally")
             };
-            conflicts.Add(new ConflictFile(change.Path, local == FileState.DirectoryMarker ? null : local, incoming, detail));
+            conflicts.Add(new ConflictFile(change.Path, local == FileState.DIRECTORY_MARKER ? null : local, incoming, detail));
         }
 
         return conflicts;

@@ -11,10 +11,10 @@ public static class FileState
     /// <summary>
     /// The pseudo hash of a real directory found where a file is expected.
     /// </summary>
-    public const string DirectoryMarker = "<directory>";
+    public const string DIRECTORY_MARKER = "<directory>";
 
     /// <summary>
-    /// Hashes a path: file content, symbolic link target, <see cref="DirectoryMarker"/> or <see langword="null"/> when absent.
+    /// Hashes a path: file content, symbolic link target, <see cref="DIRECTORY_MARKER"/> or <see langword="null"/> when absent.
     /// </summary>
     /// <param name="path">The full path.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
@@ -55,6 +55,6 @@ public static class FileState
                 : await DefaultStateHasher.Sha256FileAsync(path, cancellationToken);
         }
 
-        return Directory.Exists(path) ? DirectoryMarker : null;
+        return Directory.Exists(path) ? DIRECTORY_MARKER : null;
     }
 }

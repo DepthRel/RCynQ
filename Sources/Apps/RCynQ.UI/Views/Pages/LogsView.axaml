@@ -20,7 +20,7 @@
     <Grid ColumnDefinitions="Auto,170,*,Auto,Auto" Margin="0,0,0,14">
       <TextBlock Classes="secondary" Text="{loc:Loc Logs.Level}" VerticalAlignment="Center" Margin="0,0,10,0" />
       <ComboBox Grid.Column="1" ItemsSource="{Binding Levels}" SelectedItem="{Binding SelectedLevel}" />
-      <Button Grid.Column="3" Classes="outline" Margin="10,0,0,0" Command="{Binding ReloadCommand}">
+      <Button Grid.Column="3" Classes="outline" Margin="10,0,0,0" Command="{Binding ReloadEntriesCommand}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <controls:IconView Classes="small" IconKey="Icon.Refresh" />
           <TextBlock Text="{loc:Loc Common.Refresh}" />

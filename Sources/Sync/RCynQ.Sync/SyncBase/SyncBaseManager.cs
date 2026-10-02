@@ -1,5 +1,5 @@
-using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Patches;
+using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
@@ -23,9 +23,9 @@ namespace RCynQ.Sync.SyncBase;
 /// </para>
 /// <para>
 /// For a Git working tree the base is built automatically: it is exported from the commit both nodes have
-/// (<see cref="IGitSyncBaseLocator"/>), and exported again whenever that commit changes, for example after a Pull on Source or a
-/// commit on Dest. Files exchanged with the peer since the last export are carried over into the new export (each remembered with a hash of what the peer has, and only while the base still matches it), unless the new commit
-/// already has them or, on Source, the new commit changed them (the commit is then the newer word on what Dest has).
+/// (<see cref="IGitSyncBaseLocator"/>), and exported again whenever that commit changes, for example after a Pull on Workstation or a
+/// commit on Origin. Files exchanged with the peer since the last export are carried over into the new export (each remembered with a hash of what the peer has, and only while the base still matches it), unless the new commit
+/// already has them or, on Workstation, the new commit changed them (the commit is then the newer word on what Origin has).
 /// Nothing has to be done by hand, and no working trees have to be made identical first.
 /// </para>
 /// <para>
@@ -40,10 +40,10 @@ namespace RCynQ.Sync.SyncBase;
 public sealed class SyncBaseManager
 {
     /// <summary>The suffix of the directory a new base is built in before it is swapped into place.</summary>
-    private const string StagingSuffix = ".new-";
+    private const string STAGING_SUFFIX = ".new-";
 
     /// <summary>The suffix of the directory the replaced base is parked in until it is deleted.</summary>
-    private const string RetiredSuffix = ".old-";
+    private const string RETIRED_SUFFIX = ".old-";
 
     /// <summary>
     /// How long a staging directory is left alone before it counts as the leftover of a process that was killed.
@@ -53,7 +53,7 @@ public sealed class SyncBaseManager
     /// root right now. No export of a working tree takes anywhere near this long, so waiting it out costs nothing and makes
     /// the cleanup unable to delete a directory that is still being filled.
     /// </remarks>
-    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromHours(1);
+    private static readonly TimeSpan _abandonedAfter = TimeSpan.FromHours(1);
 
     /// <summary>The local node.</summary>
     private readonly NodeConfig _node;
@@ -91,9 +91,13 @@ public sealed class SyncBaseManager
     /// <summary>The time provider.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SyncBaseManager"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="paths">The sync paths.</param>
     /// <param name="locator">The locator of the Git commit.</param>
@@ -106,6 +110,7 @@ public sealed class SyncBaseManager
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The time provider.</param>
     public SyncBaseManager(
+        ILocalizer localizer,
         NodeConfig node,
         SyncPaths paths,
         IGitSyncBaseLocator locator,
@@ -118,6 +123,7 @@ public sealed class SyncBaseManager
         WorkingTreeLock workingTreeLock,
         TimeProvider timeProvider)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _paths = paths;
         _locator = locator;
@@ -157,7 +163,7 @@ public sealed class SyncBaseManager
         var baseExists = Directory.Exists(_paths.SyncBase);
         if (target.Commit is not null)
         {
-            if (!(baseExists && metadata is { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CurrentFormat } && metadata.Branch == target.Branch && metadata.Commit == target.Commit))
+            if (!(baseExists && metadata is { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CURRENT_FORMAT } && metadata.Branch == target.Branch && metadata.Commit == target.Commit))
             {
                 await ExportAsync(target, metadata, baseExists, cancellationToken);
             }
@@ -173,7 +179,7 @@ public sealed class SyncBaseManager
             return new SyncBaseStatus(SyncBaseMode.Manual, null, null, null, canCreateManual);
         }
 
-        return SyncBaseStatus.NotReady(target.Problem ?? Texts.Get("Patch.NoBaseline"), canCreateManual);
+        return SyncBaseStatus.NotReady(target.Problem ?? _localizer.Get("Patch.NoBaseline"), canCreateManual);
     }
 
     /// <summary>
@@ -187,7 +193,7 @@ public sealed class SyncBaseManager
     {
         ArgumentNullException.ThrowIfNull(paths);
         var metadata = await _metadata.ReadAsync(cancellationToken);
-        if (metadata is not { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CurrentFormat })
+        if (metadata is not { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CURRENT_FORMAT })
         {
             // A manual snapshot is itself the whole record of what the peer has.
             return;
@@ -264,7 +270,7 @@ public sealed class SyncBaseManager
                 change.Sha256,
                 change.SizeBytes,
                 change.IsSymlink,
-                change.Kind == ChangeKind.Added || peer == FileState.DirectoryMarker ? null : peer));
+                change.Kind == ChangeKind.Added || peer == FileState.DIRECTORY_MARKER ? null : peer));
         }
 
         return pending;
@@ -299,6 +305,12 @@ public sealed class SyncBaseManager
         {
             foreach (var (path, kind) in await _git.GetChangedFilesSinceAsync(_paths.Workdir, commit, cancellationToken))
             {
+                // What a dead process left of a half-prepared patch is untracked for Git, but it is not a file of the user.
+                if (path.Split('/').Any(Git.Paths.PathUtility.IsApplyStagingName))
+                {
+                    continue;
+                }
+
                 listed.TryAdd(path, new ChangedFile(kind, path, true));
             }
         }
@@ -366,7 +378,7 @@ public sealed class SyncBaseManager
     private async Task<Core.Patches.FileChange?> ResendAsync(string path, Core.Patches.FileEntry? entry, CancellationToken cancellationToken)
     {
         var peer = await ContentHashOfAsync(_paths.SyncBase, path, cancellationToken);
-        if (peer == FileState.DirectoryMarker)
+        if (peer == FileState.DIRECTORY_MARKER)
         {
             return null;
         }
@@ -390,13 +402,13 @@ public sealed class SyncBaseManager
     {
         if (!_node.ParticipatesInPatchChannel)
         {
-            throw new SyncBridgeException(Texts.Get("Baseline.MediatorHasNone"));
+            throw new SyncBridgeException(_localizer.Get("Baseline.RelayHasNone"));
         }
 
         var workdir = _paths.Workdir;
         if (!Directory.Exists(workdir))
         {
-            throw new SyncBridgeException(Texts.Format("Baseline.WorkdirMissing", workdir));
+            throw new SyncBridgeException(_localizer.Format("Baseline.WorkdirMissing", workdir));
         }
 
         using (await _lock.AcquireAsync(cancellationToken))
@@ -411,7 +423,7 @@ public sealed class SyncBaseManager
             }
             else if (target.IsRepository)
             {
-                throw new SyncBridgeException(target.Problem ?? Texts.Get("Patch.NoBaseline"));
+                throw new SyncBridgeException(target.Problem ?? _localizer.Get("Patch.NoBaseline"));
             }
             else
             {
@@ -466,7 +478,7 @@ public sealed class SyncBaseManager
             }
         });
 
-        await _metadata.WriteAsync(new SyncBaseMetadata(SyncBaseMode.Git, target.Branch, target.Commit, exchanged, SyncBaseMetadata.CurrentFormat), cancellationToken);
+        await _metadata.WriteAsync(new SyncBaseMetadata(SyncBaseMode.Git, target.Branch, target.Commit, exchanged, SyncBaseMetadata.CURRENT_FORMAT), cancellationToken);
     }
 
     /// <summary>
@@ -484,17 +496,17 @@ public sealed class SyncBaseManager
     /// </remarks>
     private async Task<IReadOnlyDictionary<string, string?>> CarryCandidatesAsync(GitSyncBaseTarget target, SyncBaseMetadata? previous, CancellationToken cancellationToken)
     {
-        if (previous is not { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CurrentFormat } || previous.Branch != target.Branch || previous.Exchanged.Count == 0)
+        if (previous is not { Mode: SyncBaseMode.Git, Format: SyncBaseMetadata.CURRENT_FORMAT } || previous.Branch != target.Branch || previous.Exchanged.Count == 0)
         {
             return new Dictionary<string, string?>();
         }
 
         var candidates = new Dictionary<string, string?>(previous.Exchanged, StringComparer.Ordinal);
-        if (_node.Role == NodeRole.Source && previous.Commit is not null && previous.Commit != target.Commit)
+        if (_node.Role == NodeRole.Workstation && previous.Commit is not null && previous.Commit != target.Commit)
         {
             try
             {
-                // Source moved to another commit of Dest: for the files that commit changed, it is the newer word on what Dest has.
+                // Workstation moved to another commit of Origin: for the files that commit changed, it is the newer word on what Origin has.
                 foreach (var change in await _git.GetChangedPathsAsync(_paths.Workdir, previous.Commit, target.Commit!, cancellationToken))
                 {
                     candidates.Remove(change.Path);
@@ -536,10 +548,10 @@ public sealed class SyncBaseManager
         // Compared without line endings: a file the peer has with other line endings than the checkout is still the same content.
         var currentHash = await FileState.ContentHashAsync(current, cancellationToken);
         var freshHash = await FileState.ContentHashAsync(fresh, cancellationToken);
-        if (currentHash != recorded
-            || currentHash == freshHash
-            || currentHash == FileState.DirectoryMarker
-            || freshHash == FileState.DirectoryMarker)
+        if (currentHash != recorded ||
+            currentHash == freshHash ||
+            currentHash == FileState.DIRECTORY_MARKER ||
+            freshHash == FileState.DIRECTORY_MARKER)
         {
             // Not what was recorded (the base was changed behind the record's back), or the commit has it now: trust the commit.
             return false;
@@ -595,8 +607,8 @@ public sealed class SyncBaseManager
     private async Task ReplaceAsync(Func<string, Task> fill)
     {
         var target = _paths.SyncBase;
-        var staging = target + StagingSuffix + Guid.NewGuid().ToString("N");
-        var retired = target + RetiredSuffix + Guid.NewGuid().ToString("N");
+        var staging = target + STAGING_SUFFIX + Guid.NewGuid().ToString("N");
+        var retired = target + RETIRED_SUFFIX + Guid.NewGuid().ToString("N");
         DeleteAbandonedStaging();
         try
         {
@@ -605,23 +617,49 @@ public sealed class SyncBaseManager
             if (Directory.Exists(target))
             {
                 Directory.Move(target, retired);
+
+                // A rename keeps the stamps of the old base, which may be days old: without a fresh one the cleanup of
+                // another process would take the parked base for a leftover while it may still have to be moved back.
+                TouchQuietly(retired);
             }
 
             Directory.Move(staging, target);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or GitExecutionException)
         {
-            if (!Directory.Exists(target) && Directory.Exists(retired))
-            {
-                Directory.Move(retired, target);
-            }
-
-            throw new SyncBridgeException(Texts.Format("SyncBase.Failed", ex.Message), ex);
+            RestoreQuietly(retired, target);
+            throw new SyncBridgeException(_localizer.Format("SyncBase.Failed", _localizer.Describe(ex)), ex);
         }
         finally
         {
             DeleteQuietly(staging);
-            DeleteQuietly(retired);
+
+            // Until a base is in place the parked one is the only copy of what the peer has: it is removed only then.
+            // (When it could not be moved back it stays where it is, instead of being deleted on the way out.)
+            if (Directory.Exists(target))
+            {
+                DeleteQuietly(retired);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Moves the parked base back after a failed swap, ignoring failures: the failure of the swap is what gets reported.
+    /// </summary>
+    /// <param name="retired">The parked base.</param>
+    /// <param name="target">The place of the base.</param>
+    private static void RestoreQuietly(string retired, string target)
+    {
+        try
+        {
+            if (!Directory.Exists(target) && Directory.Exists(retired))
+            {
+                Directory.Move(retired, target);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Nothing more can be done here; the parked base is kept, see ReplaceAsync.
         }
     }
 
@@ -648,10 +686,10 @@ public sealed class SyncBaseManager
     /// Deletes the staging directories a killed process left next to the sync base.
     /// </summary>
     /// <remarks>
-    /// An export builds the new base in <see cref="StagingSuffix"/> and parks the replaced one in
-    /// <see cref="RetiredSuffix"/>, deleting both when it finishes. A process that is killed mid-export runs no cleanup, so
+    /// An export builds the new base in <see cref="STAGING_SUFFIX"/> and parks the replaced one in
+    /// <see cref="RETIRED_SUFFIX"/>, deleting both when it finishes. A process that is killed mid-export runs no cleanup, so
     /// it leaves a partial copy of the working tree behind, once per killed start. Only directories untouched for
-    /// <see cref="AbandonedAfter"/> are removed; anything else beside the base is left alone.
+    /// <see cref="_abandonedAfter"/> are removed; anything else beside the base is left alone.
     /// </remarks>
     private void DeleteAbandonedStaging()
     {
@@ -663,24 +701,50 @@ public sealed class SyncBaseManager
             return;
         }
 
-        var abandonedBefore = _timeProvider.GetUtcNow() - AbandonedAfter;
+        var abandonedBefore = _timeProvider.GetUtcNow() - _abandonedAfter;
         foreach (var candidate in EnumerateQuietly(directory))
         {
             var name = Path.GetFileName(candidate);
-            if (!name.StartsWith(prefix + StagingSuffix, StringComparison.Ordinal)
-                && !name.StartsWith(prefix + RetiredSuffix, StringComparison.Ordinal))
+            if (!name.StartsWith(prefix + STAGING_SUFFIX, StringComparison.Ordinal) &&
+                !name.StartsWith(prefix + RETIRED_SUFFIX, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            // The newer of the two stamps, because a file system may not keep a creation time.
-            var touched = Directory.GetCreationTimeUtc(candidate) > Directory.GetLastWriteTimeUtc(candidate)
-                ? Directory.GetCreationTimeUtc(candidate)
-                : Directory.GetLastWriteTimeUtc(candidate);
+            DateTime touched;
+            try
+            {
+                // The newer of the two stamps, because a file system may not keep a creation time.
+                var created = Directory.GetCreationTimeUtc(candidate);
+                var written = Directory.GetLastWriteTimeUtc(candidate);
+                touched = created > written ? created : written;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best effort: a leftover that cannot be examined must not fail the export or the check it runs before.
+                continue;
+            }
+
             if (touched < abandonedBefore.UtcDateTime)
             {
                 DeleteQuietly(candidate);
             }
+        }
+    }
+
+    /// <summary>
+    /// Stamps a directory as written now, ignoring failures, so <see cref="DeleteAbandonedStaging"/> leaves it alone.
+    /// </summary>
+    /// <param name="directory">The directory path.</param>
+    private void TouchQuietly(string directory)
+    {
+        try
+        {
+            Directory.SetLastWriteTimeUtc(directory, _timeProvider.GetUtcNow().UtcDateTime);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Only the age guard of the cleanup depends on the stamp; the swap itself does not.
         }
     }
 

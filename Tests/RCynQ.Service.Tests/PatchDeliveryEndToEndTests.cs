@@ -24,44 +24,44 @@ using RCynQ.Sync.Transfer;
 namespace RCynQ.Service.Tests;
 
 /// <summary>
-/// End-to-end tests of the patch session: a real <see cref="HttpPatchSender"/> talks to a real Dest service on Kestrel, with real
+/// End-to-end tests of the patch session: a real <see cref="HttpPatchSender"/> talks to a real Origin service on Kestrel, with real
 /// files on both sides. Only the SSH forward is replaced by a direct connection to the loopback port of the service.
 /// </summary>
 public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
 {
-    /// <summary>The Dest service.</summary>
+    /// <summary>The Origin service.</summary>
     private ServiceTestHost _host = null!;
 
-    /// <summary>The working tree of Dest (its repository path).</summary>
-    private string _destWork = null!;
+    /// <summary>The working tree of Origin (its repository path).</summary>
+    private string _originWork = null!;
 
-    /// <summary>The temporary root of the simulated Source.</summary>
-    private string _sourceRoot = null!;
+    /// <summary>The temporary root of the simulated Workstation.</summary>
+    private string _workstationRoot = null!;
 
-    /// <summary>The sync base of Source, the state Source and Dest agreed on.</summary>
-    private string _sourceBase = null!;
+    /// <summary>The sync base of Workstation, the state Workstation and Origin agreed on.</summary>
+    private string _workstationBase = null!;
 
-    /// <summary>The working tree of Source.</summary>
-    private string _sourceWork = null!;
+    /// <summary>The working tree of Workstation.</summary>
+    private string _workstationWork = null!;
 
-    /// <summary>The signer of Source.</summary>
-    private readonly EcdsaSignatureService _signer = new(new InMemorySecretStore());
+    /// <summary>The signer of Workstation.</summary>
+    private readonly EcdsaSignatureService _signer = new(TestTexts.English, new InMemorySecretStore());
 
     /// <summary>The forward manager, replaced by a direct connection.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
 
     /// <summary>
-    /// Starts Dest, registers Source as its peer and creates the same starting tree on both sides and the baseline on Dest.
+    /// Starts Origin, registers Workstation as its peer and creates the same starting tree on both sides and the baseline on Origin.
     /// </summary>
     /// <returns>A task representing the setup.</returns>
     public async Task InitializeAsync()
     {
-        _host = await ServiceTestHost.StartAsync(NodeRole.Dest);
-        _destWork = Path.Combine(_host.Root, "work");
-        _sourceRoot = Path.Combine(Path.GetTempPath(), "rcynq-e2e-tests", Guid.NewGuid().ToString("N"));
-        _sourceBase = Directory.CreateDirectory(Path.Combine(_sourceRoot, "base")).FullName;
-        _sourceWork = Directory.CreateDirectory(Path.Combine(_sourceRoot, "work")).FullName;
-        foreach (var dir in new[] { _destWork, _sourceBase, _sourceWork })
+        _host = await ServiceTestHost.StartAsync(NodeRole.Origin);
+        _originWork = Path.Combine(_host.Root, "work");
+        _workstationRoot = Path.Combine(Path.GetTempPath(), "rcynq-e2e-tests", Guid.NewGuid().ToString("N"));
+        _workstationBase = Directory.CreateDirectory(Path.Combine(_workstationRoot, "base")).FullName;
+        _workstationWork = Directory.CreateDirectory(Path.Combine(_workstationRoot, "work")).FullName;
+        foreach (var dir in new[] { _originWork, _workstationBase, _workstationWork })
         {
             Write(dir, "a.txt", "v1\n");
             Write(dir, "b.txt", "keep\n");
@@ -71,7 +71,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
         {
             var key = Convert.ToBase64String(await _signer.ExportPublicKeyAsync());
             await scope.ServiceProvider.GetRequiredService<IPeerRepository>()
-                .UpsertAsync(new PeerDescriptor(new NodeId("source-1"), "Source", NodeRole.Source, "source.local", 22, "rcynq", signingPublicKey: key));
+                .UpsertAsync(new PeerDescriptor(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, "workstation.local", 22, "rcynq", signingPublicKey: key));
         }
 
         await _host.Services.GetRequiredService<IPatchService>().RebuildBaselineAsync();
@@ -88,7 +88,7 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
         await _host.DisposeAsync();
         try
         {
-            Directory.Delete(_sourceRoot, recursive: true);
+            Directory.Delete(_workstationRoot, recursive: true);
         }
         catch (IOException)
         {
@@ -106,26 +106,26 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
     {
         var big = new byte[8 * 1024 * 1024];
         new Random(1234).NextBytes(big);
-        Write(_sourceWork, "a.txt", "v2\n");
-        File.Delete(Path.Combine(_sourceWork, "b.txt"));
-        Write(_sourceWork, "new/n.txt", "new\n");
-        File.WriteAllBytes(Path.Combine(_sourceWork, "new", "big.bin"), big);
-        Write(_sourceWork, ".gitignore", "*.tmp\nbuild/\n");
-        Write(_sourceWork, "junk.tmp", "ignored");
-        Write(_sourceWork, "build/out.dll", "ignored directory");
+        Write(_workstationWork, "a.txt", "v2\n");
+        File.Delete(Path.Combine(_workstationWork, "b.txt"));
+        Write(_workstationWork, "new/n.txt", "new\n");
+        File.WriteAllBytes(Path.Combine(_workstationWork, "new", "big.bin"), big);
+        Write(_workstationWork, ".gitignore", "*.tmp\nbuild/\n");
+        Write(_workstationWork, "junk.tmp", "ignored");
+        Write(_workstationWork, "build/out.dll", "ignored directory");
 
         var envelope = await BuildAsync();
-        var result = await CreateSender().SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var result = await CreateSender().SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _workstationWork, new PathUtility(TestTexts.English)), Chain());
 
         result.Status.Should().Be(PatchStatus.Applied, result.Error);
         result.AppliedFileCount.Should().Be(5);
-        Read(_destWork, "a.txt").Should().Be("v2\n");
-        File.Exists(Path.Combine(_destWork, "b.txt")).Should().BeFalse();
-        Read(_destWork, "new/n.txt").Should().Be("new\n");
-        SHA256.HashData(File.ReadAllBytes(Path.Combine(_destWork, "new", "big.bin"))).Should().Equal(SHA256.HashData(big));
-        Read(_destWork, ".gitignore").Should().Be("*.tmp\nbuild/\n");
-        File.Exists(Path.Combine(_destWork, "junk.tmp")).Should().BeFalse("ignored files are not sent");
-        Directory.Exists(Path.Combine(_destWork, "build")).Should().BeFalse("ignored directories are not sent");
+        Read(_originWork, "a.txt").Should().Be("v2\n");
+        File.Exists(Path.Combine(_originWork, "b.txt")).Should().BeFalse();
+        Read(_originWork, "new/n.txt").Should().Be("new\n");
+        SHA256.HashData(File.ReadAllBytes(Path.Combine(_originWork, "new", "big.bin"))).Should().Equal(SHA256.HashData(big));
+        Read(_originWork, ".gitignore").Should().Be("*.tmp\nbuild/\n");
+        File.Exists(Path.Combine(_originWork, "junk.tmp")).Should().BeFalse("ignored files are not sent");
+        Directory.Exists(Path.Combine(_originWork, "build")).Should().BeFalse("ignored directories are not sent");
         envelope.Manifest.Select(change => change.Path).Should().BeEquivalentTo(".gitignore", "a.txt", "b.txt", "new/big.bin", "new/n.txt");
 
         var recent = await _host.Services.GetRequiredService<IPatchService>().GetRecentAsync(10);
@@ -140,71 +140,75 @@ public sealed class PatchDeliveryEndToEndTests : IAsyncLifetime
     [Fact]
     public async Task File_Edited_After_The_Manifest_Was_Built_Is_Refused_And_Nothing_Is_Applied()
     {
-        Write(_sourceWork, "a.txt", "v2\n");
-        Write(_sourceWork, "new/n.txt", "new\n");
+        Write(_workstationWork, "a.txt", "v2\n");
+        Write(_workstationWork, "new/n.txt", "new\n");
         var envelope = await BuildAsync();
-        Write(_sourceWork, "new/n.txt", "edited while the patch was on its way\n");
+        Write(_workstationWork, "new/n.txt", "edited while the patch was on its way\n");
 
-        var send = () => CreateSender().SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var send = () => CreateSender().SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _workstationWork, new PathUtility(TestTexts.English)), Chain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("Malformed");
-        Read(_destWork, "a.txt").Should().Be("v1\n", "the patch is applied all or nothing");
-        File.Exists(Path.Combine(_destWork, "new", "n.txt")).Should().BeFalse();
+        Read(_originWork, "a.txt").Should().Be("v1\n", "the patch is applied all or nothing");
+        File.Exists(Path.Combine(_originWork, "new", "n.txt")).Should().BeFalse();
     }
 
     /// <summary>
-    /// Verifies that a wrong link token is refused before any file leaves Source.
+    /// Verifies that a wrong link token is refused before any file leaves Workstation.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Wrong_Link_Token_Is_Refused()
     {
-        Write(_sourceWork, "a.txt", "v2\n");
+        Write(_workstationWork, "a.txt", "v2\n");
         var envelope = await BuildAsync();
-        var sender = CreateSender("not-the-token-of-dest");
+        var sender = CreateSender("not-the-token-of-origin");
 
-        var send = () => sender.SendAsync(envelope, new WorkdirPatchContent(_sourceWork, new PathUtility()), Chain());
+        var send = () => sender.SendAsync(envelope, new WorkdirPatchContent(TestTexts.English, _workstationWork, new PathUtility(TestTexts.English)), Chain());
 
         (await send.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("InvalidToken").And.Contain("401");
-        Read(_destWork, "a.txt").Should().Be("v1\n");
+        Read(_originWork, "a.txt").Should().Be("v1\n");
     }
 
     /// <summary>
-    /// Builds and signs the envelope from the Source base to the Source working tree.
+    /// Builds and signs the envelope from the Workstation base to the Workstation working tree.
     /// </summary>
     /// <returns>The signed envelope.</returns>
     private async Task<PatchEnvelope> BuildAsync()
     {
         var builder = new DefaultPatchBuilder(new DefaultFileManifestBuilder(new SnapshotFilter()), new DefaultStateHasher(), TimeProvider.System);
-        var envelope = await builder.BuildAsync(new NodeId("source-1"), new NodeId("dest-1"), _sourceBase, _sourceWork);
+        var built = await builder.BuildAsync(new NodeId("workstation-1"), new NodeId("origin-1"), _workstationBase, _workstationWork);
+        var envelope = new PatchEnvelope(
+            built.Id, built.SourceNode, built.TargetNode, built.CreatedAtUtc, built.BaseStateHash, built.IncomingStateHash, built.Manifest,
+            repository: ServiceTestHost.REPOSITORY_NAME);
         return envelope.WithSignature(await _signer.SignAsync(PayloadCanonicalizer.Build(envelope)));
     }
 
     /// <summary>
-    /// Creates the sender of the simulated Source.
+    /// Creates the sender of the simulated Workstation.
     /// </summary>
     /// <param name="token">The link token to present.</param>
     /// <returns>The sender.</returns>
-    private HttpPatchSender CreateSender(string token = ServiceTestHost.LinkToken)
+    private HttpPatchSender CreateSender(string token = ServiceTestHost.LINK_TOKEN)
         => new(
+            TestTexts.English,
             new SocketsHttpHandler { UseProxy = false },
             _forwards,
             _signer,
-            new PatchEnvelopeSerializer(new PathUtility()),
+            new PatchEnvelopeSerializer(TestTexts.English, new PathUtility(TestTexts.English)),
             new LinkTokenProvider(new SyncBridgeOptions { LinkToken = token }, new InMemorySecretStore()),
-            new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _sourceWork),
+            new NodeConfig(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, _workstationWork),
             new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero });
 
     /// <summary>
-    /// Creates the chain from Source to Dest.
+    /// Creates the chain from Workstation to Origin.
     /// </summary>
     /// <returns>The chain.</returns>
     private IReadOnlyList<ChainLinkConfig> Chain()
         => new[]
         {
             new ChainLinkConfig(
-                Guid.NewGuid(), "dest", TransportKind.Direct,
-                new PeerDescriptor(new NodeId("dest-1"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq"), 0, _host.BaseAddress.Port, 1000)
+                Guid.NewGuid(), "origin", TransportKind.Direct,
+                new PeerDescriptor(new NodeId("origin-1"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq"), 0, _host.BaseAddress.Port, 1000)
         };
 
     /// <summary>

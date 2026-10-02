@@ -14,6 +14,6 @@ public class SmokeTests
     [Fact]
     public void Can_Resolve_Core_Contracts()
     {
-        NodeRole.Source.Should().BeDefined();
+        NodeRole.Workstation.Should().BeDefined();
     }
 }

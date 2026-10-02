@@ -7,7 +7,6 @@ using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Transports;
 using RCynQ.Core.Config;
-using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
@@ -51,8 +50,8 @@ public sealed class TransportTests : IDisposable
     [Fact]
     public async Task Direct_Is_Ready_When_Reachable()
     {
-        _probe.CanConnectAsync("dest.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
-        var link = new DirectLink(Link(TransportKind.Direct), _probe, TimeProvider.System);
+        _probe.CanConnectAsync("origin.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+        var link = new DirectLink(TestTexts.English, Link(TransportKind.Direct), _probe, TimeProvider.System);
 
         await link.StartAsync();
 
@@ -71,7 +70,7 @@ public sealed class TransportTests : IDisposable
     public async Task Direct_Fails_When_Unreachable()
     {
         _probe.CanConnectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false);
-        var link = new DirectLink(Link(TransportKind.Direct), _probe, TimeProvider.System);
+        var link = new DirectLink(TestTexts.English, Link(TransportKind.Direct), _probe, TimeProvider.System);
 
         var start = () => link.StartAsync();
 
@@ -90,16 +89,16 @@ public sealed class TransportTests : IDisposable
     public async Task Direct_Checks_The_Tls_Port_Of_A_Peer_Without_Ssh()
     {
         var peer = new PeerDescriptor(
-            new NodeId("dest"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq",
+            new NodeId("origin"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq",
             endpointMode: EndpointMode.Direct, tlsFingerprint: "SHA256:" + new string('B', 64), endpointPort: 18444);
-        var config = new ChainLinkConfig(Guid.NewGuid(), "to-dest", TransportKind.Direct, peer, 0, 18444, 0);
-        _probe.CanConnectAsync("dest.internal", 18444, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+        var config = new ChainLinkConfig(Guid.NewGuid(), "to-origin", TransportKind.Direct, peer, 0, 18444, 0);
+        _probe.CanConnectAsync("origin.internal", 18444, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        var link = new DirectLink(config, _probe, TimeProvider.System);
+        var link = new DirectLink(TestTexts.English, config, _probe, TimeProvider.System);
         await link.StartAsync();
 
         link.CurrentState.Status.Should().Be(LinkStatus.Ready);
-        await _probe.DidNotReceive().CanConnectAsync("dest.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _probe.DidNotReceive().CanConnectAsync("origin.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
 
         _probe.CanConnectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(false);
         var diagnosis = await link.DiagnoseAsync();
@@ -121,7 +120,7 @@ public sealed class TransportTests : IDisposable
                 ? new ProcessResult(0, "interface: awg0\n  public key: abc\n", "")
                 : new ProcessResult(0, "", "");
         });
-        var cli = new ProcessAmneziaWgCli(processes, new AmneziaWgOptions { UseWindowsTunnelService = false });
+        var cli = new ProcessAmneziaWgCli(TestTexts.English, processes, new AmneziaWgOptions { UseWindowsTunnelService = false });
 
         var status = await cli.StartAsync(_config);
         await cli.StopAsync(_config);
@@ -142,7 +141,7 @@ public sealed class TransportTests : IDisposable
         var processes = Substitute.For<IProcessRunner>();
         processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.FileName == "amneziawg.exe"), Arg.Any<CancellationToken>()).Returns(new ProcessResult(1, "", "access denied"));
         processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.FileName == "awg"), Arg.Any<CancellationToken>()).ThrowsAsync(new SyncBridgeException("could not be started"));
-        var cli = new ProcessAmneziaWgCli(processes, new AmneziaWgOptions { UseWindowsTunnelService = true });
+        var cli = new ProcessAmneziaWgCli(TestTexts.English, processes, new AmneziaWgOptions { UseWindowsTunnelService = true });
 
         var start = () => cli.StartAsync(_config);
         (await start.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("access denied");
@@ -169,8 +168,8 @@ public sealed class TransportTests : IDisposable
     {
         var cli = Substitute.For<IAmneziaWgCli>();
         cli.GetStatusAsync(_config, Arg.Any<CancellationToken>()).Returns(new AmneziaWgStatus(true, "awg0", "10.8.0.2", null));
-        _probe.CanConnectAsync("dest.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
-        var link = new AmneziaWgLink(Link(TransportKind.AmneziaWG, _config), cli, _probe, TimeProvider.System);
+        _probe.CanConnectAsync("origin.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+        var link = new AmneziaWgLink(TestTexts.English, Link(TransportKind.AmneziaWG, _config), cli, _probe, TimeProvider.System);
 
         await link.StartAsync();
         link.CurrentState.Status.Should().Be(LinkStatus.Ready);
@@ -179,7 +178,7 @@ public sealed class TransportTests : IDisposable
         await cli.Received(1).StartAsync(_config, Arg.Any<CancellationToken>());
         await cli.Received(1).StopAsync(_config, Arg.Any<CancellationToken>());
 
-        var missingSetting = new AmneziaWgLink(Link(TransportKind.AmneziaWG), cli, _probe, TimeProvider.System);
+        var missingSetting = new AmneziaWgLink(TestTexts.English, Link(TransportKind.AmneziaWG), cli, _probe, TimeProvider.System);
         var start = () => missingSetting.StartAsync();
         (await start.Should().ThrowAsync<SyncBridgeException>()).Which.Message.Should().Contain("configPath");
 
@@ -195,10 +194,10 @@ public sealed class TransportTests : IDisposable
     [Fact]
     public void Factory_Selects_Provider()
     {
-        var factory = new TransportLinkFactory(new ITransportLinkProvider[]
+        var factory = new TransportLinkFactory(TestTexts.English, new ITransportLinkProvider[]
         {
-            new DirectLinkProvider(_probe, TimeProvider.System),
-            new AmneziaWgLinkProvider(Substitute.For<IAmneziaWgCli>(), _probe, TimeProvider.System)
+            new DirectLinkProvider(TestTexts.English, _probe, TimeProvider.System),
+            new AmneziaWgLinkProvider(TestTexts.English, Substitute.For<IAmneziaWgCli>(), _probe, TimeProvider.System)
         });
 
         factory.Create(Link(TransportKind.Direct)).Should().BeOfType<DirectLink>();
@@ -256,12 +255,112 @@ public sealed class TransportTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that an AmneziaWG link to a peer without an SSH server is checked on the TLS port of the peer, as a direct
+    /// link is: nothing listens on its SSH port, and the tunnel would be reported as unusable for ever.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task AmneziaWgLink_Checks_The_Tls_Port_Of_A_Peer_Without_Ssh()
+    {
+        var peer = new PeerDescriptor(
+            new NodeId("origin"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq",
+            endpointMode: EndpointMode.Direct, tlsFingerprint: "SHA256:" + new string('B', 64), endpointPort: 18444);
+        var config = new ChainLinkConfig(
+            Guid.NewGuid(), "to-origin", TransportKind.AmneziaWG, peer, 0, 18444, 0,
+            transportSettings: new Dictionary<string, string> { [AmneziaWgLink.CONFIG_PATH_SETTING] = _config });
+        var cli = Substitute.For<IAmneziaWgCli>();
+        cli.GetStatusAsync(_config, Arg.Any<CancellationToken>()).Returns(new AmneziaWgStatus(true, "awg0", "10.8.0.2", null));
+        _probe.CanConnectAsync("origin.internal", 18444, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        var link = new AmneziaWgLink(TestTexts.English, config, cli, _probe, TimeProvider.System);
+        await link.StartAsync();
+
+        link.CurrentState.Status.Should().Be(LinkStatus.Ready);
+        await _probe.DidNotReceive().CanConnectAsync("origin.internal", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that stopping all links also stops a link whose configuration was removed while it was running: its
+    /// tunnel must not stay up, and it must not keep the other links from being stopped.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task LinkManager_Stops_A_Link_Whose_Configuration_Was_Removed()
+    {
+        var config = Link(TransportKind.Direct);
+        var (manager, repository, link, _) = CreateManagerWithLink(config);
+        await manager.StartAsync(config.Id);
+        repository.GetAsync(config.Id, Arg.Any<CancellationToken>()).Returns((ChainLinkConfig?)null);
+
+        var stopped = await manager.StopAllAsync();
+
+        stopped.Should().ContainSingle().Which.Should().Match<LinkState>(state => state.Status == LinkStatus.Stopped && state.LinkName == config.Name);
+        await link.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        (await manager.StopAllAsync()).Should().BeEmpty("nothing is running any more");
+    }
+
+    /// <summary>
+    /// Verifies that releasing a link stops it when this manager started it, and touches nothing otherwise.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task LinkManager_Release_Stops_Only_What_It_Started()
+    {
+        var config = Link(TransportKind.Direct);
+        var (manager, _, link, provider) = CreateManagerWithLink(config);
+
+        (await manager.ReleaseAsync(config.Id)).Should().BeFalse("the link was never started here");
+        provider.DidNotReceiveWithAnyArgs().Create(default!);
+
+        await manager.StartAsync(config.Id);
+        (await manager.ReleaseAsync(config.Id)).Should().BeTrue();
+        await link.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        (await manager.ReleaseAsync(config.Id)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that one link that fails to stop does not keep the manager from stopping the others, and that the failure
+    /// is still reported.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task LinkManager_Stops_The_Other_Links_When_One_Fails_To_Stop()
+    {
+        var first = Link(TransportKind.Direct);
+        var second = new ChainLinkConfig(Guid.NewGuid(), "to-relay", TransportKind.Direct, first.Peer, 0, 22, 1);
+        var repository = Substitute.For<IChainLinkRepository>();
+        var links = new Dictionary<Guid, ITransportLink>();
+        foreach (var config in new[] { first, second })
+        {
+            repository.GetAsync(config.Id, Arg.Any<CancellationToken>()).Returns(config);
+            var link = Substitute.For<ITransportLink>();
+            link.Kind.Returns(TransportKind.Direct);
+            link.GetStatusAsync(Arg.Any<CancellationToken>()).Returns(new LinkState(config.Id, config.Name, TransportKind.Direct, LinkStatus.Ready, "ok", DateTimeOffset.UtcNow));
+            link.StopAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new SyncBridgeException("the tunnel service does not answer"));
+            links[config.Id] = link;
+        }
+
+        var provider = Substitute.For<ITransportLinkProvider>();
+        provider.Kind.Returns(TransportKind.Direct);
+        provider.Create(Arg.Any<ChainLinkConfig>()).Returns(call => links[call.Arg<ChainLinkConfig>().Id]);
+        var manager = new LinkManager(TestTexts.English, repository, new TransportLinkFactory(TestTexts.English, new[] { provider }), Substitute.For<IEventPublisher>(), TimeProvider.System);
+        await manager.StartAsync(first.Id);
+        await manager.StartAsync(second.Id);
+
+        var stop = () => manager.StopAllAsync();
+
+        await stop.Should().ThrowAsync<SyncBridgeException>();
+        await links[first.Id].Received(1).StopAsync(Arg.Any<CancellationToken>());
+        await links[second.Id].Received(1).StopAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Deletes temporary files.
     /// </summary>
     public void Dispose() => Directory.Delete(Path.GetDirectoryName(_config)!, recursive: true);
 
     /// <summary>
-    /// Creates a chain link to Dest.
+    /// Creates a chain link to Origin.
     /// </summary>
     /// <param name="transport">The primary transport.</param>
     /// <param name="configPath">The AmneziaWG configuration path, or <see langword="null"/>.</param>
@@ -270,14 +369,34 @@ public sealed class TransportTests : IDisposable
     private static ChainLinkConfig Link(TransportKind transport, string? configPath = null, IReadOnlyList<TransportKind>? fallbacks = null)
         => new(
             Guid.NewGuid(),
-            "to-dest",
+            "to-origin",
             transport,
-            new PeerDescriptor(new NodeId("dest"), "Dest", NodeRole.Dest, "dest.internal", 22, "rcynq"),
+            new PeerDescriptor(new NodeId("origin"), "Origin", NodeRole.Origin, "origin.internal", 22, "rcynq"),
             0,
             18443,
             0,
             fallbacks,
-            configPath is null ? null : new Dictionary<string, string> { [AmneziaWgLink.ConfigPathSetting] = configPath });
+            configPath is null ? null : new Dictionary<string, string> { [AmneziaWgLink.CONFIG_PATH_SETTING] = configPath });
+
+    /// <summary>
+    /// Creates a link manager whose Direct provider hands out one working link.
+    /// </summary>
+    /// <param name="config">The single configured link.</param>
+    /// <returns>The manager, its repository, the link the provider hands out and the provider.</returns>
+    private static (LinkManager Manager, IChainLinkRepository Repository, ITransportLink Link, ITransportLinkProvider Provider) CreateManagerWithLink(ChainLinkConfig config)
+    {
+        var repository = Substitute.For<IChainLinkRepository>();
+        repository.GetAsync(config.Id, Arg.Any<CancellationToken>()).Returns(config);
+        repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { config });
+        var link = Substitute.For<ITransportLink>();
+        link.Kind.Returns(TransportKind.Direct);
+        link.GetStatusAsync(Arg.Any<CancellationToken>()).Returns(new LinkState(config.Id, config.Name, TransportKind.Direct, LinkStatus.Ready, "ok", DateTimeOffset.UtcNow));
+        var provider = Substitute.For<ITransportLinkProvider>();
+        provider.Kind.Returns(TransportKind.Direct);
+        provider.Create(Arg.Any<ChainLinkConfig>()).Returns(link);
+        var manager = new LinkManager(TestTexts.English, repository, new TransportLinkFactory(TestTexts.English, new[] { provider }), Substitute.For<IEventPublisher>(), TimeProvider.System);
+        return (manager, repository, link, provider);
+    }
 
     /// <summary>
     /// Creates a link manager with scripted AmneziaWG and Direct providers.
@@ -316,7 +435,7 @@ public sealed class TransportTests : IDisposable
             return provider;
         }
 
-        var factory = new TransportLinkFactory(new[] { Provider(TransportKind.AmneziaWG, amneziaWorks), Provider(TransportKind.Direct, directWorks) });
-        return (new LinkManager(repository, factory, events, TimeProvider.System), events, () => created);
+        var factory = new TransportLinkFactory(TestTexts.English, new[] { Provider(TransportKind.AmneziaWG, amneziaWorks), Provider(TransportKind.Direct, directWorks) });
+        return (new LinkManager(TestTexts.English, repository, factory, events, TimeProvider.System), events, () => created);
     }
 }

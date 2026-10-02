@@ -1,3 +1,5 @@
+using RCynQ.UI.Enums;
+
 namespace RCynQ.UI.Services.Hosting;
 
 /// <summary>
@@ -11,7 +13,7 @@ public sealed record ServiceStartResult(ServiceStartOutcome Outcome, string Mess
     /// <summary>
     /// The exit code of RCynQ.Service for an invalid configuration.
     /// </summary>
-    public const int ConfigurationErrorExitCode = 2;
+    public const int CONFIGURATION_ERROR_EXIT_CODE = 2;
 
     /// <summary>
     /// Gets a value indicating whether the service answers.
@@ -21,6 +23,6 @@ public sealed record ServiceStartResult(ServiceStartOutcome Outcome, string Mess
     /// <summary>
     /// Gets a value indicating whether the configuration is missing or was rejected by the service.
     /// </summary>
-    public bool IsConfigurationError => Outcome == ServiceStartOutcome.NotConfigured
-        || (Outcome == ServiceStartOutcome.Failed && ExitCode == ConfigurationErrorExitCode);
+    public bool IsConfigurationError => Outcome == ServiceStartOutcome.NotConfigured ||
+        (Outcome == ServiceStartOutcome.Failed && ExitCode == CONFIGURATION_ERROR_EXIT_CODE);
 }

@@ -26,9 +26,11 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="DiagnosticsViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
-    public DiagnosticsViewModel(IServiceApiClient api, IDialogService dialogs)
+    public DiagnosticsViewModel(ILocalizer localizer, IServiceApiClient api, IDialogService dialogs)
+        : base(localizer)
     {
         _api = api;
         _dialogs = dialogs;
@@ -40,14 +42,14 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
 
     /// <summary>Gets the summary of the last run in the language of the user.</summary>
     public string Summary => _lastRun is not { } run
-        ? Texts.Get("Diagnostics.NeverRun")
-        : Texts.Format("Diagnostics.Summary", DisplayText.Time(run.TimestampUtc), run.Results.Count(result => result.Passed), run.Results.Count);
+        ? Localizer.Get("Diagnostics.NeverRun")
+        : Localizer.Format("Diagnostics.Summary", DisplayText.Time(Localizer, run.TimestampUtc), run.Results.Count(result => result.Passed), run.Results.Count);
 
     /// <summary>Gets a value indicating whether no results are shown.</summary>
     public bool HasNoResults => Results.Count == 0;
 
     /// <inheritdoc />
-    public override Task RefreshAsync() => Task.CompletedTask;
+    protected override Task<bool> LoadAsync() => Task.FromResult(true);
 
     /// <summary>
     /// Applies a diagnostics run.
@@ -81,13 +83,14 @@ public sealed partial class DiagnosticsViewModel : PageViewModelBase
     [RelayCommand]
     private async Task FixAsync(DiagnosticItemViewModel? item)
     {
-        if (item?.Result.AutoFix is not { } fix || !await _dialogs.ConfirmAsync(Texts.Get("Diagnostics.FixTitle"), fix.Description))
+        if (item?.Result.AutoFix is not { } fix || !await _dialogs.ConfirmAsync(Localizer.Get("Diagnostics.FixTitle"), fix.Description))
         {
             return;
         }
 
         if (await RunSafeAsync(async () => InfoMessage = (await _api.ApplyFixAsync(fix, confirmed: true)).Message))
         {
+            NotifyDataChanged();
             await RunAsync();
         }
     }

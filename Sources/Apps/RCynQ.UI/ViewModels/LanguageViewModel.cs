@@ -30,12 +30,19 @@ public sealed partial class LanguageViewModel : ObservableObject
     private string? _error;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LanguageViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="service">The language service, already initialized: the selector shows the language in use.</param>
     /// <param name="flags">Finds the flag of a language by its code, or <see langword="null"/> to show no flags.</param>
-    public LanguageViewModel(ILanguageService service, Func<string, IImage?>? flags = null)
+    public LanguageViewModel(ILocalizer localizer, ILanguageService service, Func<string, IImage?>? flags = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _service = service ?? throw new ArgumentNullException(nameof(service));
         Options = [.. service.Languages.Select(language => new LanguageOption(language, flags?.Invoke(language.Code)))];
         _selected = Options.FirstOrDefault(option => option.Code == service.Current.Code) ?? Options[0];
@@ -79,7 +86,7 @@ public sealed partial class LanguageViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Error = Texts.Format("Language.Error", ex.Message);
+            Error = _localizer.Format("Language.Error", _localizer.Describe(ex));
         }
     }
 }

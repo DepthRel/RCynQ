@@ -16,7 +16,7 @@ public sealed class RecordingHttpHandler : HttpMessageHandler
     /// <inheritdoc />
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        Tokens.Add(request.Headers.TryGetValues(Core.Api.ApiHeaders.ApiToken, out var values) ? values.Single() : null);
+        Tokens.Add(request.Headers.TryGetValues(Core.Api.ApiHeaders.API_TOKEN, out var values) ? values.Single() : null);
         return Task.FromResult(new HttpResponseMessage(StatusCode) { Content = new StringContent("{}") });
     }
 }

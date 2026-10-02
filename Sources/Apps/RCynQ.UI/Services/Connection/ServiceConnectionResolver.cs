@@ -1,6 +1,5 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using RCynQ.Core.Config;
+using RCynQ.UI.Services.Configuration;
 
 namespace RCynQ.UI.Services.Connection;
 
@@ -35,7 +34,10 @@ public static class ServiceConnectionResolver
         environment ??= Environment.GetEnvironmentVariable;
 
         var configPath = ConfigLocations.Resolve(Argument(args, "--config"), environment, currentDirectory, userConfigPath);
-        var options = TryLoadOptions(configPath);
+
+        // The same reader as the rest of the application: it finds the section whatever the case of its name, as the
+        // service does, so the port and the token file are not guessed from defaults for such a file.
+        var options = LocalConfigFile.TryLoad(configPath);
 
         var service = Argument(args, "--service") ?? environment("RCYNQ_SERVICE_URL") ?? $"http://127.0.0.1:{options?.ListenPort ?? 18443}/";
         if (!service.EndsWith('/'))
@@ -46,12 +48,29 @@ public static class ServiceConnectionResolver
         var token = Argument(args, "--token") ?? environment("RCYNQ_API_TOKEN");
         if (token is not null)
         {
-            return new ServiceConnectionSettings(new Uri(service), token.Trim(), ApiTokenProvider.ArgumentSource, configPath);
+            return new ServiceConnectionSettings(new Uri(service), token.Trim(), ApiTokenProvider.ARGUMENT_SOURCE, configPath);
         }
 
         var tokenFile = Argument(args, "--token-file") ?? environment("RCYNQ_API_TOKEN_FILE") ?? DefaultTokenFile(options, configPath);
-        var fileToken = File.Exists(tokenFile) ? File.ReadAllText(tokenFile).Trim() : string.Empty;
-        return new ServiceConnectionSettings(new Uri(service), fileToken, tokenFile, configPath);
+        return new ServiceConnectionSettings(new Uri(service), ReadToken(tokenFile), tokenFile, configPath);
+    }
+
+    /// <summary>
+    /// Reads the token file when it is there and readable.
+    /// </summary>
+    /// <param name="tokenFile">The token file.</param>
+    /// <returns>The token, or an empty string; the token provider reads the file again when a request needs it.</returns>
+    private static string ReadToken(string tokenFile)
+    {
+        try
+        {
+            return File.Exists(tokenFile) ? File.ReadAllText(tokenFile).Trim() : string.Empty;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The service may be writing the file right now; starting the application must not fail on that.
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -62,29 +81,6 @@ public static class ServiceConnectionResolver
     /// <returns>The token file path.</returns>
     public static string DefaultTokenFile(SyncBridgeOptions? options, string? configPath = null)
         => AppDataPaths.FromRoot(ConfigLocations.ResolveDataRoot(options ?? new SyncBridgeOptions(), configPath, ConfigLocations.FindPortableRoot())).ApiTokenPath;
-
-    /// <summary>
-    /// Loads options from a configuration file, ignoring missing or malformed files.
-    /// </summary>
-    /// <param name="path">The file path.</param>
-    /// <returns>The options, or <see langword="null"/>.</returns>
-    private static SyncBridgeOptions? TryLoadOptions(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return null;
-            }
-
-            var root = JsonNode.Parse(File.ReadAllText(path), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            return root?[SyncBridgeOptions.SectionName]?.Deserialize<SyncBridgeOptions>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
 
     /// <summary>
     /// Reads the value following an option.

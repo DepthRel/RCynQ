@@ -19,7 +19,7 @@ public static class ServiceEndpoints
     /// <returns>The route builder.</returns>
     public static IEndpointRouteBuilder MapServiceEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost(ApiRoutes.ServiceShutdown, (IHostApplicationLifetime lifetime, ILoggerFactory loggers) =>
+        app.MapPost(ApiRoutes.SERVICE_SHUTDOWN, (IHostApplicationLifetime lifetime, ILoggerFactory loggers) =>
         {
             loggers.CreateLogger(typeof(ServiceEndpoints)).LogInformation("Shutdown requested through the local API.");
             lifetime.StopApplication();

@@ -16,7 +16,7 @@ public sealed class RCynQDbContext : DbContext
     /// <summary>
     /// Converts <see cref="DateTimeOffset"/> values to UTC ticks and back.
     /// </summary>
-    private static readonly ValueConverter<DateTimeOffset, long> UtcTicksConverter = new(
+    private static readonly ValueConverter<DateTimeOffset, long> _utcTicksConverter = new(
         value => value.UtcTicks,
         ticks => new DateTimeOffset(ticks, TimeSpan.Zero));
 
@@ -118,7 +118,7 @@ public sealed class RCynQDbContext : DbContext
             {
                 if (property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?))
                 {
-                    property.SetValueConverter(UtcTicksConverter);
+                    property.SetValueConverter(_utcTicksConverter);
                 }
             }
         }

@@ -43,4 +43,7 @@ public sealed class PatchEnvelopeEntity
 
     /// <summary>Gets or sets the envelope signature.</summary>
     public byte[]? Signature { get; set; }
+
+    /// <summary>Gets or sets the name of the repository the patch belongs to, or <see langword="null"/>.</summary>
+    public string? Repository { get; set; }
 }

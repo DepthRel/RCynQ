@@ -92,7 +92,11 @@ public sealed class GitCommandRunner : IGitCommandRunner
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["GIT_TERMINAL_PROMPT"] = "0",
-            ["GIT_ALLOW_PROTOCOL"] = "ssh:file"
+            ["GIT_ALLOW_PROTOCOL"] = "ssh:file",
+
+            // Reading commands (status, diff) otherwise refresh the cached file information in .git/index. With this,
+            // a command that only reads writes nothing into the repository; the repository of an Origin is never changed.
+            ["GIT_OPTIONAL_LOCKS"] = "0"
         };
 
         if (environment is not null)

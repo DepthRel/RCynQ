@@ -19,13 +19,13 @@ namespace RCynQ.Sync.Tests;
 public sealed class NodeEnvironmentProbeTests : IDisposable
 {
     /// <summary>A valid ed25519 public key blob.</summary>
-    private const string KeyBlob = "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
+    private const string KEY_BLOB = "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
 
     /// <summary>The temporary data directory of the node.</summary>
     private readonly string _dataRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "rcynq-probe-tests", Guid.NewGuid().ToString("N"))).FullName;
 
     /// <summary>The node options.</summary>
-    private readonly SyncBridgeOptions _options = new() { NodeId = "node-1", Role = NodeRole.Mediator, ListenPort = 18443 };
+    private readonly SyncBridgeOptions _options = new() { NodeId = "node-1", Role = NodeRole.Relay, ListenPort = 18443 };
 
     /// <summary>The interface source substitute.</summary>
     private readonly INetworkInterfaceSource _interfaces = Substitute.For<INetworkInterfaceSource>();
@@ -53,7 +53,7 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
         _tcp.CanConnectAsync("10.8.0.3", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
         _tcp.CanConnectAsync("127.0.0.1", 22, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(true);
         _processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.FileName == "ssh-keyscan"), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, $"# 127.0.0.1:22 SSH-2.0-OpenSSH\n127.0.0.1 ssh-ed25519 {KeyBlob}\n", string.Empty));
+            .Returns(new ProcessResult(0, $"# 127.0.0.1:22 SSH-2.0-OpenSSH\n127.0.0.1 ssh-ed25519 {KEY_BLOB}\n", string.Empty));
     }
 
     /// <summary>
@@ -64,7 +64,7 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     public async Task Probe_Reports_Environment()
     {
         var keys = Directory.CreateDirectory(AppDataPaths.FromRoot(_dataRoot).SshKeysDirectory).FullName;
-        await File.WriteAllTextAsync(Path.Combine(keys, SshKeyLocator.DefaultKeyName + ".pub"), $"ssh-ed25519 {KeyBlob} rcynq:node-1\n");
+        await File.WriteAllTextAsync(Path.Combine(keys, SshKeyLocator.DEFAULT_KEY_NAME + ".pub"), $"ssh-ed25519 {KEY_BLOB} rcynq:node-1\n");
 
         var report = await Create().ProbeAsync();
 
@@ -138,14 +138,14 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     public async Task Generated_Key_Is_Stored_In_Data_Directory()
     {
         var config = Path.Combine(_dataRoot, "syncbridge.json");
-        await File.WriteAllTextAsync(config, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Mediator", "ssh": { "ConnectTimeoutSeconds": 5 } } }""");
+        await File.WriteAllTextAsync(config, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Relay", "ssh": { "ConnectTimeoutSeconds": 5 } } }""");
         _processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.FileName == "ssh-keygen" && spec.Arguments.Contains("-t")), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var arguments = call.Arg<ProcessSpec>().Arguments.ToList();
                 var path = arguments[arguments.IndexOf("-f") + 1];
                 File.WriteAllText(path, "PRIVATE");
-                File.WriteAllText(path + ".pub", $"ssh-ed25519 {KeyBlob} rcynq:node-1");
+                File.WriteAllText(path + ".pub", $"ssh-ed25519 {KEY_BLOB} rcynq:node-1");
                 return new ProcessResult(0, string.Empty, string.Empty);
             });
         _processes.RunAsync(Arg.Is<ProcessSpec>(spec => spec.FileName == "ssh-keygen" && spec.Arguments.Contains("-l")), Arg.Any<CancellationToken>())
@@ -153,7 +153,7 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
 
         var report = await Create().GenerateSshKeyAsync(config);
 
-        var expected = Path.Combine(AppDataPaths.FromRoot(_dataRoot).SshKeysDirectory, SshKeyLocator.DefaultKeyName);
+        var expected = Path.Combine(AppDataPaths.FromRoot(_dataRoot).SshKeysDirectory, SshKeyLocator.DEFAULT_KEY_NAME);
         _options.Ssh.IdentityFile.Should().Be(expected);
         File.ReadAllText(expected).Should().Be("PRIVATE", "the owner keeps access after the permissions are restricted");
         report.SshPublicKeyPath.Should().Be(expected + ".pub");
@@ -182,12 +182,13 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     /// <returns>The probe.</returns>
     private NodeEnvironmentProbe Create()
         => new(
-            new NodeConfig(new NodeId("node-1"), "Node", NodeRole.Mediator, null, null),
+            TestTexts.English,
+            new NodeConfig(new NodeId("node-1"), "Node", NodeRole.Relay, null, null),
             _options,
             _interfaces,
             _tcp,
             new HostKeyVerifier(_processes, _options.Ssh),
-            new SshKeyGenerator(_processes, _options.Ssh),
+            new SshKeyGenerator(TestTexts.English, _processes, _options.Ssh),
             new AppDataFactory(AppDataPaths.FromRoot(_dataRoot)),
             TimeProvider.System);
 }

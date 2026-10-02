@@ -18,7 +18,7 @@ public class CoreRecordTests
     /// <summary>
     /// A valid SHA-256 digest used by the tests.
     /// </summary>
-    private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    private const string HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     /// <summary>
     /// Verifies that node identifiers are trimmed and compared by value.
@@ -26,8 +26,8 @@ public class CoreRecordTests
     [Fact]
     public void NodeId_Trims_And_Compares_By_Value()
     {
-        new NodeId("  dest-1 ").Should().Be(new NodeId("dest-1"));
-        new NodeId("dest-1").ToString().Should().Be("dest-1");
+        new NodeId("  origin-1 ").Should().Be(new NodeId("origin-1"));
+        new NodeId("origin-1").ToString().Should().Be("origin-1");
         default(NodeId).IsEmpty.Should().BeTrue();
     }
 
@@ -41,6 +41,8 @@ public class CoreRecordTests
     [InlineData("has space")]
     [InlineData("semi;colon")]
     [InlineData("new\nline")]
+    [InlineData(".")]
+    [InlineData("..")]
     public void NodeId_Rejects_Invalid_Values(string value)
     {
         var create = () => new NodeId(value);
@@ -54,7 +56,7 @@ public class CoreRecordTests
     [Fact]
     public void NodeId_Rejects_Too_Long_Value()
     {
-        var create = () => new NodeId(new string('a', NodeId.MaxLength + 1));
+        var create = () => new NodeId(new string('a', NodeId.MAX_LENGTH + 1));
         create.Should().Throw<ArgumentException>();
     }
 
@@ -64,7 +66,7 @@ public class CoreRecordTests
     [Fact]
     public void SshEndpoint_Validates_And_Formats()
     {
-        new SshEndpoint("git", "dest.example", 2222).JumpSpec.Should().Be("git@dest.example:2222");
+        new SshEndpoint("git", "origin.example", 2222).JumpSpec.Should().Be("git@origin.example:2222");
         new SshEndpoint("git", "[::1]").JumpSpec.Should().Be("git@[::1]:22");
         new SshEndpoint("git", "10.0.0.5").Destination.Should().Be("git@10.0.0.5");
 
@@ -83,15 +85,15 @@ public class CoreRecordTests
     public void NodeConfig_Enforces_Role_Paths()
     {
         var id = new NodeId("n1");
-        new NodeConfig(id, "Dest", NodeRole.Dest, "/repo", null).EffectiveWorkdir.Should().Be("/repo");
-        new NodeConfig(id, "Mediator", NodeRole.Mediator, null, null).ParticipatesInPatchChannel.Should().BeFalse();
+        new NodeConfig(id, "Origin", NodeRole.Origin, "/repo", null).EffectiveWorkdir.Should().Be("/repo");
+        new NodeConfig(id, "Relay", NodeRole.Relay, null, null).ParticipatesInPatchChannel.Should().BeFalse();
 
-        var sourceWithoutWorkdir = () => new NodeConfig(id, "Source", NodeRole.Source, null, null);
-        var destWithoutRepo = () => new NodeConfig(id, "Dest", NodeRole.Dest, null, "/work");
-        var mediatorWithRepo = () => new NodeConfig(id, "Mediator", NodeRole.Mediator, "/repo", null);
-        sourceWithoutWorkdir.Should().Throw<ArgumentException>();
-        destWithoutRepo.Should().Throw<ArgumentException>();
-        mediatorWithRepo.Should().Throw<ArgumentException>();
+        var workstationWithoutWorkdir = () => new NodeConfig(id, "Workstation", NodeRole.Workstation, null, null);
+        var originWithoutRepo = () => new NodeConfig(id, "Origin", NodeRole.Origin, null, "/work");
+        var relayWithRepo = () => new NodeConfig(id, "Relay", NodeRole.Relay, "/repo", null);
+        workstationWithoutWorkdir.Should().Throw<ArgumentException>();
+        originWithoutRepo.Should().Throw<ArgumentException>();
+        relayWithRepo.Should().Throw<ArgumentException>();
     }
 
     /// <summary>
@@ -100,9 +102,9 @@ public class CoreRecordTests
     [Fact]
     public void ChainLinkConfig_Validates_And_Normalizes_Fallbacks()
     {
-        var peer = CreatePeer(NodeRole.Dest);
+        var peer = CreatePeer(NodeRole.Origin);
         var link = new ChainLinkConfig(
-            Guid.NewGuid(), "to-dest", TransportKind.AmneziaWG, peer, 0, 18443, 1,
+            Guid.NewGuid(), "to-origin", TransportKind.AmneziaWG, peer, 0, 18443, 1,
             new[] { TransportKind.AmneziaWG, TransportKind.Direct, TransportKind.Direct });
 
         link.FallbackTransports.Should().Equal(TransportKind.Direct);
@@ -115,12 +117,54 @@ public class CoreRecordTests
     }
 
     /// <summary>
+    /// Verifies the routes of a link: their order, the route in use, moving to another route, pinning, and that copies
+    /// of the link keep them.
+    /// </summary>
+    [Fact]
+    public void ChainLinkConfig_Tracks_Routes_And_The_Route_In_Use()
+    {
+        var peer = CreatePeer(NodeRole.Origin);
+        var first = new LinkRoute(Guid.NewGuid(), "b-first", peer.Ssh);
+        var second = new LinkRoute(Guid.NewGuid(), "a-second", new SshEndpoint(peer.SshUser, "10.9.0.9", 2200), 1);
+        var plain = new ChainLinkConfig(Guid.NewGuid(), "to-origin", TransportKind.Direct, peer, 0, 18443);
+        var link = plain.WithRoutes(new[] { second, first });
+
+        plain.Routes.Should().BeEmpty();
+        plain.ActiveRoute.Should().BeNull();
+        plain.HasAlternativeRoutes.Should().BeFalse();
+        link.Routes.Should().Equal(first, second);
+        link.ActiveRoute.Should().Be(first);
+        link.HasAlternativeRoutes.Should().BeTrue();
+
+        var moved = link.WithActiveRoute(second.Id);
+        moved.Peer.Host.Should().Be("10.9.0.9");
+        moved.Peer.SshPort.Should().Be(2200);
+        moved.Peer.SigningPublicKey.Should().Be(peer.SigningPublicKey, "only the address changes");
+        moved.ActiveRoute.Should().Be(second);
+        link.WithActiveRoute(first.Id).Should().BeSameAs(link);
+
+        var pinned = link.WithPinnedRoute(second.Id);
+        pinned.PinnedRouteId.Should().Be(second.Id);
+        pinned.ActiveRoute.Should().Be(second);
+        pinned.WithPinnedRoute(null).PinnedRouteId.Should().BeNull();
+        pinned.WithTransport(TransportKind.AmneziaWG).Routes.Should().Equal(first, second);
+        pinned.WithTransport(TransportKind.AmneziaWG).PinnedRouteId.Should().Be(second.Id);
+
+        var unknownRoute = () => link.WithActiveRoute(Guid.NewGuid());
+        var sameAddress = () => plain.WithRoutes(new[] { first, new LinkRoute(Guid.NewGuid(), "copy", peer.Ssh) });
+        var unknownPin = () => plain.WithRoutes(new[] { first, second }, Guid.NewGuid());
+        unknownRoute.Should().Throw<KeyNotFoundException>();
+        sameAddress.Should().Throw<ArgumentException>();
+        unknownPin.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>
     /// Verifies that a peer signing key must be Base64.
     /// </summary>
     [Fact]
     public void PeerDescriptor_Rejects_Invalid_Signing_Key()
     {
-        var create = () => new PeerDescriptor(new NodeId("p"), "p", NodeRole.Dest, "host", 22, "user", signingPublicKey: "not base64!");
+        var create = () => new PeerDescriptor(new NodeId("p"), "p", NodeRole.Origin, "host", 22, "user", signingPublicKey: "not base64!");
         create.Should().Throw<ArgumentException>();
     }
 
@@ -130,9 +174,9 @@ public class CoreRecordTests
     [Fact]
     public void FileChange_Validates_Hash_And_Size()
     {
-        new FileChange(ChangeKind.Modified, "a.txt", Hash.ToUpperInvariant(), 3, false).Sha256.Should().Be(Hash);
+        new FileChange(ChangeKind.Modified, "a.txt", HASH.ToUpperInvariant(), 3, false).Sha256.Should().Be(HASH);
         var badHash = () => new FileChange(ChangeKind.Added, "a.txt", "abc", 1, false);
-        var badSize = () => new FileChange(ChangeKind.Added, "a.txt", Hash, -1, false);
+        var badSize = () => new FileChange(ChangeKind.Added, "a.txt", HASH, -1, false);
         badHash.Should().Throw<ArgumentException>();
         badSize.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -153,7 +197,7 @@ public class CoreRecordTests
         var metadata = PatchMetadata.FromEnvelope(signed, PatchDirection.Incoming);
         metadata.Status.Should().Be(PatchStatus.Pending);
 
-        var conflict = metadata.WithResult(PatchApplyResult.Conflict(envelope.Id, new[] { new ConflictFile("a.txt", Hash, null) }), DateTimeOffset.UtcNow);
+        var conflict = metadata.WithResult(PatchApplyResult.Conflict(envelope.Id, new[] { new ConflictFile("a.txt", HASH, null) }), DateTimeOffset.UtcNow);
         conflict.Status.Should().Be(PatchStatus.ConflictPending);
         conflict.AppliedAtUtc.Should().BeNull();
         conflict.Conflicts.Should().HaveCount(1);
@@ -173,20 +217,20 @@ public class CoreRecordTests
         var other = new string('a', 64);
         var envelope = new PatchEnvelope(
             Guid.NewGuid(),
-            new NodeId("source"),
-            new NodeId("dest"),
+            new NodeId("workstation"),
+            new NodeId("origin"),
             DateTimeOffset.UtcNow,
-            Hash,
-            Hash,
+            HASH,
+            HASH,
             new[]
             {
-                new FileChange(ChangeKind.Added, "a.txt", Hash, 1, false),
-                new FileChange(ChangeKind.Added, "copy-of-a.txt", Hash, 1, false),
+                new FileChange(ChangeKind.Added, "a.txt", HASH, 1, false),
+                new FileChange(ChangeKind.Added, "copy-of-a.txt", HASH, 1, false),
                 new FileChange(ChangeKind.Modified, "b.txt", other, 2, false),
                 new FileChange(ChangeKind.Deleted, "gone.txt", null, null, false)
             });
 
-        envelope.ContentHashes.Should().Equal(Hash, other);
+        envelope.ContentHashes.Should().Equal(HASH, other);
     }
 
     /// <summary>
@@ -210,9 +254,9 @@ public class CoreRecordTests
     public void Events_RoundTrip_Json()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var linkEvent = new LinkStateChangedEvent(new LinkState(Guid.NewGuid(), "to-dest", TransportKind.AmneziaWG, LinkStatus.Degraded, "fallback", DateTimeOffset.UtcNow));
+        var linkEvent = new LinkStateChangedEvent(new LinkState(Guid.NewGuid(), "to-origin", TransportKind.AmneziaWG, LinkStatus.Degraded, "fallback", DateTimeOffset.UtcNow));
         var diagnostics = new DiagnosticsEvent(
-            NodeRole.Dest,
+            NodeRole.Origin,
             new[] { DiagnosticResult.Fail("GitInstalled", "missing", "install git", new DiagnosticFix(DiagnosticFixKind.CreateDirectory, "create", new Dictionary<string, string> { ["path"] = "/x" })) },
             DateTimeOffset.UtcNow);
 
@@ -245,10 +289,10 @@ public class CoreRecordTests
     private static PatchEnvelope CreateEnvelope()
         => new(
             Guid.NewGuid(),
-            new NodeId("source"),
-            new NodeId("dest"),
+            new NodeId("workstation"),
+            new NodeId("origin"),
             DateTimeOffset.UtcNow,
-            Hash,
-            Hash,
-            new[] { new FileChange(ChangeKind.Modified, "a.txt", Hash, 1, false) });
+            HASH,
+            HASH,
+            new[] { new FileChange(ChangeKind.Modified, "a.txt", HASH, 1, false) });
 }

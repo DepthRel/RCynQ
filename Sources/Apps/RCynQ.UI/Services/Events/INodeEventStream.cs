@@ -16,6 +16,12 @@ public interface INodeEventStream : IAsyncDisposable
     /// <summary>Raised when a diagnostics run completes.</summary>
     event EventHandler<DiagnosticsEvent>? DiagnosticsCompleted;
 
+    /// <summary>Raised when the repository of this node or of the node at the other end changes.</summary>
+    event EventHandler<RepositoryEvent>? RepositoryChanged;
+
+    /// <summary>Raised when the routes of a link were checked or the route in use changed.</summary>
+    event EventHandler<LinkRoutesChangedEvent>? LinkRoutesChanged;
+
     /// <summary>Raised when the connection state changes; the argument tells whether the stream is connected.</summary>
     event EventHandler<bool>? ConnectionChanged;
 

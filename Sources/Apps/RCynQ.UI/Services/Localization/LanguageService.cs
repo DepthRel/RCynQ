@@ -12,7 +12,7 @@ public sealed class LanguageService : ILanguageService
     /// <summary>
     /// The setting with the language code.
     /// </summary>
-    public const string Setting = "language";
+    public const string SETTING = "language";
 
     /// <summary>
     /// The localizer that switches the texts.
@@ -51,7 +51,7 @@ public sealed class LanguageService : ILanguageService
     /// <inheritdoc />
     public void Initialize()
     {
-        var stored = _settings.Get(Setting)?.Trim();
+        var stored = _settings.Get(SETTING)?.Trim();
         var known = _localizer.Languages.FirstOrDefault(language => string.Equals(language.Code, stored, StringComparison.OrdinalIgnoreCase));
         if (known is not null)
         {
@@ -65,7 +65,7 @@ public sealed class LanguageService : ILanguageService
         _localizer.SetLanguage(_localizer.Detect(_systemCulture()).Code);
         try
         {
-            _settings.Set(Setting, _localizer.Current.Code);
+            _settings.Set(SETTING, _localizer.Current.Code);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -77,6 +77,6 @@ public sealed class LanguageService : ILanguageService
     public void Select(string code)
     {
         _localizer.SetLanguage(code);
-        _settings.Set(Setting, _localizer.Current.Code);
+        _settings.Set(SETTING, _localizer.Current.Code);
     }
 }

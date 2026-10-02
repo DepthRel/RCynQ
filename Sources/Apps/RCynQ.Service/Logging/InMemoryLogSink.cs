@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using RCynQ.Core.Api;
 using Serilog.Core;
 using Serilog.Events;
+using RCynQ.Core.Api;
 
 namespace RCynQ.Service.Logging;
 
@@ -13,7 +13,7 @@ public sealed class InMemoryLogSink : ILogEventSink
     /// <summary>
     /// The maximum number of retained entries.
     /// </summary>
-    public const int Capacity = 2000;
+    public const int CAPACITY = 2000;
 
     /// <summary>The retained entries.</summary>
     private readonly ConcurrentQueue<(LogEventLevel Level, LogEntryDto Entry)> _entries = new();
@@ -23,7 +23,7 @@ public sealed class InMemoryLogSink : ILogEventSink
     {
         ArgumentNullException.ThrowIfNull(logEvent);
         _entries.Enqueue((logEvent.Level, new LogEntryDto(logEvent.Timestamp.ToUniversalTime(), logEvent.Level.ToString(), logEvent.RenderMessage(), logEvent.Exception?.ToString())));
-        while (_entries.Count > Capacity && _entries.TryDequeue(out _))
+        while (_entries.Count > CAPACITY && _entries.TryDequeue(out _))
         {
         }
     }

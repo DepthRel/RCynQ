@@ -1,3 +1,4 @@
+using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Validation;
@@ -5,7 +6,7 @@ using RCynQ.Core.Validation;
 namespace RCynQ.Core.Patches;
 
 /// <summary>
-/// A live patch exchanged between Source and Dest.
+/// A live patch exchanged between Workstation and Origin.
 /// </summary>
 /// <remarks>
 /// The envelope carries the file manifest only. The content of added and modified files travels separately, one file
@@ -29,6 +30,7 @@ public sealed record PatchEnvelope
     /// <param name="signature">The signature bytes, or <see langword="null"/> for an unsigned envelope.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A node identifier is empty, the identifier is empty or a hash is blank.</exception>
+    /// <param name="repository">The name of the repository the patch belongs to, or <see langword="null"/>.</param>
     public PatchEnvelope(
         Guid id,
         NodeId sourceNode,
@@ -37,7 +39,8 @@ public sealed record PatchEnvelope
         string baseStateHash,
         string incomingStateHash,
         IReadOnlyList<FileChange> manifest,
-        byte[]? signature = null)
+        byte[]? signature = null,
+        string? repository = null)
     {
         if (id == Guid.Empty)
         {
@@ -46,7 +49,7 @@ public sealed record PatchEnvelope
 
         if (sourceNode.IsEmpty)
         {
-            throw new ArgumentException("Source node must not be empty.", nameof(sourceNode));
+            throw new ArgumentException("Sender node must not be empty.", nameof(sourceNode));
         }
 
         if (targetNode.IsEmpty)
@@ -62,7 +65,19 @@ public sealed record PatchEnvelope
         IncomingStateHash = Guard.NotBlank(incomingStateHash, nameof(incomingStateHash));
         Manifest = Guard.NotNull(manifest, nameof(manifest));
         Signature = signature ?? Array.Empty<byte>();
+        if (repository is not null && !RepositoryName.IsValid(repository))
+        {
+            throw new ArgumentException($"Repository name \"{repository}\" is not valid.", nameof(repository));
+        }
+
+        Repository = repository;
     }
+
+    /// <summary>
+    /// Gets the name of the repository the patch belongs to, or <see langword="null"/> when the sender does not know the
+    /// name of its repository yet. The name is part of what is signed.
+    /// </summary>
+    public string? Repository { get; }
 
     /// <summary>
     /// Gets the unique patch identifier.
@@ -131,6 +146,6 @@ public sealed record PatchEnvelope
     public PatchEnvelope WithSignature(byte[] signature)
     {
         ArgumentNullException.ThrowIfNull(signature);
-        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, signature);
+        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, signature, Repository);
     }
 }

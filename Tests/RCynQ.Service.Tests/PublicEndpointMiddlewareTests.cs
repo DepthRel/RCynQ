@@ -10,10 +10,10 @@ namespace RCynQ.Service.Tests;
 public sealed class PublicEndpointMiddlewareTests
 {
     /// <summary>The port of the direct endpoint.</summary>
-    private const int PublicPort = 18444;
+    private const int PUBLIC_PORT = 18444;
 
     /// <summary>The loopback port of the local API.</summary>
-    private const int LocalPort = 18443;
+    private const int LOCAL_PORT = 18443;
 
     /// <summary>
     /// Verifies that the network listener serves only the routes a neighbour needs: the patch session, the branch bundle and the health probe.
@@ -45,7 +45,7 @@ public sealed class PublicEndpointMiddlewareTests
     [InlineData("POST", "/service/shutdown", false)]
     public async Task Public_Port_Serves_Only_Patch_Sessions_Bundles_And_Health(string method, string path, bool expected)
     {
-        var reached = await InvokeAsync(PublicPort, method, path);
+        var reached = await InvokeAsync(PUBLIC_PORT, method, path);
 
         reached.Should().Be(expected);
     }
@@ -57,8 +57,8 @@ public sealed class PublicEndpointMiddlewareTests
     [Fact]
     public async Task Local_Port_Is_Not_Restricted()
     {
-        (await InvokeAsync(LocalPort, "GET", "/state")).Should().BeTrue();
-        (await InvokeAsync(LocalPort, "POST", "/service/shutdown")).Should().BeTrue();
+        (await InvokeAsync(LOCAL_PORT, "GET", "/state")).Should().BeTrue();
+        (await InvokeAsync(LOCAL_PORT, "POST", "/service/shutdown")).Should().BeTrue();
     }
 
     /// <summary>
@@ -78,12 +78,13 @@ public sealed class PublicEndpointMiddlewareTests
         context.Response.Body = new MemoryStream();
 
         var middleware = new PublicEndpointMiddleware(
+            TestTexts.English,
             _ =>
             {
                 reached = true;
                 return Task.CompletedTask;
             },
-            new PublicEndpointOptions(PublicPort));
+            new PublicEndpointOptions(PUBLIC_PORT));
         await middleware.InvokeAsync(context);
 
         if (!reached)

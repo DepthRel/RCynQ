@@ -23,7 +23,12 @@ namespace RCynQ.Service.Tests.Support;
 public sealed class ServiceTestHost : IAsyncDisposable
 {
     /// <summary>The link token configured for the node.</summary>
-    public const string LinkToken = "service-tests-link-token-0123456789";
+    public const string LINK_TOKEN = "service-tests-link-token-0123456789";
+
+    /// <summary>
+    /// The name of the repository of the hosted node.
+    /// </summary>
+    public const string REPOSITORY_NAME = "app";
 
     /// <summary>The application.</summary>
     private readonly WebApplication _app;
@@ -48,7 +53,7 @@ public sealed class ServiceTestHost : IAsyncDisposable
     public Uri BaseAddress { get; }
 
     /// <summary>Gets the configuration file path the service uses.</summary>
-    public string ConfigPath => Path.Combine(Root, SyncBridgeOptions.DefaultFileName);
+    public string ConfigPath => Path.Combine(Root, SyncBridgeOptions.DEFAULT_FILE_NAME);
 
     /// <summary>Gets the application services.</summary>
     public IServiceProvider Services => _app.Services;
@@ -63,20 +68,26 @@ public sealed class ServiceTestHost : IAsyncDisposable
     /// <param name="configureServices">Service replacements applied after the default registrations.</param>
     /// <param name="extraSettings">Additional configuration values, for example a direct TLS endpoint.</param>
     /// <returns>The started host.</returns>
-    public static async Task<ServiceTestHost> StartAsync(NodeRole role = NodeRole.Dest, Action<IServiceCollection>? configureServices = null, IReadOnlyDictionary<string, string?>? extraSettings = null)
+    public static async Task<ServiceTestHost> StartAsync(NodeRole role = NodeRole.Origin, Action<IServiceCollection>? configureServices = null, IReadOnlyDictionary<string, string?>? extraSettings = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "rcynq-service-tests", Guid.NewGuid().ToString("N"));
         var work = Directory.CreateDirectory(Path.Combine(root, "work")).FullName;
         var dataRoot = Path.Combine(root, "data");
         var port = FreePort();
-        var settings = new Dictionary<string, string?>
+        var settings = new Dictionary<string, string?>();
+        if (role != NodeRole.Relay)
         {
-            ["SyncBridge:NodeId"] = role == NodeRole.Source ? "source-1" : role == NodeRole.Dest ? "dest-1" : "mediator-1",
+            settings["SyncBridge:Repositories:0:Name"] = REPOSITORY_NAME;
+            settings["SyncBridge:Repositories:0:Path"] = work;
+        }
+
+        settings = new Dictionary<string, string?>(settings)
+        {
+            ["SyncBridge:NodeId"] = role == NodeRole.Workstation ? "workstation-1" : role == NodeRole.Origin ? "origin-1" : "relay-1",
             ["SyncBridge:Role"] = role.ToString(),
-            ["SyncBridge:RepoPath"] = role == NodeRole.Dest ? work : null,
-            ["SyncBridge:WorkdirPath"] = role == NodeRole.Source ? work : null,
+
             ["SyncBridge:DataRoot"] = dataRoot,
-            ["SyncBridge:LinkToken"] = LinkToken,
+            ["SyncBridge:LinkToken"] = LINK_TOKEN,
             ["SyncBridge:ListenPort"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
 
@@ -87,7 +98,7 @@ public sealed class ServiceTestHost : IAsyncDisposable
 
         SqliteDatabaseMigrator.MigrateUp(AppDataPaths.FromRoot(dataRoot).ConnectionString);
         var app = ServiceHostBuilder.Build(
-            new[] { "--config", Path.Combine(root, SyncBridgeOptions.DefaultFileName) },
+            new[] { "--config", Path.Combine(root, SyncBridgeOptions.DEFAULT_FILE_NAME) },
             new ServiceHostOptions
             {
                 RunBackgroundServices = false,
@@ -109,7 +120,7 @@ public sealed class ServiceTestHost : IAsyncDisposable
         var client = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { BaseAddress = BaseAddress };
         if (withApiToken)
         {
-            client.DefaultRequestHeaders.Add(ApiHeaders.ApiToken, ApiToken);
+            client.DefaultRequestHeaders.Add(ApiHeaders.API_TOKEN, ApiToken);
         }
 
         return client;

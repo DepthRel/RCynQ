@@ -47,21 +47,22 @@ public sealed class CliCommandTests : IDisposable
     {
         var config = Path.Combine(_temp, "syncbridge.json");
 
-        var (code, output, _) = await RunAsync(null, "role", "set", "dest", "--repo", _temp, "--node-id", "dest-1", "--config", config);
+        var (code, output, _) = await RunAsync(null, "role", "set", "origin", "--repo", _temp, "--node-id", "origin-1", "--config", config);
         code.Should().Be(0, output);
         var options = await ConfigurationFileEditor.LoadAsync(config);
-        options.Role.Should().Be(NodeRole.Dest);
-        options.NodeId.Should().Be("dest-1");
-        options.RepoPath.Should().Be(_temp);
+        options.Role.Should().Be(NodeRole.Origin);
+        options.NodeId.Should().Be("origin-1");
+        options.Repositories.Should().ContainSingle().Which.Path.Should().Be(_temp);
+        options.Repositories[0].Name.Should().NotBeEmpty("an Origin names its repository after the folder");
 
         (await RunAsync(null, "config", "validate", "--config", config)).Output.Should().Contain("is valid");
 
-        (await RunAsync(null, "role", "set", "mediator", "--config", config)).Code.Should().Be(0);
-        (await ConfigurationFileEditor.LoadAsync(config)).RepoPath.Should().BeNull();
+        (await RunAsync(null, "role", "set", "relay", "--config", config)).Code.Should().Be(0);
+        (await ConfigurationFileEditor.LoadAsync(config)).Repositories.Should().BeEmpty();
 
-        var (sourceCode, _, error) = await RunAsync(null, "role", "set", "source", "--config", config);
+        var (sourceCode, _, error) = await RunAsync(null, "role", "set", "workstation", "--config", config);
         sourceCode.Should().Be(2);
-        error.Should().Contain("working directory");
+        error.Should().Contain("working copy");
     }
 
     /// <summary>
@@ -72,7 +73,7 @@ public sealed class CliCommandTests : IDisposable
     public async Task ConfigValidate_Reports_Errors()
     {
         var config = Path.Combine(_temp, "bad.json");
-        await File.WriteAllTextAsync(config, """{ "SyncBridge": { "NodeId": "bad id", "Role": "Source", "ListenPort": 70000 } }""");
+        await File.WriteAllTextAsync(config, """{ "SyncBridge": { "NodeId": "bad id", "Role": "Workstation", "ListenPort": 70000 } }""");
 
         var (code, _, error) = await RunAsync(null, "config", "validate", "--config", config);
 
@@ -90,11 +91,11 @@ public sealed class CliCommandTests : IDisposable
         var hash = new string('b', 64);
         var patches = Substitute.For<IPatchService>();
         patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(
-            new NodeId("source-1"), "Laptop", NodeRole.Source, new SyncState(hash, hash, DateTimeOffset.UtcNow, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('c', 40), null, false),
+            new NodeId("workstation-1"), "Laptop", NodeRole.Workstation, new SyncState(hash, hash, DateTimeOffset.UtcNow, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('c', 40), null, false),
             new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false) }, 1));
         patches.GetRecentAsync(5, Arg.Any<CancellationToken>()).Returns(new[]
         {
-            new PatchMetadata(Guid.NewGuid(), PatchDirection.Outgoing, new NodeId("source-1"), new NodeId("dest-1"), DateTimeOffset.UtcNow, hash, hash, PatchStatus.Applied, DateTimeOffset.UtcNow, Array.Empty<FileChange>())
+            new PatchMetadata(Guid.NewGuid(), PatchDirection.Outgoing, new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow, hash, hash, PatchStatus.Applied, DateTimeOffset.UtcNow, Array.Empty<FileChange>())
         });
         var links = Substitute.For<IChainLinkRepository>();
         links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { Relay() });
@@ -102,7 +103,7 @@ public sealed class CliCommandTests : IDisposable
         var (code, output, _) = await RunAsync(services => services.AddSingleton(patches).AddSingleton(links), "status");
 
         code.Should().Be(0);
-        output.Should().Contain("source-1 (Source) Laptop")
+        output.Should().Contain("workstation-1 (Workstation) Laptop")
             .And.Contain("Sync base:      Git main @ cccccccccccc")
             .And.Contain("M src/a.cs")
             .And.Contain("patch resolve")
@@ -174,24 +175,43 @@ public sealed class CliCommandTests : IDisposable
             .AddSingleton(node).AddSingleton(new SyncBridgeOptions { ListenPort = 18443 }).AddSingleton(signatures)
             .AddSingleton(peers).AddSingleton(links).AddSingleton(TimeProvider.System).AddSingleton<NodeConfigurationTransfer>().AddSingleton(Substitute.For<RCynQ.Sync.Configuration.Probing.INodeEnvironmentProbe>());
 
-        var exportFile = Path.Combine(_temp, "dest.json");
-        var dest = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, "/srv/repo", null);
-        var (exportCode, exportOutput, _) = await RunAsync(services => Register(services, dest), "export", "--host", "10.8.0.2", "--user", "rcynq", "--output", exportFile);
+        var exportFile = Path.Combine(_temp, "origin.json");
+        var origin = new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, "/srv/repo", null);
+        var (exportCode, exportOutput, _) = await RunAsync(services => Register(services, origin), "export", "--host", "10.8.0.2", "--user", "rcynq", "--output", exportFile);
         exportCode.Should().Be(0, exportOutput);
         File.ReadAllText(exportFile).Should().Contain("\"signingPublicKey\"").And.NotContain("PRIVATE");
 
-        var source = new NodeConfig(new NodeId("source-1"), "Source", NodeRole.Source, null, _temp);
-        var (importCode, importOutput, _) = await RunAsync(services => Register(services, source), "import", exportFile);
+        var workstation = new NodeConfig(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, null, _temp);
+        var (importCode, importOutput, _) = await RunAsync(services => Register(services, workstation), "import", exportFile);
         importCode.Should().Be(0, importOutput);
-        importOutput.Should().Contain("added link 'dest-1'");
-        await peers.Received(1).UpsertAsync(Arg.Is<PeerDescriptor>(peer => peer.Id == new NodeId("dest-1") && peer.GitRepoPath == "/srv/repo"), Arg.Any<CancellationToken>());
-        await links.Received(1).UpsertAsync(Arg.Is<ChainLinkConfig>(link => link.RemotePort == 18443 && link.Peer.Role == NodeRole.Dest), Arg.Any<CancellationToken>());
+        importOutput.Should().Contain("added link 'origin-1'");
+        await peers.Received(1).UpsertAsync(Arg.Is<PeerDescriptor>(peer => peer.Id == new NodeId("origin-1")), Arg.Any<CancellationToken>());
+        await links.Received(1).UpsertAsync(Arg.Is<ChainLinkConfig>(link => link.RemotePort == 18443 && link.Peer.Role == NodeRole.Origin), Arg.Any<CancellationToken>());
 
         var garbage = Path.Combine(_temp, "garbage.json");
         await File.WriteAllTextAsync(garbage, "{ \"formatVersion\": 99 }");
-        var (garbageCode, _, garbageError) = await RunAsync(services => Register(services, source), "import", garbage);
+        var (garbageCode, _, garbageError) = await RunAsync(services => Register(services, workstation), "import", garbage);
         garbageCode.Should().Be(2);
         garbageError.Should().NotBeEmpty();
+
+        // The Origin is linked now; its export with another address is not imported until the command says what it is.
+        var known = new PeerDescriptor(new NodeId("origin-1"), "Origin", NodeRole.Origin, "10.8.0.2", 22, "rcynq");
+        peers.GetAsync(known.Id, Arg.Any<CancellationToken>()).Returns(known);
+        links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { new ChainLinkConfig(Guid.NewGuid(), "origin-1", TransportKind.Direct, known, 0, 18443, 1000) });
+        links.ClearReceivedCalls();
+        var otherAddress = Path.Combine(_temp, "origin-tcp.json");
+        (await RunAsync(services => Register(services, origin), "export", "--host", "10.9.0.2", "--user", "rcynq", "--output", otherAddress)).Item1.Should().Be(0);
+
+        var (askedCode, _, askedError) = await RunAsync(services => Register(services, workstation), "import", otherAddress);
+        askedCode.Should().Be(2);
+        askedError.Should().Contain("--as route").And.Contain("--as replace");
+        await links.DidNotReceive().UpsertAsync(Arg.Any<ChainLinkConfig>(), Arg.Any<CancellationToken>());
+
+        var (routeCode, routeOutput, _) = await RunAsync(services => Register(services, workstation), "import", otherAddress, "--as", "route");
+        routeCode.Should().Be(0, routeOutput);
+        await links.Received(1).UpsertAsync(Arg.Is<ChainLinkConfig>(link => link.Routes.Count == 2 && link.Peer.Host == "10.8.0.2"), Arg.Any<CancellationToken>());
+
+        (await RunAsync(services => Register(services, workstation), "import", otherAddress, "--as", "sideways")).Item1.Should().Be(2);
     }
 
     /// <summary>
@@ -205,20 +225,20 @@ public sealed class CliCommandTests : IDisposable
         var peers = Substitute.For<IPeerRepository>();
         peers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[]
         {
-            new PeerDescriptor(new NodeId("source-1"), "Source", NodeRole.Source, "10.8.1.3", 22, "dev", sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:source-1")
+            new PeerDescriptor(new NodeId("workstation-1"), "Workstation", NodeRole.Workstation, "10.8.1.3", 22, "dev", sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:workstation-1")
         });
-        var dest = new NodeConfig(new NodeId("dest-1"), "Dest", NodeRole.Dest, "/srv/repo", null);
+        var origin = new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, "/srv/repo", null);
         void Register(IServiceCollection services) => services
-            .AddSingleton(new PeerAccessService(dest, new SyncBridgeOptions { ListenPort = 18443 }, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = keysFile })));
+            .AddSingleton(new PeerAccessService(TestTexts.English, origin, new SyncBridgeOptions { ListenPort = 18443 }, peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = keysFile })));
 
         var (code, output, _) = await RunAsync(Register, "ssh", "allow");
 
         code.Should().Be(0, output);
         output.Should().Contain("Allowed 1 neighbour key(s)");
-        File.ReadAllText(keysFile).Should().Contain("permitopen=\"127.0.0.1:18443\"").And.Contain("rcynq:source-1");
+        File.ReadAllText(keysFile).Should().Contain("permitopen=\"127.0.0.1:18443\"").And.Contain("rcynq:workstation-1");
 
         void RegisterAdmin(IServiceCollection services) => services
-            .AddSingleton(new PeerAccessService(dest, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(Path.Combine(_temp, "admin_keys"), true), () => false)));
+            .AddSingleton(new PeerAccessService(TestTexts.English, origin, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(Path.Combine(_temp, "admin_keys"), true), () => false)));
         var (adminCode, _, adminError) = await RunAsync(RegisterAdmin, "ssh", "allow");
         adminCode.Should().Be(1);
         adminError.Should().Contain("Administrator rights");
@@ -233,7 +253,7 @@ public sealed class CliCommandTests : IDisposable
     {
         var fix = new DiagnosticFix(DiagnosticFixKind.CreateDirectory, "Create '/work'.", new Dictionary<string, string> { ["path"] = "/work" });
         var runner = Substitute.For<IDiagnosticsRunner>();
-        runner.RunAsync(Arg.Any<CancellationToken>()).Returns(new DiagnosticsEvent(NodeRole.Source, new[]
+        runner.RunAsync(Arg.Any<CancellationToken>()).Returns(new DiagnosticsEvent(NodeRole.Workstation, new[]
         {
             DiagnosticResult.Pass("GitInstalled", "git version 2.55"),
             DiagnosticResult.Fail("WorkdirWritable", "missing", "Create the directory.", fix)
@@ -276,14 +296,14 @@ public sealed class CliCommandTests : IDisposable
     {
         using var console = new FakeInMemoryConsole();
         var factory = new TestNodeContextFactory(register ?? (_ => { }));
-        var code = await CliHost.CreateApplication(factory, console).RunAsync(args, new Dictionary<string, string>());
+        var code = await CliHost.CreateApplication(factory, TestTexts.English, console).RunAsync(args, new Dictionary<string, string>());
         return (code, console.ReadOutputString(), console.ReadErrorString());
     }
 
     /// <summary>
-    /// Creates a mediator link.
+    /// Creates a relay link.
     /// </summary>
     /// <returns>The link.</returns>
     private static ChainLinkConfig Relay()
-        => new(Guid.NewGuid(), "relay", TransportKind.AmneziaWG, new PeerDescriptor(new NodeId("mediator-1"), "Relay", NodeRole.Mediator, "203.0.113.4", 22, "jump"), 0, 22, 10, new[] { TransportKind.Direct });
+        => new(Guid.NewGuid(), "relay", TransportKind.AmneziaWG, new PeerDescriptor(new NodeId("relay-1"), "Relay", NodeRole.Relay, "203.0.113.4", 22, "jump"), 0, 22, 10, new[] { TransportKind.Direct });
 }

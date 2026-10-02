@@ -11,15 +11,15 @@ namespace RCynQ.Service.Tests;
 public class SmokeTests
 {
     /// <summary>
-    /// Verifies that a Mediator has no patch or Git capabilities.
+    /// Verifies that a Relay has no patch or Git capabilities.
     /// </summary>
     [Fact]
     public void Role_Capabilities_Match_Roles()
     {
-        RoleCapabilities.For(NodeRole.Mediator).Should().Be(new RoleCapabilities(false, false, false, false, true));
-        RoleCapabilities.For(NodeRole.Source).FetchesGit.Should().BeTrue();
-        RoleCapabilities.For(NodeRole.Dest).ServesGit.Should().BeTrue();
-        RoleCapabilities.For(NodeRole.Mediator).ShowsSyncTab.Should().BeFalse();
+        RoleCapabilities.For(NodeRole.Relay).Should().Be(new RoleCapabilities(false, false, false, false, true));
+        RoleCapabilities.For(NodeRole.Workstation).FetchesGit.Should().BeTrue();
+        RoleCapabilities.For(NodeRole.Origin).ServesGit.Should().BeTrue();
+        RoleCapabilities.For(NodeRole.Relay).ShowsSyncTab.Should().BeFalse();
     }
 
     /// <summary>

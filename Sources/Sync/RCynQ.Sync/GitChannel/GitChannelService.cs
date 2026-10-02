@@ -8,7 +8,6 @@ using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
 using RCynQ.Git.Repository;
 using RCynQ.Localization;
-using RCynQ.Ssh.Commands;
 using RCynQ.Ssh.Routing;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
@@ -18,23 +17,21 @@ using RCynQ.Sync.SyncBase;
 namespace RCynQ.Sync.GitChannel;
 
 /// <summary>
-/// The Git channel of a Source node: branches are fetched only from Dest, through the same chain as patches.
+/// The Git channel of a Workstation node: branches are fetched only from Origin, through the same chain as patches.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A Dest that runs an SSH server is fetched over git-over-ssh: the remote URL is built from the Dest peer
-/// (<see cref="PeerDescriptor.GitRepoPath"/>), and <c>GIT_SSH_COMMAND</c> carries the jump hosts.
+/// Origin is asked for a bundle of the repository this node works with: this node names the repository and the commits
+/// it already has, Origin answers with only what is new, and the bundle is fetched from a file. The request travels the
+/// way patches do (through the SSH forward or the TLS port of Origin), so Origin needs no Git access over SSH and its
+/// repository is only read.
 /// </para>
 /// <para>
-/// A Dest that runs no SSH server is asked for a bundle instead: this node names the commits it already has, Dest answers with only
-/// what is new, and the bundle is fetched from a file.
-/// </para>
-/// <para>
-/// Either way the first fetch into a directory without commits makes it a clone of the branch Dest has checked out, so a Source needs
+/// The first fetch into a directory without commits makes it a clone of the branch Origin has checked out, so a Workstation needs
 /// nothing but a Pull to start: the sync base is then built from that commit (see <see cref="SyncBaseManager"/>).
 /// </para>
 /// <para>
-/// Branches land in <c>refs/remotes/dest/*</c>; nothing is ever pushed. A <c>dest</c> remote is kept configured (with a placeholder URL
+/// Branches land in <c>refs/remotes/rcynq/*</c>; nothing is ever pushed. A <c>rcynq</c> remote is kept configured (with a placeholder URL
 /// RCynQ never uses) purely so external Git tooling recognizes those refs as belonging to a remote; see
 /// <see cref="IGitRepositoryService.EnsureRemoteAsync"/>.
 /// </para>
@@ -42,20 +39,20 @@ namespace RCynQ.Sync.GitChannel;
 public sealed class GitChannelService
 {
     /// <summary>
-    /// The remote-tracking namespace for branches fetched from Dest.
+    /// The remote-tracking namespace for branches fetched from Origin.
     /// </summary>
-    public const string RemoteName = "dest";
+    public const string REMOTE_NAME = "rcynq";
 
     /// <summary>
     /// How many files a refused Pull names before it only counts the rest.
     /// </summary>
-    private const int MaxListedFiles = 20;
+    private const int MAX_LISTED_FILES = 20;
 
     /// <summary>
-    /// The placeholder URL stored for the <c>dest</c> remote, so ordinary Git tooling recognizes fetched branches as belonging
+    /// The placeholder URL stored for the <c>rcynq</c> remote, so ordinary Git tooling recognizes fetched branches as belonging
     /// to a remote (see <see cref="IGitRepositoryService.EnsureRemoteAsync"/>). RCynQ never fetches through it.
     /// </summary>
-    private const string RemotePlaceholderUrl = "file:///RCynQ-managed-remote-use-the-Branches-tab-to-fetch";
+    internal const string REMOTE_PLACEHOLDER_URL = "file:///RCynQ-managed-remote-use-the-Branches-tab-to-fetch";
 
     /// <summary>The local node.</summary>
     private readonly NodeConfig _node;
@@ -66,10 +63,7 @@ public sealed class GitChannelService
     /// <summary>The repository service.</summary>
     private readonly IGitRepositoryService _git;
 
-    /// <summary>The SSH command builder.</summary>
-    private readonly SshCommandBuilder _ssh;
-
-    /// <summary>The client that asks Dest for a bundle.</summary>
+    /// <summary>The client that asks Origin for a bundle.</summary>
     private readonly GitBundleClient _bundles;
 
     /// <summary>The node data directories.</summary>
@@ -87,55 +81,79 @@ public sealed class GitChannelService
     /// <summary>The working tree lock.</summary>
     private readonly WorkingTreeLock _lock;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>Renames the remote-tracking namespace of an earlier version, or <see langword="null"/>.</summary>
+    private readonly LegacyRemoteMigration? _legacyRemote;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitChannelService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="node">The local node.</param>
     /// <param name="links">The link repository.</param>
     /// <param name="git">The repository service.</param>
-    /// <param name="ssh">The SSH command builder.</param>
-    /// <param name="bundles">The client that asks Dest for a bundle.</param>
+    /// <param name="bundles">The client that asks Origin for a bundle.</param>
     /// <param name="appData">The node data directories.</param>
     /// <param name="syncBase">The sync base manager.</param>
     /// <param name="paths">The sync paths.</param>
     /// <param name="pathUtility">The path utility.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
+    /// <param name="legacyRemote">Renames the remote-tracking namespace of an earlier version; <see langword="null"/> leaves it alone.</param>
     public GitChannelService(
+        ILocalizer localizer,
         NodeConfig node,
         IChainLinkRepository links,
         IGitRepositoryService git,
-        SshCommandBuilder ssh,
         GitBundleClient bundles,
         IAppDataFactory appData,
         SyncBaseManager syncBase,
         SyncPaths paths,
         IPathUtility pathUtility,
-        WorkingTreeLock workingTreeLock)
+        WorkingTreeLock workingTreeLock,
+        LegacyRemoteMigration? legacyRemote = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _links = links;
         _git = git;
-        _ssh = ssh;
         _bundles = bundles;
         _appData = appData;
         _syncBase = syncBase;
         _paths = paths;
         _pathUtility = pathUtility;
         _lock = workingTreeLock;
+        _legacyRemote = legacyRemote;
     }
 
     /// <summary>
-    /// Gets the current branch of the working tree and its divergence from the branches fetched from Dest.
+    /// Gets the current branch of the working tree and its divergence from the branches fetched from Origin.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The branch information; a non-repository result for a Mediator.</returns>
-    public Task<GitBranchInfo> GetBranchAsync(CancellationToken cancellationToken = default)
-        => _node.EffectiveWorkdir is { } workdir
-            ? _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken)
-            : Task.FromResult(new GitBranchInfo(false, null, null, 0, 0));
+    /// <returns>The branch information; a non-repository result for a Relay.</returns>
+    public async Task<GitBranchInfo> GetBranchAsync(CancellationToken cancellationToken = default)
+    {
+        if (_paths.Repository?.Path is not { } workdir)
+        {
+            return new GitBranchInfo(false, null, null, 0, 0);
+        }
+
+        await MigrateLegacyRemoteAsync(workdir, cancellationToken);
+        return await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken);
+    }
 
     /// <summary>
-    /// Fetches all branches from Dest. A directory without commits becomes a clone of the branch Dest has checked out.
+    /// Renames the remote-tracking namespace an earlier version left in the working copy.
+    /// </summary>
+    /// <param name="workdir">The working copy.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the working copy was looked at.</returns>
+    private Task MigrateLegacyRemoteAsync(string workdir, CancellationToken cancellationToken)
+        => _legacyRemote is null ? Task.CompletedTask : _legacyRemote.EnsureAsync(workdir, cancellationToken);
+
+    /// <summary>
+    /// Fetches all branches from Origin. A directory without commits becomes a clone of the branch Origin has checked out.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The outcome; failures are reported in the result.</returns>
@@ -143,27 +161,27 @@ public sealed class GitChannelService
     {
         try
         {
-            var (workdir, chain, route) = await ResolveAsync(cancellationToken);
-            var output = route.Endpoint.Peer.EndpointMode == EndpointMode.Direct
-                ? await FetchBundleAsync(workdir, chain, cancellationToken)
-                : await FetchSshAsync(workdir, route, cancellationToken);
-            return new GitOperationResult(true, output, await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
+            var (workdir, chain, _) = await ResolveAsync(cancellationToken);
+            await MigrateLegacyRemoteAsync(workdir, cancellationToken);
+            var output = await FetchBundleAsync(workdir, chain, cancellationToken);
+            return new GitOperationResult(true, output, await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken));
         }
-        catch (Exception ex) when (ex is SyncBridgeException or ArgumentException)
+        catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            return new GitOperationResult(false, ex.Message, null);
+            // "Failures are reported in the result" includes a working directory or a bundle file that cannot be written.
+            return new GitOperationResult(false, _localizer.Describe(ex), null);
         }
     }
 
     /// <summary>
-    /// Fetches from Dest and fast-forwards the current branch to the one of Dest, then rebuilds the sync base from the new commit.
+    /// Fetches from Origin and fast-forwards the current branch to the one of Origin, then rebuilds the sync base from the new commit.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The outcome; failures are reported in the result, and nothing in the working tree changes then.</returns>
     /// <remarks>
-    /// Local changes to the files the Pull updates are handled before Git sees them: a file that already has the content of Dest's
-    /// commit, or that was already delivered to Dest by a patch, is replaced by Dest's version. Any other change is one the user
-    /// has not sent yet; the Pull is refused and lists those files, so nothing typed on Source is ever overwritten.
+    /// Local changes to the files the Pull updates are handled before Git sees them: a file that already has the content of Origin's
+    /// commit, or that was already delivered to Origin by a patch, is replaced by Origin's version. Any other change is one the user
+    /// has not sent yet; the Pull is refused and lists those files, so nothing typed on Workstation is ever overwritten.
     /// </remarks>
     public async Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default)
     {
@@ -173,7 +191,7 @@ public sealed class GitChannelService
             return fetch;
         }
 
-        var workdir = _node.EffectiveWorkdir!;
+        var workdir = _paths.Workdir;
         try
         {
             string output;
@@ -182,20 +200,20 @@ public sealed class GitChannelService
                 output = await FastForwardAsync(workdir, cancellationToken);
             }
 
-            return new GitOperationResult(true, $"{fetch.Output}\n{output}".Trim(), await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
+            return new GitOperationResult(true, $"{fetch.Output}\n{output}".Trim(), await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken));
         }
         catch (PullRefusedException ex)
         {
-            return new GitOperationResult(false, $"{fetch.Output}\n{ex.Message}".Trim(), await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken));
+            return new GitOperationResult(false, $"{fetch.Output}\n{_localizer.Describe(ex)}".Trim(), await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken));
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
         {
-            return new GitOperationResult(false, ex.Message, fetch.Branch);
+            return new GitOperationResult(false, _localizer.Describe(ex), fetch.Branch);
         }
     }
 
     /// <summary>
-    /// Brings the current branch to the commit of Dest; the caller holds the <see cref="WorkingTreeLock"/>.
+    /// Brings the current branch to the commit of Origin; the caller holds the <see cref="WorkingTreeLock"/>.
     /// </summary>
     /// <param name="workdir">The working tree.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
@@ -205,45 +223,45 @@ public sealed class GitChannelService
     {
         // The base as it is before the Pull says which local files the peer already has.
         var syncBase = await _syncBase.EnsureAsync(cancellationToken);
-        var info = await _git.GetBranchInfoAsync(workdir, RemoteName, cancellationToken);
+        var info = await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken);
         if (info.Branch is null)
         {
-            throw new PullRefusedException(Texts.Get("Git.PullDetached"));
+            throw new PullRefusedException(_localizer.Get("Git.PullDetached"));
         }
 
         if (info.TrackingRef is null)
         {
-            throw new PullRefusedException(Texts.Format("Git.PullNoDestBranch", info.Branch));
+            throw new PullRefusedException(_localizer.Format("Git.PullNoOriginBranch", info.Branch));
         }
 
         var head = await _git.GetHeadCommitAsync(workdir, cancellationToken);
         var target = await _git.ResolveCommitAsync(workdir, info.TrackingRef, cancellationToken)
-            ?? throw new PullRefusedException(Texts.Format("Git.PullNoDestBranch", info.Branch));
+            ?? throw new PullRefusedException(_localizer.Format("Git.PullNoOriginBranch", info.Branch));
         var lines = new List<string>();
         if (head == target)
         {
-            lines.Add(Texts.Format("Git.PullUpToDate", info.Branch));
+            lines.Add(_localizer.Format("Git.PullUpToDate", info.Branch));
         }
         else
         {
             if (head is null || !await _git.IsAncestorAsync(workdir, head, target, cancellationToken))
             {
-                throw new PullRefusedException(Texts.Format("Git.PullDiverged", info.Branch, info.Ahead, info.Behind));
+                throw new PullRefusedException(_localizer.Format("Git.PullDiverged", info.Branch, info.Ahead, info.Behind));
             }
 
             var replaced = await ClearDeliveredChangesAsync(workdir, head, target, syncBase.IsReady, cancellationToken);
             if (replaced.Count > 0)
             {
-                lines.Add(Texts.Format("Git.PullReplacedDelivered", DescribeFiles(replaced)));
+                lines.Add(_localizer.Format("Git.PullReplacedDelivered", DescribeFiles(replaced)));
             }
 
-            lines.Add(await _git.PullFastForwardAsync(workdir, RemoteName, cancellationToken));
+            lines.Add(await _git.PullFastForwardAsync(workdir, REMOTE_NAME, cancellationToken));
         }
 
         var after = await _syncBase.EnsureAsync(cancellationToken);
         if (after.Mode == SyncBaseMode.Git && after.Commit is not null)
         {
-            lines.Add(Texts.Format("Git.PullSyncBase", after.Commit[..Math.Min(12, after.Commit.Length)]));
+            lines.Add(_localizer.Format("Git.PullSyncBase", after.Commit[..Math.Min(12, after.Commit.Length)]));
         }
 
         return string.Join('\n', lines.Where(line => line.Length > 0));
@@ -254,11 +272,11 @@ public sealed class GitChannelService
     /// </summary>
     /// <param name="workdir">The working tree.</param>
     /// <param name="head">The current commit.</param>
-    /// <param name="target">The commit of Dest.</param>
-    /// <param name="baseReady">Whether the sync base can tell which files were delivered to Dest.</param>
+    /// <param name="target">The commit of Origin.</param>
+    /// <param name="baseReady">Whether the sync base can tell which files were delivered to Origin.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The files whose local changes were discarded.</returns>
-    /// <exception cref="PullRefusedException">A changed file has local work that is not on Dest yet; nothing was discarded.</exception>
+    /// <exception cref="PullRefusedException">A changed file has local work that is not on Origin yet; nothing was discarded.</exception>
     private async Task<IReadOnlyList<string>> ClearDeliveredChangesAsync(string workdir, string head, string target, bool baseReady, CancellationToken cancellationToken)
     {
         var updated = (await _git.GetChangedPathsAsync(workdir, head, target, cancellationToken))
@@ -269,8 +287,8 @@ public sealed class GitChannelService
         var unsent = new List<string>();
         foreach (var path in blocking)
         {
-            if (await _git.MatchesCommitAsync(workdir, target, path, cancellationToken)
-                || (baseReady && await IsDeliveredAsync(workdir, path, cancellationToken)))
+            if (await _git.MatchesCommitAsync(workdir, target, path, cancellationToken) ||
+                (baseReady && await IsDeliveredAsync(workdir, path, cancellationToken)))
             {
                 safe.Add(path);
             }
@@ -282,7 +300,7 @@ public sealed class GitChannelService
 
         if (unsent.Count > 0)
         {
-            throw new PullRefusedException(Texts.Format("Git.PullLocalChanges", DescribeFiles(unsent)));
+            throw new PullRefusedException(_localizer.Format("Git.PullLocalChanges", DescribeFiles(unsent)));
         }
 
         if (safe.Count > 0)
@@ -294,19 +312,19 @@ public sealed class GitChannelService
     }
 
     /// <summary>
-    /// Checks whether the local version of a file is the one the sync base records as delivered to Dest.
+    /// Checks whether the local version of a file is the one the sync base records as delivered to Origin.
     /// </summary>
     /// <param name="workdir">The working tree.</param>
     /// <param name="path">The relative path.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns><see langword="true"/> when Dest already has exactly this content (or this deletion).</returns>
+    /// <returns><see langword="true"/> when Origin already has exactly this content (or this deletion).</returns>
     private async Task<bool> IsDeliveredAsync(string workdir, string path, CancellationToken cancellationToken)
     {
         try
         {
             var local = await FileState.ContentHashAsync(_pathUtility.ResolveWithinRoot(workdir, path), cancellationToken);
             var delivered = await FileState.ContentHashAsync(_pathUtility.ResolveWithinRoot(_paths.SyncBase, path), cancellationToken);
-            return local != FileState.DirectoryMarker && local == delivered;
+            return local != FileState.DIRECTORY_MARKER && local == delivered;
         }
         catch (ArgumentException)
         {
@@ -319,67 +337,37 @@ public sealed class GitChannelService
     /// </summary>
     /// <param name="paths">The files.</param>
     /// <returns>The text.</returns>
-    private static string DescribeFiles(IReadOnlyCollection<string> paths)
+    private string DescribeFiles(IReadOnlyCollection<string> paths)
     {
-        var shown = paths.Take(MaxListedFiles).Select(path => "  " + path);
+        var shown = paths.Take(MAX_LISTED_FILES).Select(path => "  " + path);
         var text = string.Join('\n', shown);
-        return paths.Count > MaxListedFiles ? $"{text}\n  {Texts.Format("Git.PullMoreFiles", paths.Count - MaxListedFiles)}" : text;
+        return paths.Count > MAX_LISTED_FILES ? $"{text}\n  {_localizer.Format("Git.PullMoreFiles", paths.Count - MAX_LISTED_FILES)}" : text;
     }
 
     /// <summary>
-    /// Fetches from a Dest that runs an SSH server, over git-over-ssh.
+    /// Asks Origin for a bundle with what is new in the repository this node works with and fetches it from the file.
     /// </summary>
     /// <param name="workdir">The working tree.</param>
-    /// <param name="route">The route to Dest.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The git output.</returns>
-    /// <exception cref="SyncBridgeException">The Dest peer has no repository path, or has no checked out branch to start from.</exception>
-    private async Task<string> FetchSshAsync(string workdir, ChainRoute route, CancellationToken cancellationToken)
-    {
-        var repoPath = route.Endpoint.Peer.GitRepoPath
-            ?? throw new SyncBridgeException(Texts.Format("Git.DestNoRepo", route.Endpoint.Peer.Id));
-        var url = GitRepositoryService.BuildSshUrl(route.Target!, repoPath);
-        var sshCommand = _ssh.BuildGitSshCommand(route.Jumps);
-        var hadCommits = await _git.HasCommitsAsync(workdir, cancellationToken);
-        string? destHead = null;
-        if (!hadCommits)
-        {
-            Directory.CreateDirectory(workdir);
-            destHead = await _git.GetRemoteHeadBranchAsync(workdir, url, sshCommand, cancellationToken);
-            if (!await _git.IsWorkTreeAsync(workdir, cancellationToken))
-            {
-                await _git.InitializeAsync(workdir, destHead ?? "main", cancellationToken);
-            }
-        }
-
-        var output = await _git.FetchAsync(workdir, url, RemoteName, sshCommand, cancellationToken);
-        await _git.EnsureRemoteAsync(workdir, RemoteName, RemotePlaceholderUrl, cancellationToken);
-        return hadCommits ? output : await AdoptAsync(workdir, destHead, output, cancellationToken);
-    }
-
-    /// <summary>
-    /// Fetches from a Dest that runs no SSH server: asks for a bundle with what is new and fetches it from the file.
-    /// </summary>
-    /// <param name="workdir">The working tree.</param>
-    /// <param name="chain">The chain to Dest.</param>
+    /// <param name="chain">The chain to Origin.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A description of the outcome.</returns>
-    /// <exception cref="SyncBridgeException">Dest refused, could not be reached, or has no checked out branch to start from.</exception>
+    /// <exception cref="SyncBridgeException">Origin refused, could not be reached, or has no checked out branch to start from.</exception>
     private async Task<string> FetchBundleAsync(string workdir, IReadOnlyList<ChainLinkConfig> chain, CancellationToken cancellationToken)
     {
         var hadCommits = await _git.HasCommitsAsync(workdir, cancellationToken);
-        var have = hadCommits ? await _git.GetKnownCommitsAsync(workdir, RemoteName, cancellationToken) : Array.Empty<string>();
-        var download = await _bundles.DownloadAsync(chain, have, _appData.Create().TempDirectory, cancellationToken);
+        var have = hadCommits ? await _git.GetKnownCommitsAsync(workdir, REMOTE_NAME, cancellationToken) : Array.Empty<string>();
+        var repository = _paths.Repository is { IsBound: true } bound ? bound.Name : null;
+        var download = await _bundles.DownloadAsync(chain, have, _appData.Create().TempDirectory, repository, cancellationToken);
         if (download is null)
         {
             // Nothing new, but the remote must exist regardless of whether this call brought any commits, so external Git
             // tooling can already recognize the branches an earlier pull fetched.
             if (hadCommits)
             {
-                await _git.EnsureRemoteAsync(workdir, RemoteName, RemotePlaceholderUrl, cancellationToken);
+                await _git.EnsureRemoteAsync(workdir, REMOTE_NAME, REMOTE_PLACEHOLDER_URL, cancellationToken);
             }
 
-            return Texts.Get("Git.BundleUpToDate");
+            return _localizer.Get("Git.BundleUpToDate");
         }
 
         try
@@ -389,8 +377,8 @@ public sealed class GitChannelService
                 await _git.InitializeAsync(workdir, download.Head ?? "main", cancellationToken);
             }
 
-            var output = await _git.FetchBundleAsync(workdir, download.Path, RemoteName, cancellationToken);
-            await _git.EnsureRemoteAsync(workdir, RemoteName, RemotePlaceholderUrl, cancellationToken);
+            var output = await _git.FetchBundleAsync(workdir, download.Path, REMOTE_NAME, cancellationToken);
+            await _git.EnsureRemoteAsync(workdir, REMOTE_NAME, REMOTE_PLACEHOLDER_URL, cancellationToken);
             return hadCommits ? output : await AdoptAsync(workdir, download.Head, output, cancellationToken);
         }
         finally
@@ -400,28 +388,28 @@ public sealed class GitChannelService
     }
 
     /// <summary>
-    /// Starts a repository without commits on the branch Dest has checked out.
+    /// Starts a repository without commits on the branch Origin has checked out.
     /// </summary>
     /// <param name="workdir">The working tree.</param>
-    /// <param name="branch">The branch Dest has checked out, or <see langword="null"/> for a detached HEAD.</param>
+    /// <param name="branch">The branch Origin has checked out, or <see langword="null"/> for a detached HEAD.</param>
     /// <param name="output">The output of the fetch.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A description of the outcome.</returns>
-    /// <exception cref="SyncBridgeException">Dest has no checked out branch.</exception>
+    /// <exception cref="SyncBridgeException">Origin has no checked out branch.</exception>
     private async Task<string> AdoptAsync(string workdir, string? branch, string output, CancellationToken cancellationToken)
     {
         if (branch is null)
         {
-            throw new SyncBridgeException(Texts.Get("Git.BundleNoHead"));
+            throw new SyncBridgeException(_localizer.Get("Git.BundleNoHead"));
         }
 
         var keepFiles = HasWorkingFiles(workdir);
         using (await _lock.AcquireAsync(cancellationToken))
         {
-            await _git.AdoptRemoteBranchAsync(workdir, RemoteName, branch, keepFiles, cancellationToken);
+            await _git.AdoptRemoteBranchAsync(workdir, REMOTE_NAME, branch, keepFiles, cancellationToken);
         }
 
-        return $"{output}\n{Texts.Format(keepFiles ? "Git.BundleAdoptedKeepingFiles" : "Git.BundleAdopted", branch)}".Trim();
+        return $"{output}\n{_localizer.Format(keepFiles ? "Git.BundleAdoptedKeepingFiles" : "Git.BundleAdopted", branch)}".Trim();
     }
 
     /// <summary>
@@ -430,8 +418,8 @@ public sealed class GitChannelService
     /// <param name="directory">The directory.</param>
     /// <returns><see langword="true"/> when there are files or directories to keep.</returns>
     private static bool HasWorkingFiles(string directory)
-        => Directory.Exists(directory)
-            && Directory.EnumerateFileSystemEntries(directory).Any(entry => !string.Equals(Path.GetFileName(entry), ".git", StringComparison.OrdinalIgnoreCase));
+        => Directory.Exists(directory) &&
+            Directory.EnumerateFileSystemEntries(directory).Any(entry => !string.Equals(Path.GetFileName(entry), ".git", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Deletes a temporary file, ignoring failures.
@@ -450,26 +438,26 @@ public sealed class GitChannelService
     }
 
     /// <summary>
-    /// Resolves the working tree, the chain and the route to Dest.
+    /// Resolves the working tree, the chain and the route to Origin.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The resolved values.</returns>
-    /// <exception cref="SyncBridgeException">The node is not a Source or the chain is incomplete.</exception>
+    /// <exception cref="SyncBridgeException">The node is not a Workstation or the chain is incomplete.</exception>
     private async Task<(string Workdir, IReadOnlyList<ChainLinkConfig> Chain, ChainRoute Route)> ResolveAsync(CancellationToken cancellationToken)
     {
-        if (_node.Role != NodeRole.Source)
+        if (_node.Role != NodeRole.Workstation)
         {
-            throw new SyncBridgeException(Texts.Format("Git.OnlySource", _node.Role));
+            throw new SyncBridgeException(_localizer.Format("Git.OnlyWorkstation", _node.Role));
         }
 
         var chain = await _links.GetAllAsync(cancellationToken);
         try
         {
-            return (_node.EffectiveWorkdir!, chain, ChainRoute.Resolve(chain));
+            return (_paths.Workdir, chain, ChainRoute.Resolve(chain));
         }
         catch (ArgumentException ex)
         {
-            throw new SyncBridgeException(ex.Message, ex);
+            throw new SyncBridgeException(_localizer.Describe(ex), ex);
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using RCynQ.Core.Config;
+using RCynQ.Core.Config.Legacy;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Localization;
@@ -12,14 +13,15 @@ namespace RCynQ.Sync.Configuration;
 /// </summary>
 /// <remarks>
 /// The file holds a <c>SyncBridge</c> section bound to <see cref="SyncBridgeOptions"/>. Edits preserve unknown
-/// properties and are written atomically through a temporary file.
+/// properties and are written atomically through a temporary file. The section and its properties are found whatever
+/// the case of their names, as the service binds them.
 /// </remarks>
 public static class ConfigurationFileEditor
 {
     /// <summary>
     /// The environment variable that points to the configuration file.
     /// </summary>
-    public const string EnvironmentVariable = ConfigLocations.EnvironmentVariable;
+    public const string ENVIRONMENT_VARIABLE = ConfigLocations.ENVIRONMENT_VARIABLE;
 
     /// <summary>
     /// JSON options used for reading and writing the file.
@@ -33,7 +35,7 @@ public static class ConfigurationFileEditor
 
     /// <summary>
     /// Resolves the configuration file path with <see cref="ConfigLocations.Resolve"/>: explicit path,
-    /// <see cref="EnvironmentVariable"/>, <c>./syncbridge.json</c> when it exists, then the per-user file.
+    /// <see cref="ENVIRONMENT_VARIABLE"/>, <c>./syncbridge.json</c> when it exists, then the per-user file.
     /// </summary>
     /// <param name="explicitPath">The explicitly requested path, or <see langword="null"/>.</param>
     /// <returns>The full path.</returns>
@@ -50,19 +52,21 @@ public static class ConfigurationFileEditor
     {
         if (!File.Exists(path))
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.Missing", path));
+            throw LocalizedError.Create(message => new SyncBridgeException(message), "ConfigFile.Missing", path);
         }
+
+        ConfigurationFileMigrator.Migrate(path);
 
         try
         {
             var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            var section = root?[SyncBridgeOptions.SectionName]
-                ?? throw new SyncBridgeException(Texts.Format("ConfigFile.NoSection", path, SyncBridgeOptions.SectionName));
+            var section = FindSection(root as JsonObject)?.Section
+                ?? throw LocalizedError.Create(message => new SyncBridgeException(message), "ConfigFile.NoSection", path, SyncBridgeOptions.SECTION_NAME);
             return section.Deserialize<SyncBridgeOptions>(JsonOptions) ?? new SyncBridgeOptions();
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
+            throw LocalizedError.Create(message => new SyncBridgeException(message, ex), "ConfigFile.BadJson", path, ex);
         }
     }
 
@@ -77,6 +81,9 @@ public static class ConfigurationFileEditor
     public static async Task UpdateAsync(string path, Action<JsonObject> update, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(update);
+
+        // An edit is made to the current format, never next to the properties of an earlier version.
+        ConfigurationFileMigrator.Migrate(path);
         JsonObject root;
         try
         {
@@ -86,13 +93,14 @@ public static class ConfigurationFileEditor
         }
         catch (JsonException ex)
         {
-            throw new SyncBridgeException(Texts.Format("ConfigFile.BadJson", path, ex.Message), ex);
+            throw LocalizedError.Create(message => new SyncBridgeException(message, ex), "ConfigFile.BadJson", path, ex);
         }
 
-        if (root[SyncBridgeOptions.SectionName] is not JsonObject section)
+        var found = FindSection(root);
+        if (found?.Section is not JsonObject section)
         {
             section = new JsonObject();
-            root[SyncBridgeOptions.SectionName] = section;
+            root[found?.Key ?? SyncBridgeOptions.SECTION_NAME] = section;
         }
 
         update(section);
@@ -114,7 +122,7 @@ public static class ConfigurationFileEditor
     }
 
     /// <summary>
-    /// Sets the node role and the matching paths. A Mediator has its paths removed.
+    /// Sets the node role and the matching paths. A Relay has its paths removed.
     /// </summary>
     /// <param name="path">The file path.</param>
     /// <param name="role">The role.</param>
@@ -132,23 +140,72 @@ public static class ConfigurationFileEditor
 
         return UpdateAsync(path, section =>
         {
-            section[nameof(SyncBridgeOptions.Role)] = role.ToString();
-            if (role == NodeRole.Mediator)
-            {
-                section.Remove(nameof(SyncBridgeOptions.RepoPath));
-                section.Remove(nameof(SyncBridgeOptions.WorkdirPath));
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(repoPath))
-            {
-                section[nameof(SyncBridgeOptions.RepoPath)] = repoPath;
-            }
-
-            if (!string.IsNullOrWhiteSpace(workdirPath))
-            {
-                section[nameof(SyncBridgeOptions.WorkdirPath)] = workdirPath;
-            }
+            SetProperty(section, nameof(SyncBridgeOptions.Role), role.ToString());
+            RepositoryConfigurationEditor.Apply(section, role, role == NodeRole.Origin ? repoPath : workdirPath);
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sets or removes a property that holds an object or an array, matching its name without regard to case.
+    /// </summary>
+    /// <param name="node">The object that holds the property.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The value, or <see langword="null"/> to remove the property.</param>
+    public static void SetNode(JsonObject node, string name, JsonNode? value)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        foreach (var key in node.Select(pair => pair.Key).Where(key => key.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray())
+        {
+            node.Remove(key);
+        }
+
+        if (value is not null)
+        {
+            node[name] = value;
+        }
+    }
+
+    /// <summary>
+    /// Sets or removes a property of a configuration object, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="node">The configuration object.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The new value, or <see langword="null"/> to remove the property.</param>
+    /// <remarks>
+    /// The service binds the file without regard to the case of the names, so <c>"role"</c> and <c>"Role"</c> are the same
+    /// setting for it. An edit that only knew the usual spelling would add a second property next to the one the user
+    /// wrote, and the service refuses a file with the same setting twice. The spelling found in the file is kept.
+    /// </remarks>
+    public static void SetProperty(JsonObject node, string name, string? value)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var existing = node.Select(pair => pair.Key).Where(key => key.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach (var key in existing.Skip(1))
+        {
+            node.Remove(key);
+        }
+
+        var target = existing.Length > 0 ? existing[0] : name;
+        if (value is null)
+        {
+            node.Remove(target);
+        }
+        else
+        {
+            node[target] = value;
+        }
+    }
+
+    /// <summary>
+    /// Finds the <c>SyncBridge</c> section of a configuration document, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="root">The root object of the document, or <see langword="null"/>.</param>
+    /// <returns>The name the section is written with and the section, or <see langword="null"/> when there is none.</returns>
+    private static (string Key, JsonNode? Section)? FindSection(JsonObject? root)
+    {
+        var key = root?.Select(pair => pair.Key).FirstOrDefault(name => name.Equals(SyncBridgeOptions.SECTION_NAME, StringComparison.OrdinalIgnoreCase));
+        return key is null ? null : (key, root![key]);
     }
 }

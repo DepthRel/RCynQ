@@ -32,7 +32,7 @@ public sealed class SignalREventPublisher : IEventPublisher
     public Task PublishLinkStateAsync(LinkStateChangedEvent linkEvent, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Link {Link} via {Transport} is {Status}: {Message}", linkEvent.State.LinkName, linkEvent.State.Kind, linkEvent.State.Status, linkEvent.State.Message);
-        return SendAsync(NodeEventNames.LinkStateChanged, linkEvent, cancellationToken);
+        return SendAsync(NodeEventNames.LINK_STATE_CHANGED, linkEvent, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -40,14 +40,32 @@ public sealed class SignalREventPublisher : IEventPublisher
     {
         _logger.LogInformation("Patch {PatchId} ({Direction}) is {Status}; applied {Applied}, conflicts {Conflicts}. {Message}",
             patchEvent.PatchId, patchEvent.Direction, patchEvent.Status, patchEvent.AppliedFileCount, patchEvent.ConflictCount, patchEvent.Message);
-        return SendAsync(NodeEventNames.PatchEvent, patchEvent, cancellationToken);
+        return SendAsync(NodeEventNames.PATCH_EVENT, patchEvent, cancellationToken);
     }
 
     /// <inheritdoc />
     public Task PublishDiagnosticsAsync(DiagnosticsEvent diagnosticsEvent, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Diagnostics for {Role}: {Failed} of {Total} checks failed.", diagnosticsEvent.Role, diagnosticsEvent.Results.Count(result => !result.Passed), diagnosticsEvent.Results.Count);
-        return SendAsync(NodeEventNames.DiagnosticsEvent, diagnosticsEvent, cancellationToken);
+        return SendAsync(NodeEventNames.DIAGNOSTICS_EVENT, diagnosticsEvent, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task PublishRepositoryAsync(RepositoryEvent repositoryEvent, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Repository of this node: {Repository}; of the node at the other end: {PeerRepository}.", repositoryEvent.Repository, repositoryEvent.PeerRepository);
+        return SendAsync(NodeEventNames.REPOSITORY_EVENT, repositoryEvent, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task PublishLinkRoutesAsync(LinkRoutesChangedEvent routesEvent, CancellationToken cancellationToken = default)
+    {
+        if (routesEvent.Switched && routesEvent.Routes.Routes.FirstOrDefault(route => route.IsActive) is { } active)
+        {
+            _logger.LogInformation("Link {LinkId} now goes through route {Route} ({Host}).", routesEvent.Routes.LinkId, active.Name, active.Host);
+        }
+
+        return SendAsync(NodeEventNames.LINK_ROUTES_CHANGED, routesEvent, cancellationToken);
     }
 
     /// <summary>

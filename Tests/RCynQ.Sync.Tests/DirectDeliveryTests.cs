@@ -19,11 +19,11 @@ namespace RCynQ.Sync.Tests;
 /// </summary>
 public sealed class DirectDeliveryTests : IDisposable
 {
-    /// <summary>The shared Source and Dest fixture.</summary>
+    /// <summary>The shared Workstation and Origin fixture.</summary>
     private readonly SyncFixture _fixture = new();
 
     /// <summary>A pinned certificate fingerprint.</summary>
-    private const string Fingerprint = "SHA256:" + "A1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    private const string FINGERPRINT = "SHA256:" + "A1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90";
 
     /// <summary>The forward manager substitute.</summary>
     private readonly ILocalForwardManager _forwards = Substitute.For<ILocalForwardManager>();
@@ -34,7 +34,7 @@ public sealed class DirectDeliveryTests : IDisposable
     [Fact]
     public void Ssh_Peer_Is_Reached_Through_Its_Own_Ssh_Server()
     {
-        var route = ChainRoute.Resolve(new[] { Link("relay", Peer("mediator-1", NodeRole.Mediator, "203.0.113.4"), 22, 10), Link("dest", Peer("dest-1", NodeRole.Dest, "10.8.0.2"), 18443, 1000) });
+        var route = ChainRoute.Resolve(new[] { Link("relay", Peer("relay-1", NodeRole.Relay, "203.0.113.4"), 22, 10), Link("origin", Peer("origin-1", NodeRole.Origin, "10.8.0.2"), 18443, 1000) });
 
         route.UsesSsh.Should().BeTrue();
         route.UsesTls.Should().BeFalse();
@@ -45,32 +45,32 @@ public sealed class DirectDeliveryTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies that a peer without an SSH server is reached through the mediator, with TLS ending at the peer.
+    /// Verifies that a peer without an SSH server is reached through the relay, with TLS ending at the peer.
     /// </summary>
     [Fact]
-    public void Direct_Peer_Behind_Mediator_Is_Reached_Through_The_Mediator()
+    public void Direct_Peer_Behind_Relay_Is_Reached_Through_The_Relay()
     {
         var route = ChainRoute.Resolve(new[]
         {
-            Link("relay", Peer("mediator-1", NodeRole.Mediator, "203.0.113.4"), 22, 10),
-            Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
+            Link("relay", Peer("relay-1", NodeRole.Relay, "203.0.113.4"), 22, 10),
+            Link("origin", Peer("origin-1", NodeRole.Origin, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
         });
 
-        route.UsesSsh.Should().BeTrue("the mediator still relays, it just stops there");
-        route.Target!.Host.Should().Be("203.0.113.4", "the SSH session ends at the mediator");
+        route.UsesSsh.Should().BeTrue("the relay still relays, it just stops there");
+        route.Target!.Host.Should().Be("203.0.113.4", "the SSH session ends at the relay");
         route.Jumps.Should().BeEmpty();
-        route.RemoteHost.Should().Be("192.168.10.20", "the mediator forwards to the peer's own address");
+        route.RemoteHost.Should().Be("192.168.10.20", "the relay forwards to the peer's own address");
         route.RemotePort.Should().Be(18444);
-        route.TlsFingerprint.Should().Be(Fingerprint, "TLS is established with the peer, so the mediator sees only ciphertext");
+        route.TlsFingerprint.Should().Be(FINGERPRINT, "TLS is established with the peer, so the relay sees only ciphertext");
     }
 
     /// <summary>
-    /// Verifies that without a mediator no SSH is used at all.
+    /// Verifies that without a relay no SSH is used at all.
     /// </summary>
     [Fact]
-    public void Direct_Peer_Without_Mediator_Uses_No_Ssh()
+    public void Direct_Peer_Without_Relay_Uses_No_Ssh()
     {
-        var route = ChainRoute.Resolve(new[] { Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000) });
+        var route = ChainRoute.Resolve(new[] { Link("origin", Peer("origin-1", NodeRole.Origin, "192.168.10.20", EndpointMode.Direct), 18444, 1000) });
 
         route.UsesSsh.Should().BeFalse();
         route.Target.Should().BeNull();
@@ -85,28 +85,28 @@ public sealed class DirectDeliveryTests : IDisposable
     [Fact]
     public void Direct_Peer_Requires_Fingerprint_And_Port()
     {
-        var withoutFingerprint = () => new PeerDescriptor(new NodeId("dest-1"), "d", NodeRole.Dest, "h", 22, "u", endpointMode: EndpointMode.Direct, endpointPort: 18444);
-        var withoutPort = () => new PeerDescriptor(new NodeId("dest-1"), "d", NodeRole.Dest, "h", 22, "u", endpointMode: EndpointMode.Direct, tlsFingerprint: Fingerprint);
+        var withoutFingerprint = () => new PeerDescriptor(new NodeId("origin-1"), "d", NodeRole.Origin, "h", 22, "u", endpointMode: EndpointMode.Direct, endpointPort: 18444);
+        var withoutPort = () => new PeerDescriptor(new NodeId("origin-1"), "d", NodeRole.Origin, "h", 22, "u", endpointMode: EndpointMode.Direct, tlsFingerprint: FINGERPRINT);
 
         withoutFingerprint.Should().Throw<ArgumentException>().WithParameterName("tlsFingerprint");
         withoutPort.Should().Throw<ArgumentException>().WithParameterName("endpointPort");
-        Peer("dest-1", NodeRole.Dest, "h", EndpointMode.Direct).ReachablePort.Should().Be(18444, "neighbours connect to the TLS port");
-        Peer("dest-1", NodeRole.Dest, "h").ReachablePort.Should().Be(22, "neighbours connect to the SSH server");
+        Peer("origin-1", NodeRole.Origin, "h", EndpointMode.Direct).ReachablePort.Should().Be(18444, "neighbours connect to the TLS port");
+        Peer("origin-1", NodeRole.Origin, "h").ReachablePort.Should().Be(22, "neighbours connect to the SSH server");
     }
 
     /// <summary>
-    /// Verifies that a mediator without an SSH server cannot relay to a peer without one either.
+    /// Verifies that a relay without an SSH server cannot relay to a peer without one either.
     /// </summary>
     [Fact]
-    public void Mediator_Without_Ssh_Cannot_Relay()
+    public void Relay_Without_Ssh_Cannot_Relay()
     {
         var resolve = () => ChainRoute.Resolve(new[]
         {
-            Link("relay", Peer("mediator-1", NodeRole.Mediator, "203.0.113.4", EndpointMode.Direct), 22, 10),
-            Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
+            Link("relay", Peer("relay-1", NodeRole.Relay, "203.0.113.4", EndpointMode.Direct), 22, 10),
+            Link("origin", Peer("origin-1", NodeRole.Origin, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
         });
 
-        resolve.Should().Throw<ArgumentException>().WithMessage("*mediator-1*SSH server*");
+        resolve.Should().Throw<ArgumentException>().WithMessage("*relay-1*SSH server*");
     }
 
     /// <summary>
@@ -121,31 +121,31 @@ public sealed class DirectDeliveryTests : IDisposable
 
         await sender.SendAsync(
             await _fixture.BuildSignedEnvelopeAsync(),
-            _fixture.SourceContent,
-            new[] { Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000) });
+            _fixture.WorkstationContent,
+            new[] { Link("origin", Peer("origin-1", NodeRole.Origin, "192.168.10.20", EndpointMode.Direct), 18444, 1000) });
 
         recorder.Uris.Should().OnlyContain(uri => uri.Scheme == "https" && uri.Host == "192.168.10.20" && uri.Port == 18444);
         recorder.Uris[0].AbsolutePath.Should().Be("/patch/sessions");
-        recorder.PinnedFingerprint.Should().Be(Fingerprint, "the certificate of the peer is pinned");
+        recorder.PinnedFingerprint.Should().Be(FINGERPRINT, "the certificate of the peer is pinned");
         await _forwards.DidNotReceiveWithAnyArgs().StartAsync(default!, default!, default, default!, default);
     }
 
     /// <summary>
-    /// Verifies that with a mediator the sender forwards to the peer's TLS port and posts through the forward.
+    /// Verifies that with a relay the sender forwards to the peer's TLS port and posts through the forward.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Sender_Forwards_To_The_Tls_Port_Through_The_Mediator()
+    public async Task Sender_Forwards_To_The_Tls_Port_Through_The_Relay()
     {
         var recorder = new RequestRecorder();
         _forwards.StartAsync(Arg.Any<SshEndpoint>(), Arg.Any<IReadOnlyList<SshEndpoint>>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(19001);
         var sender = Create(recorder);
 
-        await sender.SendAsync(await _fixture.BuildSignedEnvelopeAsync(), _fixture.SourceContent, new[]
+        await sender.SendAsync(await _fixture.BuildSignedEnvelopeAsync(), _fixture.WorkstationContent, new[]
         {
-            Link("relay", Peer("mediator-1", NodeRole.Mediator, "203.0.113.4"), 22, 10),
-            Link("dest", Peer("dest-1", NodeRole.Dest, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
+            Link("relay", Peer("relay-1", NodeRole.Relay, "203.0.113.4"), 22, 10),
+            Link("origin", Peer("origin-1", NodeRole.Origin, "192.168.10.20", EndpointMode.Direct), 18444, 1000)
         });
 
         await _forwards.Received(1).StartAsync(
@@ -156,7 +156,7 @@ public sealed class DirectDeliveryTests : IDisposable
             18444,
             Arg.Any<CancellationToken>());
         recorder.Uris.Should().OnlyContain(uri => uri.Scheme == "https" && uri.Host == "127.0.0.1" && uri.Port == 19001, "the forward is local, the certificate is still the peers");
-        recorder.PinnedFingerprint.Should().Be(Fingerprint);
+        recorder.PinnedFingerprint.Should().Be(FINGERPRINT);
         await _forwards.Received(1).StopAsync(19001, Arg.Any<CancellationToken>());
     }
 
@@ -167,12 +167,12 @@ public sealed class DirectDeliveryTests : IDisposable
     /// <returns>The sender.</returns>
     private HttpPatchSender Create(RequestRecorder recorder)
         => new(
-            recorder,
+            TestTexts.English, recorder,
             _forwards,
-            _fixture.SourceSigner,
-            new PatchEnvelopeSerializer(_fixture.Paths),
-            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.Token }, new InMemorySecretStore()),
-            _fixture.SourceNode,
+            _fixture.WorkstationSigner,
+            new PatchEnvelopeSerializer(TestTexts.English, _fixture.Paths),
+            new LinkTokenProvider(new SyncBridgeOptions { LinkToken = SyncFixture.TOKEN }, new InMemorySecretStore()),
+            _fixture.WorkstationNode,
             new HttpPatchSenderOptions { RetryDelay = TimeSpan.Zero },
             recorder.Pin);
 
@@ -186,7 +186,7 @@ public sealed class DirectDeliveryTests : IDisposable
     /// <returns>The peer.</returns>
     private static PeerDescriptor Peer(string id, NodeRole role, string host, EndpointMode mode = EndpointMode.SshTunnel)
         => mode == EndpointMode.Direct
-            ? new(new NodeId(id), id, role, host, 22, "rcynq", endpointMode: mode, tlsFingerprint: Fingerprint, endpointPort: 18444)
+            ? new(new NodeId(id), id, role, host, 22, "rcynq", endpointMode: mode, tlsFingerprint: FINGERPRINT, endpointPort: 18444)
             : new(new NodeId(id), id, role, host, 22, "rcynq");
 
     /// <summary>

@@ -5,7 +5,7 @@ using RCynQ.Core.State;
 namespace RCynQ.Git.Repository;
 
 /// <summary>
-/// Git channel operations: Source receives branches from Dest; push is never performed.
+/// Git channel operations: Workstation receives branches from Origin; push is never performed.
 /// </summary>
 public interface IGitRepositoryService
 {
@@ -143,6 +143,23 @@ public interface IGitRepositoryService
     Task EnsureRemoteAsync(string directory, string remoteName, string placeholderUrl, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Renames a remote-tracking namespace together with its branches, when the old one exists and the new one does not.
+    /// </summary>
+    /// <remarks>
+    /// Branches fetched under <paramref name="oldName"/> without a configured remote are renamed too: the remote is first
+    /// registered with <paramref name="placeholderUrl"/>. A remote <paramref name="newName"/> that already exists is left as
+    /// it is and nothing is renamed.
+    /// </remarks>
+    /// <param name="directory">The working tree.</param>
+    /// <param name="oldName">The current remote-tracking namespace.</param>
+    /// <param name="newName">The new remote-tracking namespace.</param>
+    /// <param name="placeholderUrl">The URL to store when branches exist under the old name without a remote.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns><see langword="true"/> when the namespace was renamed.</returns>
+    /// <exception cref="GitExecutionException">git reported an error.</exception>
+    Task<bool> RenameRemoteAsync(string directory, string oldName, string newName, string placeholderUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Points a repository without any commit at a fetched remote branch.
     /// </summary>
     /// <param name="directory">The working tree.</param>
@@ -180,7 +197,7 @@ public interface IGitRepositoryService
     /// Exports every file tracked at a commit-ish into a plain directory, with no Git metadata.
     /// </summary>
     /// <param name="directory">The repository the commit-ish is resolved in.</param>
-    /// <param name="treeish">The commit, tag or ref to export, for example <c>refs/remotes/dest/main</c>.</param>
+    /// <param name="treeish">The commit, tag or ref to export, for example <c>refs/remotes/rcynq/main</c>.</param>
     /// <param name="destinationDirectory">The directory to extract into; created if it does not exist.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the directory holds the exported tree.</returns>
@@ -296,10 +313,3 @@ public interface IGitRepositoryService
     /// <exception cref="GitExecutionException">git reported an error, for example an unreachable remote.</exception>
     Task<string?> GetRemoteHeadBranchAsync(string directory, string remoteUrl, string? sshCommand, CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// A file that differs between two commits.
-/// </summary>
-/// <param name="Deleted"><see langword="true"/> when the file no longer exists in the newer commit.</param>
-/// <param name="Path">The path relative to the root of the repository, with <c>/</c> separators.</param>
-public sealed record GitPathChange(bool Deleted, string Path);

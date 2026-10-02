@@ -4,11 +4,12 @@ using RCynQ.Core.Api;
 using RCynQ.Core.State;
 using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
+using RCynQ.UI.ViewModels.Repositories;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The branches tab: current branch, divergence from Dest and pull.
+/// The branches tab: current branch, divergence from Origin and pull.
 /// </summary>
 public sealed partial class BranchViewModel : PageViewModelBase
 {
@@ -18,7 +19,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// <summary>The last branch information, or <see langword="null"/> before the first reply of the service.</summary>
     private GitBranchInfo? _branch;
 
-    /// <summary>Whether the node may fetch and pull from Dest.</summary>
+    /// <summary>Whether the node may fetch and pull from Origin.</summary>
     [ObservableProperty]
     private bool _canPull;
 
@@ -31,7 +32,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     public string CurrentBranch => _branch switch
     {
         null => "—",
-        { IsRepository: false } => Texts.Get("Branch.NotRepository"),
+        { IsRepository: false } => Localizer.Get("Branch.NotRepository"),
         var info => info.Branch ?? "(detached HEAD)"
     };
 
@@ -39,9 +40,14 @@ public sealed partial class BranchViewModel : PageViewModelBase
     public string DivergenceText => _branch switch
     {
         null or { IsRepository: false } => string.Empty,
-        { TrackingRef: null } => CanPull ? Texts.Get("Branch.NotFetched") : string.Empty,
-        var info => Texts.Format("Branch.Divergence", info.Behind, info.Ahead)
+        { TrackingRef: null } => CanPull ? Localizer.Get("Branch.NotFetched") : string.Empty,
+        var info => Localizer.Format("Branch.Divergence", info.Behind, info.Ahead)
     };
+
+    /// <summary>
+    /// Gets or sets the repositories of the node, listed on the page; <see langword="null"/> shows no list.
+    /// </summary>
+    public RepositoriesViewModel? Repositories { get; set; }
 
     /// <summary>Gets a value indicating whether Git output is shown.</summary>
     public bool HasOutput => Output.Length > 0;
@@ -49,8 +55,10 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// <summary>
     /// Initializes a new instance of the <see cref="BranchViewModel"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public BranchViewModel(IServiceApiClient api)
+    public BranchViewModel(ILocalizer localizer, IServiceApiClient api)
+        : base(localizer)
     {
         _api = api;
     }
@@ -67,7 +75,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     }
 
     /// <inheritdoc />
-    public override Task RefreshAsync() => RunSafeAsync(async () => Apply(await _api.GetBranchAsync()));
+    protected override Task<bool> LoadAsync() => RunQuietAsync(async () => Apply(await _api.GetBranchAsync()));
 
     /// <summary>
     /// Applies branch information.
@@ -82,7 +90,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     }
 
     /// <summary>
-    /// Fetches from Dest and fast-forwards the current branch.
+    /// Fetches from Origin and fast-forwards the current branch.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
@@ -90,6 +98,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     {
         var result = await _api.PullAsync();
         Output = result.Output;
+        NotifyDataChanged();
         if (result.Branch is not null)
         {
             Apply(result.Branch);
@@ -97,12 +106,12 @@ public sealed partial class BranchViewModel : PageViewModelBase
 
         if (!result.Succeeded)
         {
-            ErrorMessage = Texts.Get("Branch.PullFailed");
+            ErrorMessage = Localizer.Get("Branch.PullFailed");
         }
     });
 
     /// <summary>
-    /// Fetches from Dest without changing the working tree.
+    /// Fetches from Origin without changing the working tree.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
@@ -110,6 +119,7 @@ public sealed partial class BranchViewModel : PageViewModelBase
     {
         var result = await _api.FetchAsync();
         Output = result.Output;
+        NotifyDataChanged();
         if (result.Branch is not null)
         {
             Apply(result.Branch);

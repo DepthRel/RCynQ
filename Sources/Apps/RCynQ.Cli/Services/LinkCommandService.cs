@@ -2,6 +2,7 @@ using System.Globalization;
 using RCynQ.Cli.Output;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
+using RCynQ.Sync.Configuration;
 
 namespace RCynQ.Cli.Services;
 
@@ -13,13 +14,18 @@ public sealed class LinkCommandService
     /// <summary>The link repository.</summary>
     private readonly IChainLinkRepository _links;
 
+    /// <summary>The store that saves a typed link without erasing what is known about its peer.</summary>
+    private readonly ConfiguredLinkStore _store;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LinkCommandService"/> class.
     /// </summary>
     /// <param name="links">The link repository.</param>
-    public LinkCommandService(IChainLinkRepository links)
+    /// <param name="store">The store that saves a typed link without erasing what is known about its peer.</param>
+    public LinkCommandService(IChainLinkRepository links, ConfiguredLinkStore store)
     {
         _links = links;
+        _store = store;
     }
 
     /// <summary>
@@ -31,7 +37,7 @@ public sealed class LinkCommandService
     /// <exception cref="ArgumentException">The settings are invalid.</exception>
     public async Task<string> AddAsync(ChainLinkOptions options, CancellationToken cancellationToken = default)
     {
-        var link = await _links.UpsertAsync(SyncBridgeOptionsValidator.ToChainLink(options), cancellationToken);
+        var link = await _store.SaveAsync(options, cancellationToken);
         return $"Saved link '{link.Name}' ({link.Id}) to {link.Peer.Role} {link.Peer.Id} at {link.Peer.Ssh.JumpSpec} via {link.Transport}.\n";
     }
 

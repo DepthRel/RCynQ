@@ -1,9 +1,12 @@
 {
   "SyncBridge": {
-    "NodeId": "source-1",
+    "NodeId": "workstation-1",
     "Name": "Laptop",
-    "Role": "Source",
-    "WorkdirPath": "/home/dev/projects/app",
+    "Role": "Workstation",
+    "Repositories": [
+      { "Id": "00000000-0000-0000-0000-000000000000", "Name": "app", "Path": "/home/dev/projects/app" }
+    ],
+    "ActiveRepository": "app",
     "ListenPort": 18443,
     "LinkToken": "replace-with-a-long-random-shared-token",
     "ExcludedDirectories": [ "bin", "obj", ".vs", ".idea", "node_modules" ],
@@ -15,8 +18,8 @@
     "Chain": [
       {
         "Name": "relay",
-        "PeerNodeId": "mediator-1",
-        "PeerRole": "Mediator",
+        "PeerNodeId": "relay-1",
+        "PeerRole": "Relay",
         "Host": "203.0.113.4",
         "SshPort": 22,
         "SshUser": "jump",
@@ -27,14 +30,13 @@
         "Priority": 10
       },
       {
-        "Name": "dest",
-        "PeerNodeId": "dest-1",
-        "PeerRole": "Dest",
+        "Name": "origin",
+        "PeerNodeId": "origin-1",
+        "PeerRole": "Origin",
         "Host": "10.8.0.2",
         "SshPort": 22,
         "SshUser": "rcynq",
-        "GitRepoPath": "/srv/repos/app",
-        "SigningPublicKey": "paste the SigningPublicKey from the Dest export",
+        "SigningPublicKey": "paste the SigningPublicKey from the Origin export",
         "RemotePort": 18443,
         "Priority": 1000
       }

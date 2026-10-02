@@ -58,7 +58,19 @@ public static class FilePermissions
         var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await File.WriteAllBytesAsync(temp, content, cancellationToken);
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
+            if (ownerOnly && !OperatingSystem.IsWindows())
+            {
+                // Created with the final mode: a file that is written first and restricted afterwards is readable by
+                // everybody (through the default mode) for as long as the write takes.
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            }
+
+            await using (var stream = new FileStream(temp, options))
+            {
+                await stream.WriteAsync(content, cancellationToken);
+            }
+
             if (ownerOnly)
             {
                 RestrictFileToOwner(temp);
@@ -93,11 +105,11 @@ public static class FilePermissions
             var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
             if (target is DirectoryInfo directory)
             {
-                const InheritanceFlags inherited = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+                const InheritanceFlags INHERITED = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
                 var security = new DirectorySecurity();
                 security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-                security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.FullControl, inherited, PropagationFlags.None, AccessControlType.Allow));
-                security.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, inherited, PropagationFlags.None, AccessControlType.Allow));
+                security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.FullControl, INHERITED, PropagationFlags.None, AccessControlType.Allow));
+                security.AddAccessRule(new FileSystemAccessRule(system, FileSystemRights.FullControl, INHERITED, PropagationFlags.None, AccessControlType.Allow));
                 directory.SetAccessControl(security);
             }
             else if (target is FileInfo file)

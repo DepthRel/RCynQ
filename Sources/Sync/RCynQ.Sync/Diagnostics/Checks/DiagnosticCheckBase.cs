@@ -11,12 +11,12 @@ public abstract class DiagnosticCheckBase : IDiagnosticCheck
     /// <summary>
     /// All roles.
     /// </summary>
-    protected static readonly NodeRole[] AllRoles = { NodeRole.Source, NodeRole.Mediator, NodeRole.Dest };
+    protected static readonly NodeRole[] _allRoles = { NodeRole.Workstation, NodeRole.Relay, NodeRole.Origin };
 
     /// <summary>
     /// The patch channel roles.
     /// </summary>
-    protected static readonly NodeRole[] PatchRoles = { NodeRole.Source, NodeRole.Dest };
+    protected static readonly NodeRole[] _patchRoles = { NodeRole.Workstation, NodeRole.Origin };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DiagnosticCheckBase"/> class.

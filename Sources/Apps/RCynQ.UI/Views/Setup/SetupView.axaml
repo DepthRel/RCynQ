@@ -81,7 +81,7 @@
         </Grid>
         <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding EndpointHint}" IsVisible="{Binding IsEndpointModeVisible}" />
         <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !IsEndpointModeVisible}"
-                   Text="{loc:Loc Setup.MediatorHint}" />
+                   Text="{loc:Loc Setup.RelayHint}" />
 
         <Border Classes="banner error" IsVisible="{Binding HasError}">
           <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" />

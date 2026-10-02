@@ -11,7 +11,7 @@ public sealed record AuthorizedKeyEntry(string? Options, SshPublicKey Key, int L
     /// <summary>
     /// Gets a value indicating whether the entry is restricted by <c>restrict</c> or a forced command.
     /// </summary>
-    public bool IsRestricted => Options is not null
-        && (Options.Split(',').Any(option => option.Trim().Equals("restrict", StringComparison.OrdinalIgnoreCase))
-            || Options.Contains("command=", StringComparison.OrdinalIgnoreCase));
+    public bool IsRestricted => Options is not null &&
+        (Options.Split(',').Any(option => option.Trim().Equals("restrict", StringComparison.OrdinalIgnoreCase)) ||
+            Options.Contains("command=", StringComparison.OrdinalIgnoreCase));
 }

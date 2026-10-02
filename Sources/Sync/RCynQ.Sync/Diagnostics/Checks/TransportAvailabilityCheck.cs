@@ -1,7 +1,7 @@
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
-using RCynQ.Transports.Abstractions.Factory;
 using RCynQ.Localization;
+using RCynQ.Transports.Abstractions.Factory;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -13,13 +13,18 @@ public sealed class TransportAvailabilityCheck : DiagnosticCheckBase
     /// <summary>The link factory.</summary>
     private readonly TransportLinkFactory _factory;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TransportAvailabilityCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="factory">The link factory.</param>
-    public TransportAvailabilityCheck(TransportLinkFactory factory)
-        : base("TransportAvailability", AllRoles)
+    public TransportAvailabilityCheck(ILocalizer localizer, TransportLinkFactory factory)
+        : base("TransportAvailability", _allRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _factory = factory;
     }
 
@@ -34,7 +39,7 @@ public sealed class TransportAvailabilityCheck : DiagnosticCheckBase
             {
                 if (!_factory.IsSupported(kind))
                 {
-                    problems.Add($"{link.Name}: transport {kind} is not available in this build");
+                    problems.Add(_localizer.Format("Diag.Transports.NotInBuild", link.Name, kind));
                 }
             }
 
@@ -50,7 +55,7 @@ public sealed class TransportAvailabilityCheck : DiagnosticCheckBase
         }
 
         return problems.Count == 0
-            ? Pass(Texts.Get("Diag.Transports.Ok"))
-            : Fail(string.Join("; ", problems), Texts.Get("Diag.Transports.Fix"), fix);
+            ? Pass(_localizer.Get("Diag.Transports.Ok"))
+            : Fail(string.Join("; ", problems), _localizer.Get("Diag.Transports.Fix"), fix);
     }
 }

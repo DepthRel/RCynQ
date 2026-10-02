@@ -12,7 +12,7 @@ namespace RCynQ.Git.Tests;
 public class GitBundleRepositoryTests
 {
     /// <summary>The Git command runner.</summary>
-    private readonly GitCommandRunner _runner = new(new SystemProcessRunner(), new GitOptions());
+    private readonly GitCommandRunner _runner = new(new SystemProcessRunner(TestTexts.English), new GitOptions());
 
     /// <summary>
     /// Verifies that a bundle holds only what the receiver lacks, and that there is no bundle when the receiver has everything.
@@ -29,7 +29,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         var first = await CommitAsync(source.Path, "first");
@@ -47,11 +47,11 @@ public class GitBundleRepositoryTests
         new FileInfo(increment).Length.Should().BeLessThan(new FileInfo(full).Length, "the increment leaves out the first commit");
 
         await service.InitializeAsync(target.Path, "main");
-        await service.FetchBundleAsync(target.Path, full, "dest");
-        (await service.GetKnownCommitsAsync(target.Path, "dest")).Should().BeEmpty("nothing is checked out yet, and no local branch exists");
-        await service.AdoptRemoteBranchAsync(target.Path, "dest", "main", keepWorkingFiles: false);
+        await service.FetchBundleAsync(target.Path, full, "rcynq");
+        (await service.GetKnownCommitsAsync(target.Path, "rcynq")).Should().BeEmpty("nothing is checked out yet, and no local branch exists");
+        await service.AdoptRemoteBranchAsync(target.Path, "rcynq", "main", keepWorkingFiles: false);
         File.ReadAllText(Path.Combine(target.Path, "b.txt")).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("two\n");
-        (await service.GetKnownCommitsAsync(target.Path, "dest")).Should().Equal(second);
+        (await service.GetKnownCommitsAsync(target.Path, "rcynq")).Should().Equal(second);
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public class GitBundleRepositoryTests
 
         using var source = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         var commit = await CommitAsync(source.Path, "first");
@@ -95,7 +95,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         await CommitAsync(source.Path, "first");
@@ -103,9 +103,9 @@ public class GitBundleRepositoryTests
         (await service.CreateBundleAsync(source.Path, bundle, Array.Empty<string>())).Should().BeTrue();
         target.Write("a.txt", "edited here\n");
         await service.InitializeAsync(target.Path, "main");
-        await service.FetchBundleAsync(target.Path, bundle, "dest");
+        await service.FetchBundleAsync(target.Path, bundle, "rcynq");
 
-        await service.AdoptRemoteBranchAsync(target.Path, "dest", "main", keepWorkingFiles: true);
+        await service.AdoptRemoteBranchAsync(target.Path, "rcynq", "main", keepWorkingFiles: true);
 
         File.ReadAllText(Path.Combine(target.Path, "a.txt")).Should().Be("edited here\n");
         (await _runner.RunAsync(new[] { "status", "--porcelain" }, target.Path)).StandardOutput.Should().Contain("a.txt");
@@ -116,8 +116,8 @@ public class GitBundleRepositoryTests
     /// <summary>
     /// Verifies that once the remote is ensured, plain Git tooling can create a local tracking branch from a fetched branch on its
     /// own (<c>git checkout &lt;branch&gt;</c> and <c>git checkout --track</c>), which fails without a registered remote. This
-    /// reproduces the exact failure reported against RCynQ: switching to a second branch of Dest after the first pull adopted
-    /// another one, through VS Code's <c>git checkout -q --track dest/&lt;branch&gt;</c>.
+    /// reproduces the exact failure reported against RCynQ: switching to a second branch of Origin after the first pull adopted
+    /// another one, through VS Code's <c>git checkout -q --track rcynq/&lt;branch&gt;</c>.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -131,7 +131,7 @@ public class GitBundleRepositoryTests
         using var source = new TempDirectory();
         using var target = new TempDirectory();
         using var work = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(source.Path);
         source.Write("a.txt", "one\n");
         await CommitAsync(source.Path, "first");
@@ -141,17 +141,17 @@ public class GitBundleRepositoryTests
         var bundle = Path.Combine(work.Path, "all.bundle");
         (await service.CreateBundleAsync(source.Path, bundle, Array.Empty<string>())).Should().BeTrue();
         await service.InitializeAsync(target.Path, "main");
-        await service.FetchBundleAsync(target.Path, bundle, "dest");
-        await service.AdoptRemoteBranchAsync(target.Path, "dest", "main", keepWorkingFiles: false);
+        await service.FetchBundleAsync(target.Path, bundle, "rcynq");
+        await service.AdoptRemoteBranchAsync(target.Path, "rcynq", "main", keepWorkingFiles: false);
 
         // Without a registered remote, neither plain DWIM nor an explicit --track can create a local tracking branch from a bare
         // name: this is the exact failure reported against RCynQ ("starting point '...' is not a branch").
         var beforeDwim = await _runner.RunAsync(new[] { "checkout", "feature/x" }, target.Path);
-        var beforeTrack = await _runner.RunAsync(new[] { "checkout", "-q", "--track", "dest/feature/x" }, target.Path);
+        var beforeTrack = await _runner.RunAsync(new[] { "checkout", "-q", "--track", "rcynq/feature/x" }, target.Path);
         beforeDwim.ExitCode.Should().NotBe(0, "no remote is registered yet, so Git has nothing to match 'feature/x' against");
         beforeTrack.ExitCode.Should().NotBe(0, "git checkout --track refuses when it cannot find a remote that owns the ref (reported upstream as 'is not a branch')");
 
-        await service.EnsureRemoteAsync(target.Path, "dest", "file:///placeholder", CancellationToken.None);
+        await service.EnsureRemoteAsync(target.Path, "rcynq", "file:///placeholder", CancellationToken.None);
 
         (await _runner.RunAsync(new[] { "checkout", "feature/x" }, target.Path)).ExitCode.Should().Be(0, "plain checkout now finds the branch through the registered remote");
         (await service.GetCurrentBranchAsync(target.Path)).Should().Be("feature/x");
@@ -172,14 +172,14 @@ public class GitBundleRepositoryTests
         }
 
         using var directory = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
         await InitAsync(directory.Path);
-        (await _runner.RunAsync(new[] { "remote", "add", "dest", "ssh://real-remote-someone-configured-by-hand/repo" }, directory.Path)).ExitCode.Should().Be(0);
+        (await _runner.RunAsync(new[] { "remote", "add", "rcynq", "ssh://real-remote-someone-configured-by-hand/repo" }, directory.Path)).ExitCode.Should().Be(0);
 
-        await service.EnsureRemoteAsync(directory.Path, "dest", "file:///placeholder", CancellationToken.None);
-        await service.EnsureRemoteAsync(directory.Path, "dest", "file:///placeholder", CancellationToken.None);
+        await service.EnsureRemoteAsync(directory.Path, "rcynq", "file:///placeholder", CancellationToken.None);
+        await service.EnsureRemoteAsync(directory.Path, "rcynq", "file:///placeholder", CancellationToken.None);
 
-        (await _runner.RunAsync(new[] { "remote", "get-url", "dest" }, directory.Path)).StandardOutput.Trim()
+        (await _runner.RunAsync(new[] { "remote", "get-url", "rcynq" }, directory.Path)).StandardOutput.Trim()
             .Should().Be("ssh://real-remote-someone-configured-by-hand/repo", "an existing remote must never be silently replaced");
     }
 
@@ -196,10 +196,10 @@ public class GitBundleRepositoryTests
     public async Task Unsafe_Branch_Names_Are_Refused(string branch)
     {
         using var directory = new TempDirectory();
-        var service = new GitRepositoryService(_runner);
+        var service = new GitRepositoryService(TestTexts.English, _runner);
 
         var initialize = () => service.InitializeAsync(directory.Path, branch);
-        var adopt = () => service.AdoptRemoteBranchAsync(directory.Path, "dest", branch, keepWorkingFiles: false);
+        var adopt = () => service.AdoptRemoteBranchAsync(directory.Path, "rcynq", branch, keepWorkingFiles: false);
 
         await initialize.Should().ThrowAsync<ArgumentException>();
         await adopt.Should().ThrowAsync<ArgumentException>();

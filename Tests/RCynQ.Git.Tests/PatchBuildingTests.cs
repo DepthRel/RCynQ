@@ -25,7 +25,7 @@ public class PatchBuildingTests
     /// <summary>
     /// The path utility.
     /// </summary>
-    private readonly PathUtility _paths = new();
+    private readonly PathUtility _paths = new(TestTexts.English);
 
     /// <summary>
     /// Verifies that git commands get byte-exact configuration and a non-interactive environment.
@@ -42,12 +42,12 @@ public class PatchBuildingTests
 
         await runner.Received(1).RunAsync(
             Arg.Is<ProcessSpec>(spec =>
-                spec.FileName == "/usr/bin/git"
-                && spec.Arguments.SequenceEqual(GitCommandRunner.ConfigPrefix.Append("status"))
-                && spec.WorkingDirectory == "/work"
-                && spec.EnvironmentVariables!["GIT_TERMINAL_PROMPT"] == "0"
-                && spec.EnvironmentVariables["GIT_ALLOW_PROTOCOL"] == "ssh:file"
-                && spec.EnvironmentVariables["GIT_SSH_COMMAND"] == "ssh -J a@b:22"),
+                spec.FileName == "/usr/bin/git" &&
+                spec.Arguments.SequenceEqual(GitCommandRunner.ConfigPrefix.Append("status")) &&
+                spec.WorkingDirectory == "/work" &&
+                spec.EnvironmentVariables!["GIT_TERMINAL_PROMPT"] == "0" &&
+                spec.EnvironmentVariables["GIT_ALLOW_PROTOCOL"] == "ssh:file" &&
+                spec.EnvironmentVariables["GIT_SSH_COMMAND"] == "ssh -J a@b:22"),
             Arg.Any<CancellationToken>());
     }
 
@@ -121,7 +121,7 @@ public class PatchBuildingTests
         clock.GetUtcNow().Returns(now);
         var builder = new DefaultPatchBuilder(manifestBuilder, new DefaultStateHasher(), clock);
 
-        var envelope = await builder.BuildAsync(new NodeId("source"), new NodeId("dest"), baseDir.Path, work.Path);
+        var envelope = await builder.BuildAsync(new NodeId("workstation"), new NodeId("origin"), baseDir.Path, work.Path);
 
         envelope.Manifest.Select(change => (change.Kind, change.Path)).Should().Equal(
             (ChangeKind.Added, "add/x.txt"), (ChangeKind.Deleted, "del.txt"), (ChangeKind.Modified, "mod.txt"));
@@ -227,10 +227,10 @@ public class PatchBuildingTests
     [Fact]
     public void Serializer_RoundTrip_And_Validation()
     {
-        var serializer = new PatchEnvelopeSerializer(_paths);
+        var serializer = new PatchEnvelopeSerializer(TestTexts.English, _paths);
         var hash = new string('c', 64);
         var envelope = new PatchEnvelope(
-            Guid.NewGuid(), new NodeId("source"), new NodeId("dest"), DateTimeOffset.UtcNow, hash, hash,
+            Guid.NewGuid(), new NodeId("workstation"), new NodeId("origin"), DateTimeOffset.UtcNow, hash, hash,
             new[]
             {
                 new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false, new string('d', 64)),
@@ -270,5 +270,24 @@ public class PatchBuildingTests
 
         var malformed = () => serializer.Deserialize("{not json"u8);
         malformed.Should().Throw<FormatException>();
+    }
+
+    /// <summary>
+    /// Verifies that a manifest with a <c>null</c> entry, which is valid JSON, is refused as malformed instead of failing
+    /// with a null reference.
+    /// </summary>
+    [Fact]
+    public void Serializer_Refuses_A_Null_Manifest_Entry()
+    {
+        var serializer = new PatchEnvelopeSerializer(TestTexts.English, _paths);
+        var hash = new string('c', 64);
+        var json = $$"""
+            {"patchId":"{{Guid.NewGuid()}}","sender":"workstation","receiver":"origin","createdAt":"2026-01-01T00:00:00+00:00",
+             "baseStateHash":"{{hash}}","incomingStateHash":"{{hash}}","changes":[null]}
+            """;
+
+        var deserialize = () => serializer.Deserialize(Encoding.UTF8.GetBytes(json));
+
+        deserialize.Should().Throw<FormatException>();
     }
 }

@@ -45,4 +45,12 @@ public interface ISyncHistoryRepository
     /// otherwise <see langword="false"/>.
     /// </returns>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the history entries recorded before a moment.
+    /// </summary>
+    /// <param name="recordedBeforeUtc">Entries recorded before this moment are deleted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of deleted entries.</returns>
+    Task<int> DeleteOlderThanAsync(DateTimeOffset recordedBeforeUtc, CancellationToken cancellationToken = default);
 }

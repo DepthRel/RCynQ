@@ -96,4 +96,19 @@ public interface IPatchFileStorage
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the stale uploads are deleted.</returns>
     Task PruneUploadsAsync(DateTimeOffset olderThanUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes everything stored for a patch: its diff and its content.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of bytes that were freed.</returns>
+    Task<long> DeletePatchAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the patches that have stored data.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The identifiers of the patches with a diff or content on disk.</returns>
+    Task<IReadOnlyList<Guid>> ListStoredPatchesAsync(CancellationToken cancellationToken = default);
 }

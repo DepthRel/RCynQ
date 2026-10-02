@@ -27,7 +27,7 @@ public sealed class IconView : Control
         AvaloniaProperty.Register<IconView, double>(nameof(StrokeThickness), 1.75);
 
     /// <summary>The size of the icon grid.</summary>
-    private const double GridSize = 24;
+    private const double GRID_SIZE = 24;
 
     /// <summary>
     /// Initializes static members of the <see cref="IconView"/> class.
@@ -75,7 +75,7 @@ public sealed class IconView : Control
             return;
         }
 
-        var scale = size / GridSize;
+        var scale = size / GRID_SIZE;
         var offsetX = (Bounds.Width - size) / 2;
         var offsetY = (Bounds.Height - size) / 2;
         var pen = new Pen(Foreground, StrokeThickness / scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);

@@ -1,6 +1,7 @@
 using RCynQ.Core.Diagnostics;
-using RCynQ.Sync.Diagnostics.Endpoint;
+using RCynQ.Core.Enums;
 using RCynQ.Localization;
+using RCynQ.Sync.Diagnostics.Endpoint;
 
 namespace RCynQ.Sync.Diagnostics.Checks;
 
@@ -12,13 +13,18 @@ public sealed class PatchEndpointLocalCheck : DiagnosticCheckBase
     /// <summary>The endpoint probe.</summary>
     private readonly ILocalEndpointProbe _probe;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchEndpointLocalCheck"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="probe">The endpoint probe.</param>
-    public PatchEndpointLocalCheck(ILocalEndpointProbe probe)
-        : base("PatchEndpointLocal", PatchRoles)
+    public PatchEndpointLocalCheck(ILocalizer localizer, ILocalEndpointProbe probe)
+        : base("PatchEndpointLocal", _patchRoles)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _probe = probe;
     }
 
@@ -27,10 +33,10 @@ public sealed class PatchEndpointLocalCheck : DiagnosticCheckBase
     {
         var port = context.Options.ListenPort;
         return await _probe.IsHealthyAsync(port, cancellationToken)
-            ? Pass(Texts.Format("Diag.Endpoint.Ok", port))
+            ? Pass(_localizer.Format("Diag.Endpoint.Ok", port))
             : Fail(
-                Texts.Format("Diag.Endpoint.Down", port),
-                Texts.Get("Diag.Endpoint.Fix"),
-                new DiagnosticFix(DiagnosticFixKind.RestartLocalEndpoint, Texts.Get("Diag.Endpoint.Restart"), new Dictionary<string, string> { ["port"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+                _localizer.Format("Diag.Endpoint.Down", port),
+                _localizer.Get("Diag.Endpoint.Fix"),
+                new DiagnosticFix(DiagnosticFixKind.RestartLocalEndpoint, _localizer.Get("Diag.Endpoint.Restart"), new Dictionary<string, string> { ["port"] = port.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
     }
 }

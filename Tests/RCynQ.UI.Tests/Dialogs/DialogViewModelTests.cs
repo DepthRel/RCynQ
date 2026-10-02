@@ -2,9 +2,9 @@ using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
+using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Dialogs;
-using RCynQ.UI.ViewModels.Items;
 
 namespace RCynQ.UI.Tests.Dialogs;
 
@@ -14,12 +14,34 @@ namespace RCynQ.UI.Tests.Dialogs;
 public sealed class DialogViewModelTests
 {
     /// <summary>
+    /// Verifies the reported bug: the reason of a conflict comes from the service as the key of a text with its values
+    /// and is shown as a sentence in the language of the user, not as separators, a key and a path. A reason stored
+    /// as plain text is shown as it is, and a file without a reason shows none.
+    /// </summary>
+    [Fact]
+    public void Conflict_Reasons_Are_Worded_For_The_User()
+    {
+        var dialog = new ConflictDialogViewModel(TestTexts.Russian, Guid.NewGuid(), "workstation-1", new[]
+        {
+            new ConflictFile("Ddu/Program.cs", null, null, LocalizedText.Encode("Apply.RejectedHunks", "Ddu/Program.cs")),
+            new ConflictFile("notes.txt", null, null, "Сохранённый ранее текст."),
+            new ConflictFile("plain.txt", null, null)
+        });
+
+        dialog.Files.Select(file => file.Path).Should().Equal("Ddu/Program.cs", "notes.txt", "plain.txt");
+        dialog.Files[0].Detail.Should().Be("Отклонённые фрагменты записаны в Ddu/Program.cs.rej.");
+        dialog.Files[0].Detail.Should().NotContain("Apply.RejectedHunks");
+        dialog.Files[1].Detail.Should().Be("Сохранённый ранее текст.");
+        dialog.Files[2].HasDetail.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that each conflict choice records its policy and closes the dialog.
     /// </summary>
     [Fact]
     public void Conflict_Choices_Close_With_Policy()
     {
-        var dialog = new ConflictDialogViewModel(Guid.NewGuid(), "dest-1", Array.Empty<ConflictFile>());
+        var dialog = new ConflictDialogViewModel(TestTexts.Russian, Guid.NewGuid(), "origin-1", Array.Empty<ConflictFile>());
         bool? closed = null;
         dialog.CloseRequested += (_, confirmed) => closed = confirmed;
 
@@ -41,7 +63,7 @@ public sealed class DialogViewModelTests
     [Fact]
     public void AddNode_Rejects_Unsafe_Host()
     {
-        var dialog = new AddNodeDialogViewModel { NodeId = "mediator-1", Host = "-oProxyCommand=calc", SshUser = "jump" };
+        var dialog = new AddNodeDialogViewModel(TestTexts.Russian) { NodeId = "relay-1", Host = "-oProxyCommand=calc", SshUser = "jump" };
         var closed = false;
         dialog.CloseRequested += (_, _) => closed = true;
 
@@ -57,7 +79,7 @@ public sealed class DialogViewModelTests
     [Fact]
     public void AddNode_Rejects_Invalid_NodeId()
     {
-        var dialog = new AddNodeDialogViewModel { NodeId = "bad id/..", Host = "203.0.113.4", SshUser = "jump" };
+        var dialog = new AddNodeDialogViewModel(TestTexts.Russian) { NodeId = "bad id/..", Host = "203.0.113.4", SshUser = "jump" };
 
         dialog.ConfirmCommand.Execute(null);
 
@@ -71,25 +93,25 @@ public sealed class DialogViewModelTests
     [Fact]
     public void AddNode_Builds_Link_Options()
     {
-        var dialog = new AddNodeDialogViewModel
+        var dialog = new AddNodeDialogViewModel(TestTexts.Russian)
         {
-            NodeId = "dest-1",
-            Role = NodeRole.Dest,
+            NodeId = "origin-1",
+            Role = NodeRole.Origin,
             Host = "10.8.0.2",
             SshUser = "rcynq",
-            SelectedTransport = TransportOption.For(TransportKind.AmneziaWG),
             ConfigPath = "/etc/amnezia/amneziawg/awg0.conf"
         };
+        dialog.SelectedTransport = dialog.Transports.Single(option => option.Value == TransportKind.AmneziaWG);
 
         dialog.Transport.Should().Be(TransportKind.AmneziaWG);
         dialog.NeedsConfigPath.Should().BeTrue();
-        TransportOption.For(TransportKind.Direct).Title.Should().Be("Обычная сеть (без VPN)", "'Direct' means no VPN tunnel, not 'no SSH'");
+        dialog.Transports.Single(option => option.Value == TransportKind.Direct).Title.Should().Be("Обычная сеть (без VPN)", "'Direct' means no VPN tunnel, not 'no SSH'");
 
         dialog.ConfirmCommand.Execute(null);
 
         dialog.Confirmed.Should().BeTrue();
         var options = dialog.ToOptions();
-        options.RemotePort.Should().Be(18443, "a Dest peer is reached on its service port");
+        options.RemotePort.Should().Be(18443, "an Origin peer is reached on its service port");
         options.Priority.Should().Be(1000);
         options.TransportSettings.Should().Contain("configPath", "/etc/amnezia/amneziawg/awg0.conf");
     }
@@ -100,7 +122,7 @@ public sealed class DialogViewModelTests
     [Fact]
     public void Export_Validates_Host()
     {
-        var dialog = new ExportDialogViewModel(Substitute.For<IServiceApiClient>()) { Host = "bad host;rm", User = "rcynq" };
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, Substitute.For<IServiceApiClient>()) { Host = "bad host;rm", User = "rcynq" };
 
         dialog.ConfirmCommand.Execute(null);
         dialog.Confirmed.Should().BeFalse();

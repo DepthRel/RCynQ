@@ -1,0 +1,52 @@
+using Microsoft.Extensions.Logging;
+using RCynQ.Core.Api;
+using RCynQ.Core.Enums;
+using RCynQ.Sync.Paths;
+using RCynQ.Sync.State;
+
+namespace RCynQ.Service.Pipelines;
+
+/// <summary>
+/// Workstation pipeline: patch send and receive, Git fetch through Origin and events. On start it records the current state.
+/// </summary>
+public sealed class WorkstationPipeline : IRolePipeline
+{
+    /// <summary>The state tracker.</summary>
+    private readonly StateTracker _tracker;
+
+    /// <summary>The sync paths.</summary>
+    private readonly SyncPaths _paths;
+
+    /// <summary>The logger.</summary>
+    private readonly ILogger<WorkstationPipeline> _logger;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkstationPipeline"/> class.
+    /// </summary>
+    /// <param name="tracker">The state tracker.</param>
+    /// <param name="paths">The sync paths.</param>
+    /// <param name="logger">The logger.</param>
+    public WorkstationPipeline(StateTracker tracker, SyncPaths paths, ILogger<WorkstationPipeline> logger)
+    {
+        _tracker = tracker;
+        _paths = paths;
+        _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public NodeRole Role => NodeRole.Workstation;
+
+    /// <inheritdoc />
+    public RoleCapabilities Capabilities => RoleCapabilities.For(Role);
+
+    /// <inheritdoc />
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await _tracker.CaptureAsync(cancellationToken);
+        _logger.LogInformation("Workstation pipeline started for {Workdir}; sync base {Mode} {Commit}, local state {Hash}.",
+            _paths.Workdir, snapshot.SyncBase.Mode, snapshot.SyncBase.Commit ?? snapshot.SyncBase.Problem, snapshot.State.LocalStateHash);
+    }
+
+    /// <inheritdoc />
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}

@@ -43,7 +43,7 @@ public sealed class StatusCommandService
         var text = new StringBuilder();
 
         text.Append("Node:           ").Append(status.NodeId).Append(" (").Append(status.Role).Append(") ").Append(status.Name).Append('\n');
-        if (status.Role != Core.Enums.NodeRole.Mediator)
+        if (status.Role != Core.Enums.NodeRole.Relay)
         {
             text.Append("Sync base:      ").Append(DescribeSyncBase(status.SyncBase)).Append('\n');
             text.Append("Local state:    ").Append(TextFormat.Hash(status.State.LocalStateHash)).Append('\n');

@@ -18,10 +18,10 @@ public sealed class LocalizedTextTests
     [Fact]
     public void Encoded_Message_Follows_The_Language_Of_The_Reader()
     {
-        var stored = LocalizedText.Encode("Patch.Sent", 3, "dest-1");
+        var stored = LocalizedText.Encode("Patch.Sent", 3, "origin-1");
 
-        Assert.Equal("Sent 3 file(s) to dest-1.", LocalizedText.Render(stored, In("en")));
-        Assert.Equal("Отправлено файлов: 3, получатель: dest-1.", LocalizedText.Render(stored, In("ru")));
+        Assert.Equal("Sent 3 file(s) to origin-1.", LocalizedText.Render(stored, In("en")));
+        Assert.Equal("Отправлено файлов: 3, получатель: origin-1.", LocalizedText.Render(stored, In("ru")));
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public sealed class LocalizedTextTests
     {
         Assert.False(LocalizedText.IsEncoded("Already a sentence."));
         Assert.Equal("Already a sentence.", LocalizedText.Render("Already a sentence.", In("ru")));
-        Assert.Null(LocalizedText.Render(null));
+        Assert.Null(LocalizedText.Render(null, TestTexts.English));
     }
 
     /// <summary>

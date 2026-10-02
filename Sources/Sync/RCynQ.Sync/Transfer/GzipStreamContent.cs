@@ -26,7 +26,7 @@ public sealed class GzipStreamContent : HttpContent
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        Headers.ContentEncoding.Add(GzipCodec.ContentEncoding);
+        Headers.ContentEncoding.Add(GzipCodec.CONTENT_ENCODING);
     }
 
     /// <inheritdoc />

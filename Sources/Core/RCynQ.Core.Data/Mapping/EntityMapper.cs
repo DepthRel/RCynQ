@@ -57,7 +57,6 @@ internal static class EntityMapper
             entity.SshUser,
             entity.HostKeyFingerprint,
             entity.SigningPublicKey,
-            entity.GitRepoPath,
             entity.SshPublicKey,
             entity.EndpointMode,
             entity.TlsFingerprint,
@@ -79,7 +78,6 @@ internal static class EntityMapper
         entity.SshUser = peer.SshUser;
         entity.HostKeyFingerprint = peer.HostKeyFingerprint;
         entity.SigningPublicKey = peer.SigningPublicKey;
-        entity.GitRepoPath = peer.GitRepoPath;
         entity.SshPublicKey = peer.SshPublicKey;
         entity.EndpointMode = peer.EndpointMode;
         entity.TlsFingerprint = peer.TlsFingerprint;
@@ -105,8 +103,43 @@ internal static class EntityMapper
             entity.RemotePort,
             entity.Priority,
             JsonSerializer.Deserialize<List<TransportKind>>(entity.FallbackTransportsJson, Json),
-            JsonSerializer.Deserialize<Dictionary<string, string>>(entity.TransportSettingsJson, Json));
+            JsonSerializer.Deserialize<Dictionary<string, string>>(entity.TransportSettingsJson, Json),
+            ToRoutes(entity.RoutesJson),
+            entity.PinnedRouteId);
     }
+
+    /// <summary>
+    /// Reads the routes of a link from their JSON column.
+    /// </summary>
+    /// <param name="json">The JSON array; blank means no routes.</param>
+    /// <returns>The routes.</returns>
+    internal static IReadOnlyList<LinkRoute> ToRoutes(string? json)
+        => string.IsNullOrWhiteSpace(json)
+            ? Array.Empty<LinkRoute>()
+            : (JsonSerializer.Deserialize<List<StoredRoute>>(json, Json) ?? new List<StoredRoute>())
+                .Select(route => new LinkRoute(route.Id, route.Name, new SshEndpoint(route.SshUser, route.Host, route.SshPort), route.Priority))
+                .ToArray();
+
+    /// <summary>
+    /// Writes the routes of a link as the JSON of their column.
+    /// </summary>
+    /// <param name="routes">The routes.</param>
+    /// <returns>The JSON array.</returns>
+    internal static string ToJson(IReadOnlyList<LinkRoute> routes)
+        => JsonSerializer.Serialize(
+            routes.Select(route => new StoredRoute(route.Id, route.Name, route.Ssh.Host, route.Ssh.Port, route.Ssh.User, route.Priority)).ToArray(),
+            Json);
+
+    /// <summary>
+    /// A route as it is kept in the JSON column of its link.
+    /// </summary>
+    /// <param name="Id">The route identifier.</param>
+    /// <param name="Name">The display name.</param>
+    /// <param name="Host">The host name or address.</param>
+    /// <param name="SshPort">The SSH port.</param>
+    /// <param name="SshUser">The SSH user.</param>
+    /// <param name="Priority">The preference; lower values are preferred.</param>
+    private sealed record StoredRoute(Guid Id, string Name, string Host, int SshPort, string SshUser, int Priority);
 
     /// <summary>
     /// Copies a chain link into an entity.
@@ -124,6 +157,8 @@ internal static class EntityMapper
         entity.LocalPort = link.LocalPort;
         entity.RemotePort = link.RemotePort;
         entity.Priority = link.Priority;
+        entity.RoutesJson = ToJson(link.Routes);
+        entity.PinnedRouteId = link.PinnedRouteId;
     }
 
     /// <summary>
@@ -145,7 +180,10 @@ internal static class EntityMapper
             JsonSerializer.Deserialize<List<FileChange>>(entity.ManifestJson, Json) ?? new List<FileChange>(),
             JsonSerializer.Deserialize<List<ConflictFile>>(entity.ConflictsJson, Json),
             entity.Error,
-            entity.Signature);
+            entity.Signature)
+        {
+            Repository = entity.Repository
+        };
 
     /// <summary>
     /// Copies patch metadata into an entity.
@@ -167,6 +205,7 @@ internal static class EntityMapper
         entity.ConflictsJson = JsonSerializer.Serialize(patch.Conflicts, Json);
         entity.Error = patch.Error;
         entity.Signature = patch.Signature.Length == 0 ? null : patch.Signature;
+        entity.Repository = patch.Repository;
     }
 
     /// <summary>

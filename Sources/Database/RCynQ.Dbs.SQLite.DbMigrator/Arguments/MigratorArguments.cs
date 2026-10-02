@@ -12,7 +12,7 @@ public sealed record MigratorArguments(string? ConnectionString, bool ShowHelp, 
     /// <summary>
     /// The usage text.
     /// </summary>
-    public const string Usage =
+    public const string USAGE =
         """
         RCynQ.Dbs.SQLite.DbMigrator - applies RCynQ SQLite schema migrations.
 

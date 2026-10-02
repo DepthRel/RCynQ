@@ -1,6 +1,7 @@
 using RCynQ.Core.Diagnostics;
-using RCynQ.Transports.Abstractions.Management;
+using RCynQ.Core.Enums;
 using RCynQ.Localization;
+using RCynQ.Transports.Abstractions.Management;
 
 namespace RCynQ.Sync.Diagnostics.AutoFix;
 
@@ -12,12 +13,17 @@ public sealed class StartTransportFixHandler : IAutoFixHandler
     /// <summary>The link manager.</summary>
     private readonly ILinkManager _links;
 
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="StartTransportFixHandler"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="links">The link manager.</param>
-    public StartTransportFixHandler(ILinkManager links)
+    public StartTransportFixHandler(ILocalizer localizer, ILinkManager links)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _links = links;
     }
 
@@ -29,10 +35,10 @@ public sealed class StartTransportFixHandler : IAutoFixHandler
     {
         if (!fix.Parameters.TryGetValue("linkId", out var text) || !Guid.TryParse(text, out var linkId))
         {
-            throw new ArgumentException(Texts.Get("Fix.NoLinkId"));
+            throw new ArgumentException(_localizer.Get("Fix.NoLinkId"));
         }
 
         var state = await _links.StartAsync(linkId, cancellationToken);
-        return new AutoFixResult(state.IsUsable, Texts.Format("Fix.LinkState", state.LinkName, state.Status, state.Message));
+        return new AutoFixResult(state.IsUsable, _localizer.Format("Fix.LinkState", state.LinkName, state.Status, state.Message));
     }
 }

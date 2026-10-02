@@ -110,6 +110,16 @@ public sealed class ChainLinkRepository : IChainLinkRepository, IPeerRepository
         return entities.Select(EntityMapper.ToDomain).ToArray();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> DeleteUnlinkedAsync(NodeId id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var deleted = await db.Peers
+            .Where(peer => peer.Id == id.Value && !db.ChainLinks.Any(link => link.PeerId == peer.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+        return deleted > 0;
+    }
+
     /// <summary>
     /// Adds or updates a peer entity in the given context without saving.
     /// </summary>

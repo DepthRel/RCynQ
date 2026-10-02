@@ -18,13 +18,13 @@ public readonly record struct NodeId
     /// <summary>
     /// Maximum allowed length of a node identifier value.
     /// </summary>
-    public const int MaxLength = 128;
+    public const int MAX_LENGTH = 128;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NodeId"/> struct.
     /// </summary>
     /// <param name="value">
-    /// The node identifier. Must not be blank, must not exceed <see cref="MaxLength"/> characters and
+    /// The node identifier. Must not be blank, must not exceed <see cref="MAX_LENGTH"/> characters and
     /// may contain only letters, digits, <c>-</c>, <c>_</c> and <c>.</c>.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
@@ -39,22 +39,26 @@ public readonly record struct NodeId
         var trimmed = value.Trim();
         if (trimmed.Length == 0)
         {
-            throw new ArgumentException(Texts.Get("NodeId.Blank"), nameof(value));
+            throw LocalizedError.Argument(nameof(value), "NodeId.Blank");
         }
 
-        if (trimmed.Length > MaxLength)
+        if (trimmed.Length > MAX_LENGTH)
         {
-            throw new ArgumentException(Texts.Format("NodeId.TooLong", MaxLength), nameof(value));
+            throw LocalizedError.Argument(nameof(value), "NodeId.TooLong", MAX_LENGTH);
         }
 
         foreach (var c in trimmed)
         {
             if (!(char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
             {
-                throw new ArgumentException(
-                    Texts.Get("NodeId.Forbidden"),
-                    nameof(value));
+                throw LocalizedError.Argument(nameof(value), "NodeId.Forbidden");
             }
+        }
+
+        // "." and ".." pass the character check, but as a directory name they are the directory itself and its parent.
+        if (trimmed.All(c => c == '.'))
+        {
+            throw LocalizedError.Argument(nameof(value), "NodeId.OnlyDots");
         }
 
         _value = trimmed;

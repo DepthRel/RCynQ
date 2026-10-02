@@ -90,4 +90,23 @@ public sealed class InMemoryPatchFileStorage : IPatchFileStorage
 
     /// <inheritdoc />
     public Task PruneUploadsAsync(DateTimeOffset olderThanUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task<long> DeletePatchAsync(Guid patchId, CancellationToken cancellationToken = default)
+    {
+        long freed = Diffs.TryRemove(patchId, out var diff) ? diff.Length : 0;
+        foreach (var key in Staged.Keys.Where(key => key.PatchId == patchId).ToArray())
+        {
+            if (Staged.TryRemove(key, out var bytes))
+            {
+                freed += bytes.Length;
+            }
+        }
+
+        return Task.FromResult(freed);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ListStoredPatchesAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<Guid>>(Diffs.Keys.Concat(Staged.Keys.Select(key => key.PatchId)).Distinct().ToArray());
 }

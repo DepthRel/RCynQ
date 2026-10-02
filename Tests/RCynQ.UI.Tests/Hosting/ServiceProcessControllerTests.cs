@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Connection;
 using RCynQ.UI.Services.Hosting;
@@ -203,7 +204,7 @@ public sealed class ServiceProcessControllerTests : IDisposable
     /// <returns>The controller.</returns>
     private ServiceProcessController Create(ServiceLaunchCommand? command)
         => new(
-            new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, ApiTokenProvider.ArgumentSource, _configPath),
+            TestTexts.Russian, new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, ApiTokenProvider.ARGUMENT_SOURCE, _configPath),
             _api,
             _launcher,
             command,

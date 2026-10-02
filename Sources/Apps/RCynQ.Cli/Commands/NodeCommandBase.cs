@@ -4,6 +4,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Core.Exceptions;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands;
 
@@ -44,11 +45,11 @@ public abstract class NodeCommandBase : ICommand
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException or KeyNotFoundException or FileNotFoundException)
         {
-            throw new CommandException(ex.Message, 2);
+            throw new CommandException(context.Get<ILocalizer>().Describe(ex), 2);
         }
         catch (Exception ex) when (ex is SyncBridgeException or InvalidOperationException or IOException)
         {
-            throw new CommandException(ex.Message, 1);
+            throw new CommandException(context.Get<ILocalizer>().Describe(ex), 1);
         }
     }
 

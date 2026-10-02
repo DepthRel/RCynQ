@@ -6,11 +6,13 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
@@ -18,12 +20,12 @@ using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Patches.Serialization;
-using RCynQ.Sync.Transfer;
 using RCynQ.Service.Tests.Support;
 using RCynQ.Sync.Configuration;
-using Microsoft.Extensions.Hosting;
 using RCynQ.Sync.Configuration.Probing;
+using RCynQ.Sync.Diagnostics.AutoFix;
 using RCynQ.Sync.Services;
+using RCynQ.Sync.Transfer;
 
 namespace RCynQ.Service.Tests;
 
@@ -35,7 +37,7 @@ public sealed class ServiceApiTests
     /// <summary>
     /// JSON options matching the service.
     /// </summary>
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
     /// Verifies that health is public and management endpoints require the local API token.
@@ -45,18 +47,24 @@ public sealed class ServiceApiTests
     public async Task Health_Is_Public_And_Management_Requires_Token()
     {
         var patches = Substitute.For<IPatchService>();
-        patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(new NodeId("dest-1"), "dest-1", NodeRole.Dest, new SyncState("a", "b", null, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('d', 40), null, false), Array.Empty<FileChange>(), 0));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+        patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(new NodeId("origin-1"), "origin-1", NodeRole.Origin, new SyncState("a", "b", null, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('d', 40), null, false), Array.Empty<FileChange>(), 0));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
 
-        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.Health)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.State)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.HEALTH)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.STATE)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         var wrongToken = host.CreateClient(withApiToken: false);
-        wrongToken.DefaultRequestHeaders.Add(ApiHeaders.ApiToken, "guess");
-        (await wrongToken.GetAsync(ApiRoutes.State)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        wrongToken.DefaultRequestHeaders.Add(ApiHeaders.API_TOKEN, "guess");
+        (await wrongToken.GetAsync(ApiRoutes.STATE)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        var state = await host.CreateClient().GetFromJsonAsync<NodeSyncStatus>(ApiRoutes.State, Json);
-        state!.NodeId.Should().Be(new NodeId("dest-1"));
+        var state = await host.CreateClient().GetFromJsonAsync<NodeSyncStatus>(ApiRoutes.STATE, _json);
+        state!.NodeId.Should().Be(new NodeId("origin-1"));
+
+        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.STATE_SUMMARY)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        patches.GetSummaryAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(new NodeId("origin-1"), "summary", NodeRole.Origin, new SyncState("a", "b", null, null), SyncBaseStatus.NotApplicable, Array.Empty<FileChange>(), 3));
+        var summary = await host.CreateClient().GetFromJsonAsync<NodeSyncStatus>(ApiRoutes.STATE_SUMMARY, _json);
+        summary!.ConflictPendingCount.Should().Be(3);
+        await patches.Received(1).GetStateAsync(Arg.Any<CancellationToken>());
         File.ReadAllText(Path.Combine(host.Root, "data", "keys", "api.token")).Trim().Should().Be(host.ApiToken);
     }
 
@@ -67,7 +75,7 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task Api_Token_File_Is_Created_On_Startup()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Mediator, services => Replace(services, Substitute.For<IPatchService>()));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Relay, services => Replace(services, Substitute.For<IPatchService>()));
 
         var tokenFile = Path.Combine(host.Root, "data", "keys", "api.token");
         File.Exists(tokenFile).Should().BeTrue();
@@ -81,12 +89,12 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task Patch_Malformed_Returns_400()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, Substitute.For<IPatchService>()));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, Substitute.For<IPatchService>()));
 
-        var response = await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.PatchSessions, new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"));
+        var response = await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.PATCH_SESSIONS, new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(_json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
     }
 
     /// <summary>
@@ -96,14 +104,14 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task Patch_Corrupt_Gzip_Returns_400()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, Substitute.For<IPatchService>()));
-        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessions) { Content = new ByteArrayContent("this is not gzip"u8.ToArray()) };
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, Substitute.For<IPatchService>()));
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PATCH_SESSIONS) { Content = new ByteArrayContent("this is not gzip"u8.ToArray()) };
         request.Content.Headers.ContentEncoding.Add("gzip");
 
         var response = await host.CreateClient(withApiToken: false).SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(_json))!.Reason.Should().Be(PatchRejectionReason.Malformed);
     }
 
     /// <summary>
@@ -123,15 +131,15 @@ public sealed class ServiceApiTests
             .ThrowsAsync(new PatchRejectedException(reason, "refused"));
         patches.CommitAsync(Arg.Any<Guid>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new PatchRejectedException(reason, "refused"));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
 
-        var response = await PostEnvelopeAsync(host, "source-1", "presented-token");
-        var commit = await PostCommitAsync(host, Guid.NewGuid(), "source-1", "presented-token");
+        var response = await PostEnvelopeAsync(host, "workstation-1", "presented-token");
+        var commit = await PostCommitAsync(host, Guid.NewGuid(), "workstation-1", "presented-token");
 
         response.StatusCode.Should().Be(status);
         commit.StatusCode.Should().Be(status);
-        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Reason.Should().Be(reason);
-        await patches.Received(1).OpenSessionAsync(Arg.Any<PatchEnvelope>(), new PatchReceiveContext("source-1", "presented-token"), Arg.Any<CancellationToken>());
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(_json))!.Reason.Should().Be(reason);
+        await patches.Received(1).OpenSessionAsync(Arg.Any<PatchEnvelope>(), new PatchReceiveContext("workstation-1", "presented-token"), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -160,23 +168,23 @@ public sealed class ServiceApiTests
             });
         patches.CommitAsync(Arg.Any<Guid>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
             .Returns(call => PatchApplyResult.Applied(call.Arg<Guid>(), 2));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
 
-        var open = await PostEnvelopeAsync(host, "source-1", ServiceTestHost.LinkToken);
+        var open = await PostEnvelopeAsync(host, "workstation-1", ServiceTestHost.LINK_TOKEN);
         open.StatusCode.Should().Be(HttpStatusCode.OK);
-        var session = await open.Content.ReadFromJsonAsync<PatchSession>(Json);
+        var session = await open.Content.ReadFromJsonAsync<PatchSession>(_json);
         session!.PatchId.Should().Be(opened!.Id);
         session.MissingContent.Should().Equal(new string('b', 64));
 
         var content = string.Concat(Enumerable.Repeat("streamed content\n", 50_000));
-        var put = await PutContentAsync(host, opened.Id, new string('b', 64), content, "source-1", ServiceTestHost.LinkToken);
+        var put = await PutContentAsync(host, opened.Id, new string('b', 64), content, "workstation-1", ServiceTestHost.LINK_TOKEN);
         put.StatusCode.Should().Be(HttpStatusCode.NoContent);
         System.Text.Encoding.UTF8.GetString(received!).Should().Be(content, "the service decompresses the body before handing it over");
-        await patches.Received(1).ReceiveContentAsync(opened.Id, new string('b', 64), Arg.Any<Stream>(), new PatchReceiveContext("source-1", ServiceTestHost.LinkToken), Arg.Any<CancellationToken>());
+        await patches.Received(1).ReceiveContentAsync(opened.Id, new string('b', 64), Arg.Any<Stream>(), new PatchReceiveContext("workstation-1", ServiceTestHost.LINK_TOKEN), Arg.Any<CancellationToken>());
 
-        var commit = await PostCommitAsync(host, opened.Id, "source-1", ServiceTestHost.LinkToken);
+        var commit = await PostCommitAsync(host, opened.Id, "workstation-1", ServiceTestHost.LINK_TOKEN);
         commit.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await commit.Content.ReadFromJsonAsync<PatchApplyResult>(Json);
+        var result = await commit.Content.ReadFromJsonAsync<PatchApplyResult>(_json);
         result!.Status.Should().Be(PatchStatus.Applied);
         result.AppliedFileCount.Should().Be(2);
     }
@@ -191,12 +199,12 @@ public sealed class ServiceApiTests
         var patches = Substitute.For<IPatchService>();
         patches.ReceiveContentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<PatchReceiveContext>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new PatchRejectedException(PatchRejectionReason.Malformed, "hash mismatch"));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
 
-        var response = await PutContentAsync(host, Guid.NewGuid(), new string('c', 64), "x", "source-1", ServiceTestHost.LinkToken);
+        var response = await PutContentAsync(host, Guid.NewGuid(), new string('c', 64), "x", "workstation-1", ServiceTestHost.LINK_TOKEN);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(Json))!.Error.Should().Contain("hash mismatch");
+        (await response.Content.ReadFromJsonAsync<PatchRejectionResponse>(_json))!.Error.Should().Contain("hash mismatch");
     }
 
     /// <summary>
@@ -212,34 +220,34 @@ public sealed class ServiceApiTests
             .Returns(new PatchApplyResult(known, PatchStatus.ConflictResolved, 1, Array.Empty<ConflictFile>(), null));
         patches.ResolveAsync(Arg.Is<Guid>(id => id != known), Arg.Any<ConflictPolicy>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new KeyNotFoundException("missing"));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, patches));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
         var client = host.CreateClient();
 
-        var ok = await client.PostAsJsonAsync(ApiRoutes.ResolvePatchPath(known), new ResolvePatchRequest(ConflictPolicy.ApplyIncomingOverLocal), Json);
+        var ok = await client.PostAsJsonAsync(ApiRoutes.ResolvePatchPath(known), new ResolvePatchRequest(ConflictPolicy.ApplyIncomingOverLocal), _json);
         ok.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await ok.Content.ReadFromJsonAsync<PatchApplyResult>(Json))!.Status.Should().Be(PatchStatus.ConflictResolved);
+        (await ok.Content.ReadFromJsonAsync<PatchApplyResult>(_json))!.Status.Should().Be(PatchStatus.ConflictResolved);
 
-        (await client.PostAsJsonAsync(ApiRoutes.ResolvePatchPath(Guid.NewGuid()), new ResolvePatchRequest(ConflictPolicy.KeepLocal), Json))
+        (await client.PostAsJsonAsync(ApiRoutes.ResolvePatchPath(Guid.NewGuid()), new ResolvePatchRequest(ConflictPolicy.KeepLocal), _json))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await host.CreateClient(withApiToken: false).PostAsJsonAsync(ApiRoutes.ResolvePatchPath(known), new ResolvePatchRequest(ConflictPolicy.KeepLocal), Json))
+        (await host.CreateClient(withApiToken: false).PostAsJsonAsync(ApiRoutes.ResolvePatchPath(known), new ResolvePatchRequest(ConflictPolicy.KeepLocal), _json))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized, "a peer arriving through the SSH forward must not resolve patches");
     }
 
     /// <summary>
-    /// Verifies that a Mediator exposes no patch functionality.
+    /// Verifies that a Relay exposes no patch functionality.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Mediator_Has_No_Patch_Routes()
+    public async Task Relay_Has_No_Patch_Routes()
     {
         var patches = Substitute.For<IPatchService>();
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Mediator, services => Replace(services, patches));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Relay, services => Replace(services, patches));
 
-        (await PostEnvelopeAsync(host, "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await PutContentAsync(host, Guid.NewGuid(), new string('a', 64), "x", "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await PostCommitAsync(host, Guid.NewGuid(), "source-1", ServiceTestHost.LinkToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await host.CreateClient().PostAsync(ApiRoutes.SendPatch, null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await host.CreateClient().GetFromJsonAsync<NodeConfigurationDto>(ApiRoutes.Config, Json))!.Capabilities.ShowsSyncTab.Should().BeFalse();
+        (await PostEnvelopeAsync(host, "workstation-1", ServiceTestHost.LINK_TOKEN)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PutContentAsync(host, Guid.NewGuid(), new string('a', 64), "x", "workstation-1", ServiceTestHost.LINK_TOKEN)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PostCommitAsync(host, Guid.NewGuid(), "workstation-1", ServiceTestHost.LINK_TOKEN)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await host.CreateClient().PostAsync(ApiRoutes.SEND_PATCH, null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await host.CreateClient().GetFromJsonAsync<NodeConfigurationDto>(ApiRoutes.CONFIG, _json))!.Capabilities.ShowsSyncTab.Should().BeFalse();
         await patches.DidNotReceiveWithAnyArgs().OpenSessionAsync(default!, default!, default);
         await patches.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default);
     }
@@ -251,10 +259,10 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task SignalR_Delivers_Events()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Dest, services => Replace(services, Substitute.For<IPatchService>()));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, Substitute.For<IPatchService>()));
         var received = new TaskCompletionSource<PatchEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var connection = CreateHubConnection(host, host.ApiToken);
-        connection.On<PatchEvent>(NodeEventNames.PatchEvent, evt => received.TrySetResult(evt));
+        connection.On<PatchEvent>(NodeEventNames.PATCH_EVENT, evt => received.TrySetResult(evt));
         await connection.StartAsync();
 
         var published = new PatchEvent(Guid.NewGuid(), PatchDirection.Incoming, PatchStatus.ConflictPending, 0, 2, "conflict", DateTimeOffset.UtcNow);
@@ -276,34 +284,159 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task Links_Role_Export_And_Import()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Source);
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
         var client = host.CreateClient();
 
-        var link = new ChainLinkOptions { Name = "relay", PeerNodeId = "mediator-1", PeerRole = NodeRole.Mediator, Host = "203.0.113.4", SshUser = "jump", RemotePort = 22, Priority = 10 };
-        (await client.PostAsJsonAsync(ApiRoutes.Links, link, Json)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var link = new ChainLinkOptions { Name = "relay", PeerNodeId = "relay-1", PeerRole = NodeRole.Relay, Host = "203.0.113.4", SshUser = "jump", RemotePort = 22, Priority = 10 };
+        (await client.PostAsJsonAsync(ApiRoutes.LINKS, link, _json)).StatusCode.Should().Be(HttpStatusCode.OK);
         var badLink = new ChainLinkOptions { Name = "bad", PeerNodeId = "x", Host = "-oProxyCommand=calc", SshUser = "u" };
-        (await client.PostAsJsonAsync(ApiRoutes.Links, badLink, Json)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.PostAsJsonAsync(ApiRoutes.LINKS, badLink, _json)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.ConfigExport}?host=10.8.0.1&user=rcynq", Json);
+        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.CONFIG_EXPORT}?host=10.8.0.1&user=rcynq", _json);
         exported!.SigningPublicKey.Should().NotBeNullOrEmpty();
-        exported.Role.Should().Be(NodeRole.Source);
+        exported.Role.Should().Be(NodeRole.Workstation);
 
-        var destExport = exported with { NodeId = new NodeId("dest-1"), Name = "Dest", Role = NodeRole.Dest, Host = "10.8.0.2", GitRepoPath = "/srv/repo" };
-        var import = await client.PostAsJsonAsync(ApiRoutes.ConfigImport, destExport, Json);
+        var originExport = exported with { NodeId = new NodeId("origin-1"), Name = "Origin", Role = NodeRole.Origin, Host = "10.8.0.2" };
+        var import = await client.PostAsJsonAsync(ApiRoutes.CONFIG_IMPORT, originExport, _json);
         import.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await import.Content.ReadFromJsonAsync<ImportResult>(Json))!.LinkCreated.Should().BeTrue();
+        (await import.Content.ReadFromJsonAsync<ImportResult>(_json))!.LinkCreated.Should().BeTrue();
 
-        var links = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.Links, Json))!;
-        links.Select(item => (item.Name, item.PeerRole)).Should().Equal(("relay", NodeRole.Mediator), ("dest-1", NodeRole.Dest));
+        var links = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!;
+        links.Select(item => (item.Name, item.PeerRole)).Should().Equal(("relay", NodeRole.Relay), ("origin-1", NodeRole.Origin));
         links[1].HasSigningKey.Should().BeTrue();
         links[1].RemotePort.Should().Be(exported.ListenPort);
 
-        var role = await client.PutAsJsonAsync(ApiRoutes.ConfigRole, new SetRoleRequest(NodeRole.Dest, host.Root, null), Json);
+        var role = await client.PutAsJsonAsync(ApiRoutes.CONFIG_ROLE, new SetRoleRequest(NodeRole.Origin, host.Root, null), _json);
         role.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await role.Content.ReadFromJsonAsync<RoleChangeResult>(Json))!.RestartRequired.Should().BeTrue();
-        (await ConfigurationFileEditor.LoadAsync(host.ConfigPath)).Role.Should().Be(NodeRole.Dest);
+        (await role.Content.ReadFromJsonAsync<RoleChangeResult>(_json))!.RestartRequired.Should().BeTrue();
+        (await ConfigurationFileEditor.LoadAsync(host.ConfigPath)).Role.Should().Be(NodeRole.Origin);
 
-        (await client.PutAsJsonAsync(ApiRoutes.ConfigRole, new SetRoleRequest(NodeRole.Source, null, null), Json)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PutAsJsonAsync(ApiRoutes.CONFIG_ROLE, new SetRoleRequest(NodeRole.Workstation, null, null), _json)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// Verifies that saving a link by hand does not erase what an import stored about its peer (the link form knows neither
+    /// the signing key nor the repository path), and that a link can be removed and is gone afterwards.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Saving_A_Link_Keeps_The_Imported_Peer_And_A_Link_Can_Be_Removed()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
+        var client = host.CreateClient();
+        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.CONFIG_EXPORT}?host=10.8.0.1&user=rcynq", _json);
+        var originExport = exported! with { NodeId = new NodeId("origin-1"), Name = "Origin", Role = NodeRole.Origin, Host = "10.8.0.2" };
+        (await client.PostAsJsonAsync(ApiRoutes.CONFIG_IMPORT, originExport, _json)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var imported = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Should().ContainSingle().Which;
+
+        // The link is saved again by hand, with another address.
+        var edited = new ChainLinkOptions { Id = imported.Id, Name = imported.Name, PeerNodeId = "origin-1", PeerRole = NodeRole.Origin, Host = "10.8.0.9", SshUser = "rcynq", RemotePort = 18443, Priority = 1000 };
+        (await client.PostAsJsonAsync(ApiRoutes.LINKS, edited, _json)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var link = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Should().ContainSingle().Which;
+        link.Host.Should().Be("10.8.0.9");
+        link.HasSigningKey.Should().BeTrue("without the key every patch of the peer would be refused");
+
+
+        (await client.DeleteAsync(ApiRoutes.LinkPath(link.Id))).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Should().BeEmpty();
+        (await client.DeleteAsync(ApiRoutes.LinkPath(link.Id))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// Verifies the routes of a link through the API with the real data layer: a second address of a known node is not
+    /// imported without a decision, becomes a route with one, and the routes can be pinned, reordered and removed until
+    /// the link is back to one address.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Import_Of_Another_Address_Adds_A_Route_That_Can_Be_Managed()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
+        var client = host.CreateClient();
+        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.CONFIG_EXPORT}?host=10.8.0.1&user=rcynq", _json);
+        var originExport = exported! with { NodeId = new NodeId("origin-1"), Name = "Origin", Role = NodeRole.Origin, Host = "10.8.0.2" };
+        (await client.PostAsJsonAsync(ApiRoutes.CONFIG_IMPORT, originExport, _json)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<LinkRoutesDto[]>(ApiRoutes.LINK_ROUTES, _json))!.Should().BeEmpty("one address is no route");
+
+        var overTcp = originExport with { Host = "10.9.0.2" };
+        var asked = await (await client.PostAsJsonAsync(ApiRoutes.CONFIG_IMPORT, overTcp, _json)).Content.ReadFromJsonAsync<ImportResult>(_json);
+        asked!.Decision!.Options.Should().Equal(ImportDecision.AlternativeRoute, ImportDecision.Replace);
+        (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Single().Host.Should().Be("10.8.0.2", "nothing is imported without a decision");
+
+        var added = await client.PostAsJsonAsync(ApiRoutes.ConfigImportPath(ImportDecision.AlternativeRoute, null), overTcp, _json);
+        added.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await added.Content.ReadFromJsonAsync<ImportResult>(_json))!.NeedsDecision.Should().BeFalse();
+
+        var link = (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Single();
+        var routes = (await client.GetFromJsonAsync<LinkRoutesDto[]>(ApiRoutes.LINK_ROUTES, _json))!.Single();
+        routes.LinkId.Should().Be(link.Id);
+        routes.Routes.Select(route => (route.Host, route.IsActive)).Should().BeEquivalentTo(new[] { ("10.8.0.2", true), ("10.9.0.2", false) });
+        var tcp = routes.Routes.Single(route => route.Host == "10.9.0.2");
+
+        var pinned = await (await client.PutAsJsonAsync(ApiRoutes.LinkRouteSelectionPath(link.Id), new SelectRouteRequest(tcp.Id), _json)).Content.ReadFromJsonAsync<LinkRoutesDto>(_json);
+        pinned!.PinnedRouteId.Should().Be(tcp.Id);
+        (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Single().Host.Should().Be("10.9.0.2");
+
+        (await client.PutAsJsonAsync(ApiRoutes.LinkRoutePriorityPath(link.Id, tcp.Id), new SetRoutePriorityRequest(3), _json)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PutAsJsonAsync(ApiRoutes.LinkRoutePriorityPath(link.Id, tcp.Id), new SetRoutePriorityRequest(-1), _json)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.PutAsJsonAsync(ApiRoutes.LinkRouteSelectionPath(link.Id), new SelectRouteRequest(Guid.NewGuid()), _json)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        (await client.DeleteAsync(ApiRoutes.LinkRoutePath(link.Id, tcp.Id))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<LinkRoutesDto[]>(ApiRoutes.LINK_ROUTES, _json))!.Should().BeEmpty();
+        (await client.GetFromJsonAsync<LinkDto[]>(ApiRoutes.LINKS, _json))!.Single().Host.Should().Be("10.8.0.2", "the link is back to its one address");
+    }
+
+    /// <summary>
+    /// Verifies that the node applies only a fix it proposed itself: a fix made up by the client is answered as not
+    /// applied, and the same fix is applied once the node has proposed it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Fix_Endpoint_Applies_Only_Fixes_The_Node_Proposed()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
+        var client = host.CreateClient();
+        var directory = Path.Combine(host.Root, "data", "created-by-fix");
+        var fix = new DiagnosticFix(DiagnosticFixKind.CreateDirectory, "Create the directory.", new Dictionary<string, string> { ["path"] = directory });
+
+        var refused = await client.PostAsJsonAsync(ApiRoutes.DIAGNOSTICS_FIX, new ApplyFixRequest(fix, true), _json);
+
+        refused.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await refused.Content.ReadFromJsonAsync<AutoFixResult>(_json))!.Applied.Should().BeFalse();
+        Directory.Exists(directory).Should().BeFalse("the node did not propose this fix");
+
+        host.Services.GetRequiredService<IssuedFixRegistry>().Remember(new[] { DiagnosticResult.Fail("Workdir", "missing", null, fix) });
+        var applied = await client.PostAsJsonAsync(ApiRoutes.DIAGNOSTICS_FIX, new ApplyFixRequest(fix, true), _json);
+
+        (await applied.Content.ReadFromJsonAsync<AutoFixResult>(_json))!.Applied.Should().BeTrue();
+        Directory.Exists(directory).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies that the data cleanup needs the local API token and removes the finished patches of the node.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Data_Cleanup_Requires_Token_And_Removes_Finished_Patches()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
+        var patches = host.Services.GetRequiredService<RCynQ.Core.Abstractions.Repositories.IPatchRepository>();
+        var hash = new string('a', 64);
+        var finished = new PatchMetadata(
+            Guid.NewGuid(), PatchDirection.Outgoing, new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow.AddDays(-2), hash, hash,
+            PatchStatus.Failed, null, new[] { new FileChange(ChangeKind.Deleted, "old.txt", null, null, false, hash) });
+        await patches.UpsertAsync(finished);
+
+        (await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.DATA_CLEANUP, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await patches.ExistsAsync(finished.Id)).Should().BeTrue();
+
+        var response = await host.CreateClient().PostAsync(ApiRoutes.DATA_CLEANUP, null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<DataCleanupReport>(_json))!.Patches.Should().Be(1);
+        (await patches.ExistsAsync(finished.Id)).Should().BeFalse();
     }
 
     /// <summary>
@@ -313,13 +446,13 @@ public sealed class ServiceApiTests
     [Fact]
     public async Task Shutdown_Requires_Token_And_Stops_Host()
     {
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Mediator, services => Replace(services, Substitute.For<IPatchService>()));
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Relay, services => Replace(services, Substitute.For<IPatchService>()));
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
-        (await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.ServiceShutdown, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await host.CreateClient(withApiToken: false).PostAsync(ApiRoutes.SERVICE_SHUTDOWN, null)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         lifetime.ApplicationStopping.IsCancellationRequested.Should().BeFalse();
 
-        (await host.CreateClient().PostAsync(ApiRoutes.ServiceShutdown, null)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await host.CreateClient().PostAsync(ApiRoutes.SERVICE_SHUTDOWN, null)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         lifetime.ApplicationStopping.IsCancellationRequested.Should().BeTrue();
     }
 
@@ -335,22 +468,22 @@ public sealed class ServiceApiTests
             "PC", "dev", 22, true, true,
             new[] { new NetworkAddressInfo("10.8.0.3", "awg0", NetworkAddressKind.Tunnel, true) },
             "10.8.0.3", null, null, null, Array.Empty<string>(), new[] { EnvironmentWarning.NoSshPublicKey }, DateTimeOffset.UtcNow));
-        await using var host = await ServiceTestHost.StartAsync(NodeRole.Mediator, services =>
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Relay, services =>
         {
             services.RemoveAll<INodeEnvironmentProbe>();
             services.AddSingleton(probe);
         });
         var client = host.CreateClient();
 
-        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.ConfigExportProbe)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        var report = await client.GetFromJsonAsync<NodeEnvironmentReport>(ApiRoutes.ConfigExportProbe, Json);
+        (await host.CreateClient(withApiToken: false).GetAsync(ApiRoutes.CONFIG_EXPORT_PROBE)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var report = await client.GetFromJsonAsync<NodeEnvironmentReport>(ApiRoutes.CONFIG_EXPORT_PROBE, _json);
         report!.SuggestedHost.Should().Be("10.8.0.3");
         report.Warnings.Should().Equal(EnvironmentWarning.NoSshPublicKey);
 
         var fingerprint = Convert.ToBase64String(new byte[32]).TrimEnd('=');
-        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.ConfigExport}?host=10.8.0.3&user=dev&hostKeyFingerprint={Uri.EscapeDataString(fingerprint)}", Json);
+        var exported = await client.GetFromJsonAsync<ExportedNodeConfiguration>($"{ApiRoutes.CONFIG_EXPORT}?host=10.8.0.3&user=dev&hostKeyFingerprint={Uri.EscapeDataString(fingerprint)}", _json);
         exported!.HostKeyFingerprint.Should().Be("SHA256:" + fingerprint);
-        (await client.GetAsync($"{ApiRoutes.ConfigExport}?host=10.8.0.3&hostKeyFingerprint=nope")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.GetAsync($"{ApiRoutes.CONFIG_EXPORT}?host=10.8.0.3&hostKeyFingerprint=nope")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     /// <summary>
@@ -374,13 +507,13 @@ public sealed class ServiceApiTests
     private static async Task<HttpResponseMessage> PostEnvelopeAsync(ServiceTestHost host, string sender, string token)
     {
         var hash = new string('a', 64);
-        var envelope = new PatchEnvelope(Guid.NewGuid(), new NodeId(sender), new NodeId("dest-1"), DateTimeOffset.UtcNow, hash, hash, Array.Empty<FileChange>());
+        var envelope = new PatchEnvelope(Guid.NewGuid(), new NodeId(sender), new NodeId("origin-1"), DateTimeOffset.UtcNow, hash, hash, Array.Empty<FileChange>());
         var body = GzipCodec.Compress(host.Services.GetRequiredService<PatchEnvelopeSerializer>().Serialize(envelope));
-        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessions) { Content = new ByteArrayContent(body) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PATCH_SESSIONS) { Content = new ByteArrayContent(body) };
         request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-        request.Content.Headers.ContentEncoding.Add(GzipCodec.ContentEncoding);
-        request.Headers.Add(ApiHeaders.NodeId, sender);
-        request.Headers.Add(ApiHeaders.LinkToken, token);
+        request.Content.Headers.ContentEncoding.Add(GzipCodec.CONTENT_ENCODING);
+        request.Headers.Add(ApiHeaders.NODE_ID, sender);
+        request.Headers.Add(ApiHeaders.LINK_TOKEN, token);
         return await host.CreateClient(withApiToken: false).SendAsync(request);
     }
 
@@ -400,8 +533,8 @@ public sealed class ServiceApiTests
         {
             Content = new GzipStreamContent(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)))
         };
-        request.Headers.Add(ApiHeaders.NodeId, sender);
-        request.Headers.Add(ApiHeaders.LinkToken, token);
+        request.Headers.Add(ApiHeaders.NODE_ID, sender);
+        request.Headers.Add(ApiHeaders.LINK_TOKEN, token);
         return await host.CreateClient(withApiToken: false).SendAsync(request);
     }
 
@@ -416,8 +549,8 @@ public sealed class ServiceApiTests
     private static async Task<HttpResponseMessage> PostCommitAsync(ServiceTestHost host, Guid patchId, string sender, string token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.PatchSessionCommitPath(patchId));
-        request.Headers.Add(ApiHeaders.NodeId, sender);
-        request.Headers.Add(ApiHeaders.LinkToken, token);
+        request.Headers.Add(ApiHeaders.NODE_ID, sender);
+        request.Headers.Add(ApiHeaders.LINK_TOKEN, token);
         return await host.CreateClient(withApiToken: false).SendAsync(request);
     }
 
@@ -429,7 +562,7 @@ public sealed class ServiceApiTests
     /// <returns>The connection.</returns>
     private static HubConnection CreateHubConnection(ServiceTestHost host, string token)
         => new HubConnectionBuilder()
-            .WithUrl(new Uri(host.BaseAddress, $"{ApiRoutes.Hub.TrimStart('/')}?{ApiHeaders.AccessTokenQuery}={Uri.EscapeDataString(token)}"), options =>
+            .WithUrl(new Uri(host.BaseAddress, $"{ApiRoutes.HUB.TrimStart('/')}?{ApiHeaders.ACCESS_TOKEN_QUERY}={Uri.EscapeDataString(token)}"), options =>
             {
                 options.HttpMessageHandlerFactory = _ => new SocketsHttpHandler { UseProxy = false };
                 options.Transports = HttpTransportType.LongPolling;

@@ -1,4 +1,5 @@
 using RCynQ.Core.Abstractions.Storage;
+using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 
 namespace RCynQ.Core.Abstractions.Repositories;
@@ -51,4 +52,23 @@ public interface IPatchRepository
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>All records.</returns>
     Task<IReadOnlyList<PatchMetadata>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts the patches of one direction that are in one state, without loading them.
+    /// </summary>
+    /// <param name="direction">The direction.</param>
+    /// <param name="status">The status.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of such patches.</returns>
+    Task<int> CountAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the patches created before a moment, except those in one of the given states.
+    /// </summary>
+    /// <param name="createdBeforeUtc">Patches created before this moment are deleted.</param>
+    /// <param name="keepStatuses">The states of patches that are kept whatever their age.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The identifiers of the deleted patches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keepStatuses"/> is <see langword="null"/>.</exception>
+    Task<IReadOnlyList<Guid>> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, IReadOnlyCollection<PatchStatus> keepStatuses, CancellationToken cancellationToken = default);
 }

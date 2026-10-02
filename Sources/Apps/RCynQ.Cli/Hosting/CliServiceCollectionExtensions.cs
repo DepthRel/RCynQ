@@ -19,6 +19,7 @@ public static class CliServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddTransient<StatusCommandService>();
         services.TryAddTransient<LinkCommandService>();
+        services.TryAddTransient<RepositoryCommandService>();
         services.TryAddTransient<TransportCommandService>();
         services.TryAddTransient<PatchCommandService>();
         services.TryAddTransient<GitCommandService>();

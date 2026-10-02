@@ -240,6 +240,8 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+# The backups of files a patch replaces are a source folder of RCynQ.Sync, not a conversion backup.
+!Sources/Sync/RCynQ.Sync/Backups/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/

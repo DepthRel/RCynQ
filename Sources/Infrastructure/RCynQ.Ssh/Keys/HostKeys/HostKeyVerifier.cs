@@ -1,5 +1,6 @@
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
+using RCynQ.Ssh.Enums;
 
 namespace RCynQ.Ssh.Keys.HostKeys;
 
@@ -47,7 +48,14 @@ public sealed class HostKeyVerifier
     /// </summary>
     /// <param name="endpoint">The endpoint.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The fingerprints; empty when the host is unreachable.</returns>
+    /// <returns>
+    /// The fingerprints, the key an SSH client prefers first; empty when the host is unreachable.
+    /// </returns>
+    /// <remarks>
+    /// A client records the first kind of key in its order of preference that the server offers. The export pins the
+    /// first fingerprint of this list, so the order here is the order of the client: the pinned key is then the one a
+    /// neighbour records on its first connection.
+    /// </remarks>
     public async Task<IReadOnlyList<string>> GetHostFingerprintsAsync(SshEndpoint endpoint, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -61,7 +69,7 @@ public sealed class HostKeyVerifier
                 TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds + 10)),
             cancellationToken);
 
-        var fingerprints = new List<string>();
+        var keys = new List<SshPublicKey>();
         foreach (var line in result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             if (line.StartsWith('#'))
@@ -77,7 +85,7 @@ public sealed class HostKeyVerifier
 
             try
             {
-                fingerprints.Add(new SshPublicKey(parts[1], parts[2].Split(' ')[0], null).Fingerprint);
+                keys.Add(new SshPublicKey(parts[1], parts[2].Split(' ')[0], null));
             }
             catch (FormatException)
             {
@@ -85,7 +93,31 @@ public sealed class HostKeyVerifier
             }
         }
 
-        return fingerprints.Distinct(StringComparer.Ordinal).ToArray();
+        return keys
+            .OrderBy(key => Preference(key.Type))
+            .Select(key => key.Fingerprint)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// The kinds of host keys in the order an OpenSSH client prefers them.
+    /// </summary>
+    private static readonly string[] _clientPreference =
+    {
+        "ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+        "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com", "ssh-rsa"
+    };
+
+    /// <summary>
+    /// Gets the position of a kind of key in the preference of a client.
+    /// </summary>
+    /// <param name="type">The kind of key.</param>
+    /// <returns>The position; kinds the list does not name come last.</returns>
+    private static int Preference(string type)
+    {
+        var index = Array.IndexOf(_clientPreference, type);
+        return index < 0 ? _clientPreference.Length : index;
     }
 
     /// <summary>

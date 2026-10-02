@@ -14,7 +14,7 @@ public static class GzipCodec
     /// <summary>
     /// The value of the <c>Content-Encoding</c> header of compressed bodies.
     /// </summary>
-    public const string ContentEncoding = "gzip";
+    public const string CONTENT_ENCODING = "gzip";
 
     /// <summary>
     /// Compresses a buffer.

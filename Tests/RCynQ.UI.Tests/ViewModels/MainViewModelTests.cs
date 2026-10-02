@@ -4,6 +4,7 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Events;
@@ -42,19 +43,19 @@ public sealed class MainViewModelTests : IDisposable
     public MainViewModelTests()
     {
         _configPath = Path.Combine(_root, "syncbridge.json");
-        File.WriteAllText(_configPath, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Mediator" } }""");
+        File.WriteAllText(_configPath, """{ "SyncBridge": { "NodeId": "node-1", "Role": "Relay" } }""");
         _controller.ConfigPath.Returns(_configPath);
         _controller.EnsureRunningAsync(Arg.Any<CancellationToken>()).Returns(new ServiceStartResult(ServiceStartOutcome.AlreadyRunning, "running"));
     }
 
     /// <summary>
-    /// Verifies that a Mediator hides synchronization and branches and selects the overview.
+    /// Verifies that a Relay hides synchronization and branches and selects the overview.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Mediator_Hides_Sync_And_Branches()
+    public async Task Relay_Hides_Sync_And_Branches()
     {
-        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Mediator));
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Relay));
         var main = Create();
 
         await main.InitializeAsync();
@@ -100,7 +101,7 @@ public sealed class MainViewModelTests : IDisposable
         main.IsSetupVisible.Should().BeTrue();
         main.Setup.Error.Should().Contain("Chain[0]");
         main.Setup.NodeId.Should().Be("node-1");
-        main.Setup.SelectedRole.Should().Be(NodeRole.Mediator);
+        main.Setup.SelectedRole.Should().Be(NodeRole.Relay);
     }
 
     /// <summary>
@@ -111,11 +112,11 @@ public sealed class MainViewModelTests : IDisposable
     public async Task Completed_Setup_Starts_Service()
     {
         File.Delete(_configPath);
-        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Mediator));
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Relay));
         var main = Create();
         await main.InitializeAsync();
 
-        main.Setup.SelectedRole = NodeRole.Mediator;
+        main.Setup.SelectedRole = NodeRole.Relay;
         await main.Setup.SaveCommand.ExecuteAsync(null);
 
         await Eventually.WaitUntilAsync(() => !main.IsSetupVisible && main.SelectedTab is not null);
@@ -131,19 +132,19 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task Role_Change_Restarts_Service()
     {
-        var role = NodeRole.Source;
+        var role = NodeRole.Workstation;
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(_ => TestData.Config(role));
         _api.SetRoleAsync(Arg.Any<SetRoleRequest>(), Arg.Any<CancellationToken>()).Returns(new RoleChangeResult(true, true, "saved"));
         _controller.RestartAsync(Arg.Any<CancellationToken>()).Returns(_ =>
         {
-            role = NodeRole.Mediator;
+            role = NodeRole.Relay;
             return new ServiceStartResult(ServiceStartOutcome.Started, "restarted");
         });
         var main = Create();
         await main.InitializeAsync();
         main.Tabs.Single(tab => tab.Key == TabKey.Sync).IsAvailable.Should().BeTrue();
 
-        main.RoleAndNodes.SelectedRole = NodeRole.Mediator;
+        main.RoleAndNodes.SelectedRole = NodeRole.Relay;
         await main.RoleAndNodes.ApplyRoleCommand.ExecuteAsync(null);
 
         await Eventually.WaitUntilAsync(() => !main.Tabs.Single(tab => tab.Key == TabKey.Sync).IsAvailable);
@@ -158,8 +159,8 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task Link_Event_Updates_Pages_And_Marks_Tunnel()
     {
-        var link = TestData.Link("relay", "mediator-1", NodeRole.Mediator, "203.0.113.4");
-        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Source));
+        var link = TestData.Link("relay", "relay-1", NodeRole.Relay, "203.0.113.4");
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { link });
         _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(new[] { TestData.State(link, LinkStatus.Ready) });
         var main = Create();
@@ -179,11 +180,11 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task Diagnostics_Event_Is_Routed()
     {
-        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Dest));
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Origin));
         var main = Create();
         await main.InitializeAsync();
 
-        var run = new DiagnosticsEvent(NodeRole.Dest, new[] { new DiagnosticResult("GitInstalled", false, "git not found", "install git") }, DateTimeOffset.UtcNow);
+        var run = new DiagnosticsEvent(NodeRole.Origin, new[] { new DiagnosticResult("GitInstalled", false, "git not found", "install git") }, DateTimeOffset.UtcNow);
         _events.DiagnosticsCompleted += Raise.Event<EventHandler<DiagnosticsEvent>>(new object(), run);
 
         main.Diagnostics.Results.Should().ContainSingle().Which.CanFix.Should().BeFalse();
@@ -198,7 +199,7 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task Selecting_Tab_Clears_Attention()
     {
-        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Source));
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
         var main = Create();
         await main.InitializeAsync();
         var diagnostics = main.Tabs.Single(tab => tab.Key == TabKey.Diagnostics);
@@ -220,7 +221,7 @@ public sealed class MainViewModelTests : IDisposable
     {
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(
             _ => Task.FromException<NodeConfigurationDto>(new HttpRequestException("service down")),
-            _ => Task.FromResult(TestData.Config(NodeRole.Mediator)));
+            _ => Task.FromResult(TestData.Config(NodeRole.Relay)));
         var main = Create();
 
         await main.InitializeAsync();
@@ -229,7 +230,7 @@ public sealed class MainViewModelTests : IDisposable
 
         await main.RefreshCommand.ExecuteAsync(null);
 
-        main.NodeTitle.Should().Contain("Mediator");
+        main.NodeTitle.Should().Contain("Relay");
         main.Tabs.Single(tab => tab.Key == TabKey.Sync).IsAvailable.Should().BeFalse();
         await _events.Received(1).ConnectAsync(Arg.Any<CancellationToken>());
     }
@@ -255,19 +256,20 @@ public sealed class MainViewModelTests : IDisposable
     {
         var dialogs = Substitute.For<IDialogService>();
         return new MainViewModel(
+            TestTexts.Russian,
             _api,
             _events,
             new ImmediateUiDispatcher(),
             new RoleAdapter(),
             _controller,
-            new SetupViewModel(_configPath, dialogs),
-            new OverviewViewModel(_api),
-            new RoleAndNodesViewModel(_api, dialogs),
-            new SyncViewModel(_api, dialogs),
-            new TunnelViewModel(_api),
-            new DiagnosticsViewModel(_api, dialogs),
-            new BranchViewModel(_api),
-            new LogsViewModel(_api, dialogs),
-            new SettingsViewModel(new LanguageViewModel(new FakeLanguageService())));
+            new SetupViewModel(TestTexts.Russian, _configPath, dialogs),
+            new OverviewViewModel(TestTexts.Russian, _api),
+            new RoleAndNodesViewModel(TestTexts.Russian, _api, dialogs),
+            new SyncViewModel(TestTexts.Russian, _api, dialogs),
+            new TunnelViewModel(TestTexts.Russian, _api),
+            new DiagnosticsViewModel(TestTexts.Russian, _api, dialogs),
+            new BranchViewModel(TestTexts.Russian, _api),
+            new LogsViewModel(TestTexts.Russian, _api, dialogs),
+            new SettingsViewModel(TestTexts.Russian, new LanguageViewModel(TestTexts.Russian, new FakeLanguageService()), _api, dialogs));
     }
 }

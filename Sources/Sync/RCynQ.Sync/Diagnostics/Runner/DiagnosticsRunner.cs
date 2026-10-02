@@ -6,6 +6,7 @@ using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Localization;
+using RCynQ.Sync.Diagnostics.AutoFix;
 
 namespace RCynQ.Sync.Diagnostics.Runner;
 
@@ -45,9 +46,19 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
     /// <summary>The clock.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The registry of the fixes this node proposed, or <see langword="null"/> when nobody checks them.</summary>
+    private readonly IssuedFixRegistry? _issuedFixes;
+
+    /// <summary>The localizer of the messages.</summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>Tells which repository the node works with now, or <see langword="null"/> for the one it started with.</summary>
+    private readonly IActiveRepository? _repository;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DiagnosticsRunner"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="checks">The registered checks.</param>
     /// <param name="node">The local node.</param>
     /// <param name="options">The node options.</param>
@@ -56,7 +67,10 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
     /// <param name="events">The event publisher.</param>
     /// <param name="timeProvider">The clock.</param>
     /// <param name="runs">The run repository, or <see langword="null"/> to skip persistence.</param>
+    /// <param name="issuedFixes">The registry that remembers the proposed fixes, or <see langword="null"/>.</param>
+    /// <param name="repository">Tells which repository the node works with now; <see langword="null"/> for the one the node started with.</param>
     public DiagnosticsRunner(
+        ILocalizer localizer,
         IEnumerable<IDiagnosticCheck> checks,
         NodeConfig node,
         SyncBridgeOptions options,
@@ -64,8 +78,11 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
         IAppDataFactory appData,
         IEventPublisher events,
         TimeProvider timeProvider,
-        IDiagnosticRunRepository? runs = null)
+        IDiagnosticRunRepository? runs = null,
+        IssuedFixRegistry? issuedFixes = null,
+        IActiveRepository? repository = null)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _checks = checks.ToArray();
         _node = node;
         _options = options;
@@ -74,6 +91,8 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
         _events = events;
         _timeProvider = timeProvider;
         _runs = runs;
+        _issuedFixes = issuedFixes;
+        _repository = repository;
     }
 
     /// <inheritdoc />
@@ -83,7 +102,13 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
     /// <inheritdoc />
     public async Task<DiagnosticsEvent> RunAsync(CancellationToken cancellationToken = default)
     {
-        var context = new DiagnosticContext(_node, _options, await _chain.GetAllAsync(cancellationToken), _appData.Create());
+        // The checks look at the repository the node works with now, and at what the node stores about it.
+        var repository = _repository?.Current;
+        var context = new DiagnosticContext(
+            _node.WithRepository(repository),
+            _options,
+            await _chain.GetAllAsync(cancellationToken),
+            _appData.Create().ForRepository(repository?.Id ?? RepositoryEntry.DefaultId));
         var results = new List<DiagnosticResult>();
         foreach (var check in GetApplicableChecks(_node.Role))
         {
@@ -95,14 +120,16 @@ public sealed class DiagnosticsRunner : IDiagnosticsRunner
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                results.Add(DiagnosticResult.Fail(check.Name, Texts.Format("Diag.Timeout", CheckTimeout.TotalSeconds)));
+                results.Add(DiagnosticResult.Fail(check.Name, _localizer.Format("Diag.Timeout", CheckTimeout.TotalSeconds)));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                results.Add(DiagnosticResult.Fail(check.Name, Texts.Format("Diag.Unexpected", ex.Message)));
+                results.Add(DiagnosticResult.Fail(check.Name, _localizer.Format("Diag.Unexpected", _localizer.Describe(ex))));
             }
         }
 
+        // Remembered before anybody sees the results: only a fix proposed here may be applied later.
+        _issuedFixes?.Remember(results);
         var run = new DiagnosticsEvent(_node.Role, results, _timeProvider.GetUtcNow());
         if (_runs is not null)
         {

@@ -1,4 +1,5 @@
 using RCynQ.Core.Diagnostics;
+using RCynQ.Core.Enums;
 using RCynQ.Sync.Diagnostics.Endpoint;
 
 namespace RCynQ.Sync.Diagnostics.AutoFix;

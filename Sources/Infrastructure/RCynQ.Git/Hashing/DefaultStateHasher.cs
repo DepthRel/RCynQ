@@ -59,7 +59,7 @@ public sealed class DefaultStateHasher : IStateHasher
     /// <summary>
     /// How many leading bytes decide whether a file is text, as Git decides it: a NUL byte among them makes the file binary.
     /// </summary>
-    public const int TextProbeLength = 8000;
+    public const int TEXT_PROBE_LENGTH = 8000;
 
     /// <summary>
     /// Computes the lowercase SHA-256 hex digest of a file with its line endings normalized: in a text file every CRLF counts as
@@ -75,8 +75,8 @@ public sealed class DefaultStateHasher : IStateHasher
     {
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
         var buffer = new byte[81920];
-        var read = await ReadAtLeastAsync(stream, buffer, TextProbeLength, cancellationToken);
-        if (Array.IndexOf(buffer, (byte)0, 0, Math.Min(read, TextProbeLength)) >= 0)
+        var read = await ReadAtLeastAsync(stream, buffer, TEXT_PROBE_LENGTH, cancellationToken);
+        if (Array.IndexOf(buffer, (byte)0, 0, Math.Min(read, TEXT_PROBE_LENGTH)) >= 0)
         {
             stream.Position = 0;
             return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();

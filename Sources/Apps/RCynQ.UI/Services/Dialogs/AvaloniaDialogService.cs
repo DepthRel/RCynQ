@@ -1,5 +1,5 @@
-using Avalonia.Input.Platform;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using RCynQ.Core.Enums;
 using RCynQ.UI.ViewModels.Dialogs;
@@ -46,6 +46,13 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
+    public Task<bool> ShowImportDecisionDialogAsync(ImportDecisionDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new ImportDecisionDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
     public Task ShowTextAsync(string title, string text)
         => ShowAsync(new TextDialog { DataContext = new TextDialogViewModel(title, text) });
 
@@ -84,6 +91,32 @@ public sealed class AvaloniaDialogService : IDialogService
             }
         });
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
+    /// <inheritdoc />
+    public Task ShowAboutAsync(AboutViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new AboutDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> OpenUriAsync(Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+
+        // Only a web page or a letter: the address never starts a program or opens a local file.
+        if (!uri.IsAbsoluteUri || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeMailto))
+        {
+            return false;
+        }
+
+        if (_owner() is not { } owner)
+        {
+            return false;
+        }
+
+        return await owner.Launcher.LaunchUriAsync(uri);
     }
 
     /// <inheritdoc />

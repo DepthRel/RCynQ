@@ -15,7 +15,7 @@
     <Grid ColumnDefinitions="*,14,*" RowDefinitions="Auto,14,Auto,14,Auto,14,Auto">
       <StackPanel>
         <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />
-        <TextBox Classes="mono" Text="{Binding NodeId}" PlaceholderText="mediator-1" />
+        <TextBox Classes="mono" Text="{Binding NodeId}" PlaceholderText="relay-1" />
       </StackPanel>
       <StackPanel Grid.Column="2">
         <TextBlock Classes="field-label" Text="{loc:Loc Field.Role}" />

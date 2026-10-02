@@ -2,7 +2,7 @@
   "SyncBridge": {
     "NodeId": "dev-source",
     "Name": "Dev machine",
-    "Role": "Source",
+    "Role": "Workstation",
     "WorkdirPath": "C:\\Users\\DepthRel\\source\\repos\\Work\\prto",
     "DataRoot": "data",
     "ListenPort": 18443,

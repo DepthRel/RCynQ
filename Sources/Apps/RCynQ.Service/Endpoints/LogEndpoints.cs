@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Serilog.Events;
 using RCynQ.Core.Api;
 using RCynQ.Service.Logging;
-using Serilog.Events;
 
 namespace RCynQ.Service.Endpoints;
 
@@ -19,10 +19,10 @@ public static class LogEndpoints
     /// <returns>The same route builder.</returns>
     public static IEndpointRouteBuilder MapLogEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet(ApiRoutes.Logs, (InMemoryLogSink sink, string? level, int? take) =>
+        app.MapGet(ApiRoutes.LOGS, (InMemoryLogSink sink, string? level, int? take) =>
         {
             var minimum = Enum.TryParse<LogEventLevel>(level, ignoreCase: true, out var parsed) ? parsed : LogEventLevel.Information;
-            return Results.Ok(sink.GetEntries(minimum, Math.Clamp(take ?? 500, 1, InMemoryLogSink.Capacity)));
+            return Results.Ok(sink.GetEntries(minimum, Math.Clamp(take ?? 500, 1, InMemoryLogSink.CAPACITY)));
         });
         return app;
     }

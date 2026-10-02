@@ -11,14 +11,14 @@ namespace RCynQ.Sync.Signing;
 /// </summary>
 /// <remarks>
 /// The node key pair is created on first use and stored as PKCS#8 in the encrypted secret store under
-/// <see cref="SecretName"/>; it never leaves the node.
+/// <see cref="SECRET_NAME"/>; it never leaves the node.
 /// </remarks>
 public sealed class EcdsaSignatureService : ISignatureService, IDisposable
 {
     /// <summary>
     /// The secret store entry holding the private key.
     /// </summary>
-    public const string SecretName = "node-signing-key";
+    public const string SECRET_NAME = "node-signing-key";
 
     /// <summary>
     /// The secret store.
@@ -36,11 +36,18 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
     private ECDsa? _key;
 
     /// <summary>
+    /// The localizer of the messages.
+    /// </summary>
+    private readonly ILocalizer _localizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EcdsaSignatureService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="secrets">The secret store.</param>
-    public EcdsaSignatureService(ISecretStore secrets)
+    public EcdsaSignatureService(ILocalizer localizer, ISecretStore secrets)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _secrets = secrets;
     }
 
@@ -62,9 +69,9 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
         {
             using var key = ECDsa.Create();
             key.ImportSubjectPublicKeyInfo(publicKeyDer, out var bytesRead);
-            return bytesRead == publicKeyDer.Length
-                && key.KeySize == 256
-                && key.VerifyData(payload, signature, HashAlgorithmName.SHA256);
+            return bytesRead == publicKeyDer.Length &&
+                key.KeySize == 256 &&
+                key.VerifyData(payload, signature, HashAlgorithmName.SHA256);
         }
         catch (CryptographicException)
         {
@@ -106,12 +113,12 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
                 return _key;
             }
 
-            var stored = await _secrets.GetAsync(SecretName, cancellationToken);
+            var stored = await _secrets.GetAsync(SECRET_NAME, cancellationToken);
             var key = ECDsa.Create();
             if (stored is null)
             {
                 key.GenerateKey(ECCurve.NamedCurves.nistP256);
-                await _secrets.SetAsync(SecretName, Convert.ToBase64String(key.ExportPkcs8PrivateKey()), cancellationToken);
+                await _secrets.SetAsync(SECRET_NAME, Convert.ToBase64String(key.ExportPkcs8PrivateKey()), cancellationToken);
             }
             else
             {
@@ -122,7 +129,7 @@ public sealed class EcdsaSignatureService : ISignatureService, IDisposable
                 catch (Exception ex) when (ex is FormatException or CryptographicException)
                 {
                     key.Dispose();
-                    throw new SyncBridgeException(Texts.Get("Signing.KeyMalformed"), ex);
+                    throw new SyncBridgeException(_localizer.Get("Signing.KeyMalformed"), ex);
                 }
             }
 

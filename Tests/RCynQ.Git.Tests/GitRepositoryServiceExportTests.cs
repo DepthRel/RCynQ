@@ -28,7 +28,7 @@ public class GitRepositoryServiceExportTests
 
         using var repo = new TempDirectory();
         using var destination = new TempDirectory();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         await RunGit(git, repo.Path, "init", "-b", "main");
         repo.Write("a.txt", "v1\n");
         repo.Write("sub/b.txt", "v1\n");
@@ -39,7 +39,7 @@ public class GitRepositoryServiceExportTests
         repo.Write("a.txt", "uncommitted\n");
         repo.Write("untracked.txt", "new\n");
 
-        var service = new GitRepositoryService(git);
+        var service = new GitRepositoryService(TestTexts.English, git);
         await service.ExportTreeAsync(repo.Path, commit, destination.Path);
 
         // A checkout may write CRLF (core.autocrlf of the machine); the content is what matters here.
@@ -63,13 +63,13 @@ public class GitRepositoryServiceExportTests
 
         using var repo = new TempDirectory();
         using var destination = new TempDirectory();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
         await RunGit(git, repo.Path, "init", "-b", "main");
         repo.Write("a.txt", "v1\n");
         await Commit(git, repo.Path, "v1");
 
-        var service = new GitRepositoryService(git);
-        var act = () => service.ExportTreeAsync(repo.Path, "refs/remotes/dest/does-not-exist", destination.Path);
+        var service = new GitRepositoryService(TestTexts.English, git);
+        var act = () => service.ExportTreeAsync(repo.Path, "refs/remotes/rcynq/does-not-exist", destination.Path);
 
         await act.Should().ThrowAsync<Core.Exceptions.GitExecutionException>();
     }
@@ -83,8 +83,8 @@ public class GitRepositoryServiceExportTests
     {
         using var repo = new TempDirectory();
         using var destination = new TempDirectory();
-        var git = new GitCommandRunner(new SystemProcessRunner(), new GitOptions());
-        var service = new GitRepositoryService(git);
+        var git = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
+        var service = new GitRepositoryService(TestTexts.English, git);
 
         var act = () => service.ExportTreeAsync(repo.Path, "--upload-pack=evil", destination.Path);
 

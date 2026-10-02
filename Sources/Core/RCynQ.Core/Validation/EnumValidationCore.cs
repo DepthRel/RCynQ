@@ -30,7 +30,30 @@ internal static class EnumValidationCore
     /// <see langword="true"/> when a defined member with the given name exists;
     /// otherwise <see langword="false"/>.
     /// </returns>
+    /// <remarks>
+    /// Only names are accepted. <see cref="Enum.TryParse{TEnum}(string?, bool, out TEnum)"/> alone would also accept a number
+    /// ("42") or a list of names ("Workstation,Origin") and return a value that is not a member of the enum.
+    /// </remarks>
     public static bool TryParseByName<TEnum>(string? name, bool ignoreCase, out TEnum result)
         where TEnum : struct, Enum
-        => Enum.TryParse<TEnum>(name, ignoreCase, out result);
+    {
+        result = default;
+        var text = name?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var candidate in Enum.GetNames<TEnum>())
+        {
+            if (string.Equals(candidate, text, comparison))
+            {
+                result = Enum.Parse<TEnum>(candidate);
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

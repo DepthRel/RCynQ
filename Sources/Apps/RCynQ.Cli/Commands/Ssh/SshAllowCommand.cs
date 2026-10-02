@@ -38,7 +38,7 @@ public sealed class SshAllowCommand : NodeCommandBase
 
         if (result.PeersWaitingForCounterpart.Count > 0)
         {
-            await console.Output.WriteLineAsync($"Waiting for the opposite endpoint of: {string.Join(", ", result.PeersWaitingForCounterpart)}. Import both the Source and the Dest export.");
+            await console.Output.WriteLineAsync($"Waiting for the opposite endpoint of: {string.Join(", ", result.PeersWaitingForCounterpart)}. Import both the Workstation and the Origin export.");
         }
     }
 }

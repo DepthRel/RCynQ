@@ -73,6 +73,18 @@ public interface IPatchService
     Task<NodeSyncStatus> GetStateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the synchronization status of the local node without walking the working tree again.
+    /// </summary>
+    /// <remarks>
+    /// The sync base and the changed files are those of the last full look (<see cref="GetStateAsync"/>, a sent or a
+    /// received patch, a Pull); the times of the last exchange and the number of conflicts are current. The first call
+    /// after the start does the full look.
+    /// </remarks>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The status.</returns>
+    Task<NodeSyncStatus> GetSummaryAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the most recent patches, newest first.
     /// </summary>
     /// <param name="count">The maximum number of patches.</param>

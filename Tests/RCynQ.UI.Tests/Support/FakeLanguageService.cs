@@ -11,12 +11,12 @@ internal sealed class FakeLanguageService : ILanguageService
     /// <summary>
     /// The English language.
     /// </summary>
-    private static readonly LanguageInfo English = new("en", "English");
+    private static readonly LanguageInfo _english = new("en", "English");
 
     /// <summary>
     /// The Russian language.
     /// </summary>
-    private static readonly LanguageInfo Russian = new("ru", "Русский");
+    private static readonly LanguageInfo _russian = new("ru", "Русский");
 
     /// <summary>
     /// Gets or sets an exception thrown by <see cref="Select"/>, or <see langword="null"/>.
@@ -29,10 +29,10 @@ internal sealed class FakeLanguageService : ILanguageService
     public List<string> Selected { get; } = [];
 
     /// <inheritdoc />
-    public IReadOnlyList<LanguageInfo> Languages { get; } = [English, Russian];
+    public IReadOnlyList<LanguageInfo> Languages { get; } = [_english, _russian];
 
     /// <inheritdoc />
-    public LanguageInfo Current { get; private set; } = English;
+    public LanguageInfo Current { get; private set; } = _english;
 
     /// <inheritdoc />
     public void Initialize()
