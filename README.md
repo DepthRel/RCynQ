@@ -4,6 +4,13 @@
 
 **Remote Code sYNchronization, Quick: ship your code to a remote machine without a commit.**
 
+<p>
+  <a href="https://github.com/DepthRel/RCynQ/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DepthRel/RCynQ/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-9333EA">
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-2563EB">
+</p>
+
 [Project page](https://depthrel.github.io/RCynQ/) · [Documentation](Docs/README.md)
 
 The repository sits in a closed network. Your computer is somewhere else, and the two cannot connect to each other. RCynQ links them, directly or through a Relay that both can reach, and from then on you edit files where you are and press one button to deliver them — or to get the latest version.
