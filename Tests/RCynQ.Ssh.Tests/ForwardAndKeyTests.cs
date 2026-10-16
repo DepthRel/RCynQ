@@ -171,7 +171,17 @@ public sealed class ForwardAndKeyTests : IDisposable
             .Should().Be($"restrict,port-forwarding,permitopen=\"127.0.0.1:18443\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {blob} rcynq:PatchForward");
         AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.RelayForward, key, "next-hop.internal:22")
             .Should().Contain("permitopen=\"next-hop.internal:22\"").And.NotContain("git-upload-pack");
-        AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.GitReadOnly, key, "C:\\repos\\app").Should().Contain("git-upload-pack 'C:/repos/app'");
+
+        // The line goes into the authorized_keys of this machine, so a drive path is absolute only on Windows.
+        var windowsPath = () => AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.GitReadOnly, key, "C:\\repos\\app");
+        if (OperatingSystem.IsWindows())
+        {
+            windowsPath().Should().Contain("git-upload-pack 'C:/repos/app'");
+        }
+        else
+        {
+            windowsPath.Should().Throw<ArgumentException>();
+        }
     }
 
     /// <summary>

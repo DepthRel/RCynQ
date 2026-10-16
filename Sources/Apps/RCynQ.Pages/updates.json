@@ -1,1 +1,17 @@
-{}
+{
+  "windows": {
+    "version": "0.1.0",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-setup.exe",
+    "zip": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-win-x64.zip"
+  },
+  "linux": {
+    "version": "0.1.0",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-linux-x64.tar.gz",
+    "deb": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-linux-x64.deb"
+  },
+  "macos": {
+    "version": "0.1.0",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-osx-arm64.tar.gz",
+    "intel": "https://github.com/DepthRel/RCynQ/releases/download/0.1.0/RCynQ-0.1.0-osx-x64.tar.gz"
+  }
+}
