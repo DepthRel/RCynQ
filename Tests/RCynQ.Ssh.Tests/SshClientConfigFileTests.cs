@@ -198,7 +198,10 @@ public sealed class SshClientConfigFileTests : IDisposable
     [Fact]
     public void Installed_Ssh_Client_Hands_The_Configuration_To_A_Jump_Host()
     {
-        var options = new SshClientOptions { ConfigFile = Path.Combine(_directory, "ssh_config"), ConnectTimeoutSeconds = 2, KnownHostsFile = Path.Combine(_directory, "known_hosts") };
+        // The timeout also bounds the wait for the banner from the process of the jump host. A slow machine (the ssh of
+        // Git for Windows on a CI runner) may start that process later than two seconds, and the client then ends it
+        // before it reads the file; the refused port of the jump host ends the run long before this timeout.
+        var options = new SshClientOptions { ConfigFile = Path.Combine(_directory, "ssh_config"), ConnectTimeoutSeconds = 20, KnownHostsFile = Path.Combine(_directory, "known_hosts") };
         var builder = new SshCommandBuilder(options, new SshClientConfigFile(TestTexts.English, options));
         var arguments = new[] { "-v" }
             .Concat(builder.BuildExec(new SshEndpoint("rcynq", "127.0.0.1"), new[] { new SshEndpoint("jump", "127.0.0.1", 1) }, "true"))
