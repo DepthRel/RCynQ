@@ -38,7 +38,12 @@ remote machine without a commit, directly or through Relays.
 
 ## Rules of the page
 
-- Nothing is loaded from other servers: no fonts, no counters, no scripts. The page pins what it may load with a
+- Nothing is loaded from other servers but one thing: the page counts visits with Umami Cloud (no cookies), its
+  script from `cloud.umami.is` and its reports to `gateway.umami.is`. Besides visits it counts the `download` event of
+  the download links (`data-umami-event-package`: `windows`, `windows-zip`, `linux-deb`, `linux-archive`, `macos`,
+  `macos-intel`; `data-umami-event-place`: `card` or `hero`, the button at the top, which `site.js` marks for the
+  system of the visitor). It counts only on `depthrel.github.io`, keeps the part of the address after `#` and `?` out
+  of its reports and skips browsers that ask not to be tracked. The page pins what it may load with a
   `Content-Security-Policy`; there are no inline scripts or styles either.
 - The English text is written right in the HTML (the page reads fine without scripts); the other languages (Deutsch,
   Español, Français, Português, Русский) are tables in `assets/site.js`. A table must have every `data-t` key the

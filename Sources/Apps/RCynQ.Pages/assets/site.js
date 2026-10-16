@@ -522,8 +522,15 @@
     if (mine) {
       hero.querySelector('span').textContent = text('dl.for') + names[mine];
       // On Linux the package of the system comes first, as on the card.
-      var url = (entry && safeUrl(entry.deb)) || (entry && safeUrl(entry.url));
+      var deb = entry && safeUrl(entry.deb);
+      var url = deb || (entry && safeUrl(entry.url));
       hero.setAttribute('href', url || '#download');
+      // A click is counted as a download (Umami) only when the button leads to a package, not to the list below.
+      if (url) {
+        hero.setAttribute('data-umami-event', 'download');
+        hero.setAttribute('data-umami-event-package', mine === 'linux' ? (deb ? 'linux-deb' : 'linux-archive') : mine);
+        hero.setAttribute('data-umami-event-place', 'hero');
+      }
     }
   }
 

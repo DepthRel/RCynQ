@@ -3,9 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Nothing inline runs and nothing is loaded from another server: the page pins what it may load. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <!--
+    Nothing inline runs, and the only thing loaded from another server is the Umami counter of visits (no cookies):
+    its script from cloud.umami.is, its reports to gateway.umami.is. It counts only on the published page, keeps the
+    part of the address after # and ? out of its reports and skips browsers that ask not to be tracked.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self' https://cloud.umami.is; connect-src 'self' https://gateway.umami.is; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="312f1163-387e-481d-8129-a81fc9357263"
+          data-domains="depthrel.github.io" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>
   <title>RCynQ: Remote Code Synchronization, Quick</title>
   <meta name="description" content="RCynQ delivers uncommitted code to a remote machine and brings its branches back, without commits or pushes: directly or through Relay nodes that only pass encrypted traffic.">
   <meta property="og:title" content="RCynQ: Remote Code Synchronization, Quick">
@@ -187,22 +193,22 @@
             <h3>Windows</h3>
             <div class="meta"></div>
             <p class="hint" data-t="dl.windows">An installer for the current user, no administrator rights. Settings and data stay inside the installation.</p>
-            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.button">Download</a>
-            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="zip" data-t="dl.windows.other">or the portable .zip archive</a>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-umami-event="download" data-umami-event-package="windows" data-umami-event-place="card" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="zip" data-umami-event="download" data-umami-event-package="windows-zip" data-umami-event-place="card" data-t="dl.windows.other">or the portable .zip archive</a>
           </div>
           <div class="download" data-os="linux">
             <h3>Linux</h3>
             <div class="meta"></div>
             <p class="hint" data-t="dl.linux">A package for Ubuntu, Debian and their relatives: Git and the SSH client come with it.</p>
-            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="deb" data-t="dl.button">Download</a>
-            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.linux.other">or the portable .tar.gz archive</a>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="deb" data-umami-event="download" data-umami-event-package="linux-deb" data-umami-event-place="card" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-umami-event="download" data-umami-event-package="linux-archive" data-umami-event-place="card" data-t="dl.linux.other">or the portable .tar.gz archive</a>
           </div>
           <div class="download" data-os="macos">
             <h3>macOS</h3>
             <div class="meta"></div>
             <p class="hint" data-t="dl.macos">A portable archive for Macs with Apple silicon.</p>
-            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-t="dl.button">Download</a>
-            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="intel" data-t="dl.macos.other">or for Macs with an Intel processor</a>
+            <a class="btn accent" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="url" data-umami-event="download" data-umami-event-package="macos" data-umami-event-place="card" data-t="dl.button">Download</a>
+            <a class="other" href="https://github.com/DepthRel/RCynQ/releases/latest" data-field="intel" data-umami-event="download" data-umami-event-package="macos-intel" data-umami-event-place="card" data-t="dl.macos.other">or for Macs with an Intel processor</a>
           </div>
         </div>
       </div>
