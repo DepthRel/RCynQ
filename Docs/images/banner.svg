@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-labelledby="title desc">
+  <title id="title">RCynQ</title>
+  <desc id="desc">RCynQ: Remote Code sYNchronization, Quick. Ship uncommitted code from a Workstation to an Origin, directly or through Relays.</desc>
+  <defs>
+    <!-- The palette of the application (Sources/Apps/RCynQ.UI/Themes/Colors.axaml) and of the logo (rcynq.svg). -->
+    <linearGradient id="ground" x1="0" y1="0" x2="1280" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1F2126" />
+      <stop offset="1" stop-color="#16181B" />
+    </linearGradient>
+    <radialGradient id="glowViolet" cx="230" cy="150" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9333EA" stop-opacity="0.38" />
+      <stop offset="1" stop-color="#9333EA" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowBlue" cx="300" cy="300" r="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB" stop-opacity="0.32" />
+      <stop offset="1" stop-color="#2563EB" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowRight" cx="1180" cy="40" r="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5C4BEA" stop-opacity="0.20" />
+      <stop offset="1" stop-color="#5C4BEA" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="1" />
+    </pattern>
+    <linearGradient id="violet" x1="30.5" y1="30.5" x2="225.5" y2="225.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D8B4FE" />
+      <stop offset="1" stop-color="#9333EA" />
+    </linearGradient>
+    <linearGradient id="blue" x1="7.5" y1="103" x2="248.5" y2="153" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA" />
+      <stop offset="1" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="mix" x1="30.5" y1="103" x2="225.5" y2="153" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9094FB" />
+      <stop offset="1" stop-color="#5C4BEA" />
+    </linearGradient>
+    <linearGradient id="line" x1="560" y1="0" x2="1180" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA" />
+      <stop offset="0.5" stop-color="#9094FB" />
+      <stop offset="1" stop-color="#C084FC" />
+    </linearGradient>
+    <clipPath id="ring">
+      <path clip-rule="evenodd"
+            d="M128 30.5 A97.5 97.5 0 1 1 127.99 30.5 Z M128 66.75 A61.25 61.25 0 1 0 128.01 66.75 Z" />
+    </clipPath>
+    <clipPath id="frame">
+      <rect width="1280" height="400" rx="24" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <!-- Dark ground of the application with the violet and blue glow of the two halves of the logo. -->
+    <rect width="1280" height="400" fill="url(#ground)" />
+    <rect width="1280" height="400" fill="url(#grid)" />
+    <rect width="1280" height="400" fill="url(#glowViolet)" />
+    <rect width="1280" height="400" fill="url(#glowBlue)" />
+    <rect width="1280" height="400" fill="url(#glowRight)" />
+
+    <!-- The logo: a violet ring crossed by a blue bar; where they overlap the colors mix. -->
+    <g transform="translate(120 72)">
+      <circle cx="128" cy="128" r="79.375" fill="none" stroke="url(#violet)" stroke-width="36.25" />
+      <rect x="7.5" y="103" width="241" height="50" rx="25" fill="url(#blue)" />
+      <rect x="7.5" y="103" width="241" height="50" rx="25" fill="url(#mix)" clip-path="url(#ring)" />
+    </g>
+
+    <!-- Word mark and tagline. -->
+    <g font-family="'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif">
+      <text x="456" y="178" font-size="104" font-weight="700" letter-spacing="2" fill="#E6E8EB"><tspan fill="#60A5FA">RC</tspan>yn<tspan fill="#C084FC">Q</tspan></text>
+      <text x="460" y="226" font-size="30" font-weight="600" fill="#E6E8EB">Remote Code sYNchronization, Quick</text>
+      <text x="460" y="264" font-size="21" fill="#A0A6AE">Ship uncommitted code to a remote machine and bring its branches back.</text>
+      <text x="460" y="292" font-size="21" fill="#A0A6AE">No commits, no pushes: directly or through Relays that see only encrypted traffic.</text>
+    </g>
+
+    <!-- The route: Workstation, Relay, Origin. -->
+    <g font-family="'Cascadia Mono', 'JetBrains Mono', Consolas, 'DejaVu Sans Mono', monospace" font-size="15" letter-spacing="1">
+      <line x1="472" y1="338" x2="1168" y2="338" stroke="url(#line)" stroke-width="2" stroke-dasharray="6 7" stroke-linecap="round" />
+      <circle cx="472" cy="338" r="7" fill="#1B1D21" stroke="#60A5FA" stroke-width="3" />
+      <circle cx="820" cy="338" r="7" fill="#1B1D21" stroke="#9094FB" stroke-width="3" />
+      <circle cx="1168" cy="338" r="7" fill="#1B1D21" stroke="#C084FC" stroke-width="3" />
+      <text x="462" y="368" fill="#60A5FA">WORKSTATION</text>
+      <text x="820" y="368" fill="#9094FB" text-anchor="middle">RELAY</text>
+      <text x="1178" y="368" fill="#C084FC" text-anchor="end">ORIGIN</text>
+    </g>
+  </g>
+
+  <rect x="0.5" y="0.5" width="1279" height="399" rx="23.5" fill="none" stroke="#2F333A" />
+</svg>

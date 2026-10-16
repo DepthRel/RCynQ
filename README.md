@@ -1,8 +1,10 @@
+<p align="center"><img src="Docs/images/banner.svg" alt="RCynQ: Remote Code sYNchronization, Quick" width="100%"></p>
+
 # RCynQ
 
 **Remote Code sYNchronization, Quick: ship your code to a remote machine without a commit.**
 
-[Русская версия](README.ru.md) · [Project page](https://depthrel.github.io/RCynQ/)
+[Project page](https://depthrel.github.io/RCynQ/) · [Documentation](Docs/README.md)
 
 The repository sits in a closed network. Your computer is somewhere else, and the two cannot connect to each other. RCynQ links them, directly or through a Relay that both can reach, and from then on you edit files where you are and press one button to deliver them — or to get the latest version.
 
@@ -33,11 +35,13 @@ The repository sits in a closed network. Your computer is somewhere else, and th
 
 ## Documentation
 
-All documents, in English, Deutsch, Español, Français, Português and Русский: [Docs](Docs/README.md).
+- [Setup guide](Docs/En/SetupGuide.md) — from three bare computers to the first Pull.
+- [Architecture](Docs/En/Architecture.md) — how the nodes talk and what protects the exchange.
+- [Development](Docs/En/Development.md) — build, tests, localization, packaging.
 
-- [Setup guide](Docs/En/SetupGuide.md) ([на русском](Docs/Ru/SetupGuide.md)) — from three bare computers to the first Pull.
-- [Architecture](Docs/En/Architecture.md) ([на русском](Docs/Ru/Architecture.md)) — how the nodes talk and what protects the exchange.
-- [Development](Docs/En/Development.md) ([на русском](Docs/Ru/Development.md)) — build, tests, localization, packaging.
+The same documents are translated into [Deutsch](Docs/De/SetupGuide.md), [Español](Docs/Es/SetupGuide.md),
+[Français](Docs/Fr/SetupGuide.md), [Português](Docs/Pt/SetupGuide.md) and [Русский](Docs/Ru/SetupGuide.md); the full
+list by language is in [Docs](Docs/README.md).
 
 ## Build
 
