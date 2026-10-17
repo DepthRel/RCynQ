@@ -65,6 +65,7 @@ public sealed class NodeContextFactory : INodeContextFactory
         services.AddSingleton(node);
         services.AddSingleton(_localizer);
         services.AddSingleton(new RCynQ.Sync.Repositories.RepositoryCatalogStorage(path));
+        services.AddSingleton<RCynQ.Sync.Enrollment.IEnrollmentCommandSource>(new CliEnrollmentCommandSource(path));
 
         // A command ends with its answer and has nobody to tell an outcome later, so it waits for the ping of the
         // counterpart endpoint instead of reporting "being checked".

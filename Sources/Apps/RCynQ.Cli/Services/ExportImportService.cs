@@ -37,7 +37,7 @@ public sealed class ExportImportService
     /// <summary>
     /// Exports the configuration as JSON.
     /// </summary>
-    /// <param name="host">The advertised host.</param>
+    /// <param name="addresses">The advertised addresses, the preferred one first.</param>
     /// <param name="user">The advertised SSH user.</param>
     /// <param name="sshPort">The advertised SSH port.</param>
     /// <param name="sshPublicKey">This node's SSH public key line, or <see langword="null"/>.</param>
@@ -45,8 +45,8 @@ public sealed class ExportImportService
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The JSON text.</returns>
     /// <exception cref="ArgumentException">A value is invalid.</exception>
-    public async Task<string> ExportAsync(string? host, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default)
-        => NodeConfigurationTransfer.Serialize(await _transfer.ExportAsync(host, user, sshPort, sshPublicKey, hostKeyFingerprint, cancellationToken));
+    public async Task<string> ExportAsync(IReadOnlyList<string> addresses, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default)
+        => NodeConfigurationTransfer.Serialize(await _transfer.ExportAsync(addresses, user, sshPort, sshPublicKey, hostKeyFingerprint, cancellationToken));
 
     /// <summary>
     /// Imports a peer configuration file.

@@ -49,6 +49,8 @@ The Relay always uses variant A. For the Workstation and the Origin choose per c
 
 ### Variant A — SSH server
 
+The quickest way: **Role and nodes → Export configuration → Install the SSH server** (or `rcynq ssh install-server`) and confirm the administrator prompt. RCynQ installs, starts and opens the server itself; if that is impossible, it shows the commands to run by hand. The commands below do the same by hand.
+
 **Windows** (PowerShell as administrator):
 
 ```powershell
@@ -78,6 +80,8 @@ Check: `ssh -V` prints a version, and the service runs (`Get-Service sshd` / `sy
 
 For a computer where an SSH server cannot be installed. Open inbound TCP port `18444`.
 
+The quickest way: **Role and nodes → Export configuration → Open port 18444 in the firewall** (or `rcynq endpoint open-port`) and confirm the administrator prompt. By hand:
+
 **Windows** (PowerShell as administrator):
 
 ```powershell
@@ -88,11 +92,26 @@ New-NetFirewallRule -Name rcynq -DisplayName 'RCynQ' -Enabled True -Direction In
 
 The SSH *client* is still needed on this computer when a Relay is used: `ssh -V`.
 
+## The quickest way: invitations
+
+Do steps 1–3 and set the role of each computer in the setup window. Then two lines of text set up the whole chain.
+
+After the first setup the **Connect a node** wizard opens by itself; later it is under **Role and nodes → Connect a node**. It checks that the computer accepts neighbours, offers to install the SSH server when it does not, and draws the chain while it works.
+
+1. On the Relay: in the wizard **Next**, then **Create the invitation** for the **Origin**, and copy it.
+2. On the Origin: **Through a Relay → Next → I have an invitation**, paste it, **Join**. The wizard then offers **Invite a node**: create the invitation for the Workstation and copy it.
+3. On the Workstation: **Through a Relay → Next → I have an invitation**, paste it, **Join**.
+
+Without a Relay choose **Directly**: the Origin invites, the Workstation joins with its invitation. Each stage of joining is shown with its outcome; then go on with step 9.
+
+An invitation is a secret: whoever has it may join once until it expires (1 hour, 24 hours or 7 days). Pass it privately. It carries the link token, so nothing has to be copied by hand. Command line: `rcynq invite --role Workstation`, `rcynq join <invitation>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
+
+Steps 4–8 below are the same setup with files, for when an invitation cannot be used.
+
 ## 4. Set up the Relay
 
 1. Start RCynQ. In the setup window set the node identifier (for example `relay-1`), role **Relay**, and save.
-2. **Role and nodes → Export configuration.** Pick the address the Workstation reaches the Relay at and export `relay-for-workstation.rcynq.json`.
-3. Export once more with the address the Origin reaches it at: `relay-for-origin.rcynq.json`. If the address is the same, one file is enough.
+2. **Role and nodes → Export configuration.** Every address of the computer goes into the file; type a host name in as well if the Relay is reached under a name or behind NAT. Export `relay.rcynq.json`. Both endpoints import this one file, and each uses the address that answers it.
 
 ## 5. Set up the Origin
 
@@ -103,7 +122,7 @@ The SSH *client* is still needed on this computer when a Relay is used: `ssh -V`
    - **How neighbours connect to this node** — *Through the SSH server of this computer* (variant A) or *Without an SSH server: own port with TLS* (variant B).
 2. Copy the generated **shared link token**. The Workstation needs the same one.
 3. Save.
-4. **Role and nodes → Export configuration.** Create the key if asked, pick the address the Relay reaches the Origin at, export `origin.rcynq.json`.
+4. **Role and nodes → Export configuration.** The key is created by itself if the computer has none. Export `origin.rcynq.json`.
 
 The repository is named after its folder. That name is what the Workstation will see.
 
@@ -116,16 +135,16 @@ The repository is named after its folder. That name is what the Workstation will
    - the **shared link token** copied from the Origin;
    - **How neighbours connect to this node** — variant A or B as in step 3.
 2. Save.
-3. **Role and nodes → Export configuration.** Create the key if asked, pick the address the Relay reaches the Workstation at, export `workstation.rcynq.json`.
+3. **Role and nodes → Export configuration.** Export `workstation.rcynq.json`.
 
 ## 7. Exchange the node files
 
-On each computer: **Role and nodes → Import configuration**, in this order.
+On each computer: **Role and nodes → Import configuration**, in any order. After each import RCynQ runs the check and says whether the link works.
 
 | On | Import |
 |---|---|
-| Workstation | `relay-for-workstation.rcynq.json`, then `origin.rcynq.json` |
-| Origin | `relay-for-origin.rcynq.json`, then `workstation.rcynq.json` |
+| Workstation | `relay.rcynq.json` and `origin.rcynq.json` |
+| Origin | `relay.rcynq.json` and `workstation.rcynq.json` |
 | Relay | `workstation.rcynq.json` and `origin.rcynq.json` |
 
 Without a Relay: the Workstation imports `origin.rcynq.json`, the Origin imports `workstation.rcynq.json`.

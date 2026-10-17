@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\RCynQ.Core\RCynQ.Core.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\RCynQ.Ssh\RCynQ.Ssh.csproj" />
   </ItemGroup>
 
   <!--

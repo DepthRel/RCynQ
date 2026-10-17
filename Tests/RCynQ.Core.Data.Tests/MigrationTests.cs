@@ -34,11 +34,11 @@ public class MigrationTests
                 }
             }
 
-            tables.Should().Contain(new[] { "Nodes", "ChainLinks", "Peers", "Snapshots", "PatchEnvelopes", "SyncHistory", "Secrets", "DiagnosticRuns" });
+            tables.Should().Contain(new[] { "Nodes", "ChainLinks", "Peers", "Snapshots", "PatchEnvelopes", "SyncHistory", "Secrets", "DiagnosticRuns", "EnrollmentTickets" });
         }
 
         SqliteDatabaseMigrator.MigrateUp(database.Paths.ConnectionString).Should().BeEmpty();
-        SqliteDatabaseMigrator.GetAppliedVersions(database.Paths.ConnectionString).Should().Equal(1L, 2L, 3L, 4L, 5L);
+        SqliteDatabaseMigrator.GetAppliedVersions(database.Paths.ConnectionString).Should().Equal(1L, 2L, 3L, 4L, 5L, 6L);
     }
 
     /// <summary>
@@ -52,7 +52,7 @@ public class MigrationTests
 
         Program.Main(new[] { "--database", freshDb }).Should().Be(0);
         File.Exists(freshDb).Should().BeTrue();
-        SqliteDatabaseMigrator.GetAppliedVersions($"Data Source={freshDb}").Should().Equal(1L, 2L, 3L, 4L, 5L);
+        SqliteDatabaseMigrator.GetAppliedVersions($"Data Source={freshDb}").Should().Equal(1L, 2L, 3L, 4L, 5L, 6L);
 
         Program.Main(new[] { "--help" }).Should().Be(0);
         Program.Main(Array.Empty<string>()).Should().Be(2);

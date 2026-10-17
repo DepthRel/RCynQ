@@ -84,7 +84,7 @@ public static class ConfigEndpoints
     /// Handles <c>GET /config/export</c>.
     /// </summary>
     /// <param name="transfer">The transfer service.</param>
-    /// <param name="host">The advertised host.</param>
+    /// <param name="address">The advertised addresses, the preferred one first (the query repeats <c>address</c>).</param>
     /// <param name="user">The advertised SSH user.</param>
     /// <param name="port">The advertised SSH port.</param>
     /// <param name="sshPublicKey">The SSH public key line.</param>
@@ -92,11 +92,11 @@ public static class ConfigEndpoints
     /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The exported configuration.</returns>
-    private static async Task<IResult> ExportAsync(NodeConfigurationTransfer transfer, string? host, string? user, int? port, string? sshPublicKey, string? hostKeyFingerprint, ILocalizer localizer, CancellationToken cancellationToken)
+    private static async Task<IResult> ExportAsync(NodeConfigurationTransfer transfer, string[]? address, string? user, int? port, string? sshPublicKey, string? hostKeyFingerprint, ILocalizer localizer, CancellationToken cancellationToken)
     {
         try
         {
-            return Results.Ok(await transfer.ExportAsync(host, user, port ?? 22, sshPublicKey, hostKeyFingerprint, cancellationToken));
+            return Results.Ok(await transfer.ExportAsync(address ?? Array.Empty<string>(), user, port ?? 22, sshPublicKey, hostKeyFingerprint, cancellationToken));
         }
         catch (ArgumentException ex)
         {

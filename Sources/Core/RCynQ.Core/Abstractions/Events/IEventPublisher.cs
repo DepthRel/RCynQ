@@ -55,4 +55,15 @@ public interface IEventPublisher
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when the event is published.</returns>
     Task PublishLinkRoutesAsync(LinkRoutesChangedEvent routesEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    /// <summary>
+    /// Publishes that a stage of joining with an invitation started or ended.
+    /// </summary>
+    /// <remarks>
+    /// A publisher that has nobody to tell (a command, a test) may leave the default, which does nothing.
+    /// </remarks>
+    /// <param name="progressEvent">The event.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the event is published.</returns>
+    Task PublishJoinProgressAsync(JoinProgressEvent progressEvent, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

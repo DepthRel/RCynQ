@@ -194,7 +194,7 @@ public sealed class CliCommandTests : IDisposable
         garbageCode.Should().Be(2);
         garbageError.Should().NotBeEmpty();
 
-        // The Origin is linked now; its export with another address is not imported until the command says what it is.
+        // The Origin is linked now. Its new export lists every address it has, so it replaces what the link knew.
         var known = new PeerDescriptor(new NodeId("origin-1"), "Origin", NodeRole.Origin, "10.8.0.2", 22, "rcynq");
         peers.GetAsync(known.Id, Arg.Any<CancellationToken>()).Returns(known);
         links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { new ChainLinkConfig(Guid.NewGuid(), "origin-1", TransportKind.Direct, known, 0, 18443, 1000) });
@@ -202,11 +202,12 @@ public sealed class CliCommandTests : IDisposable
         var otherAddress = Path.Combine(_temp, "origin-tcp.json");
         (await RunAsync(services => Register(services, origin), "export", "--host", "10.9.0.2", "--user", "rcynq", "--output", otherAddress)).Item1.Should().Be(0);
 
-        var (askedCode, _, askedError) = await RunAsync(services => Register(services, workstation), "import", otherAddress);
-        askedCode.Should().Be(2);
-        askedError.Should().Contain("--as route").And.Contain("--as replace");
-        await links.DidNotReceive().UpsertAsync(Arg.Any<ChainLinkConfig>(), Arg.Any<CancellationToken>());
+        var (refreshCode, refreshOutput, _) = await RunAsync(services => Register(services, workstation), "import", otherAddress);
+        refreshCode.Should().Be(0, refreshOutput);
+        await links.Received(1).UpsertAsync(Arg.Is<ChainLinkConfig>(link => link.Routes.Count == 0 && link.Peer.Host == "10.9.0.2"), Arg.Any<CancellationToken>());
+        links.ClearReceivedCalls();
 
+        // Said explicitly, the address is one more route instead.
         var (routeCode, routeOutput, _) = await RunAsync(services => Register(services, workstation), "import", otherAddress, "--as", "route");
         routeCode.Should().Be(0, routeOutput);
         await links.Received(1).UpsertAsync(Arg.Is<ChainLinkConfig>(link => link.Routes.Count == 2 && link.Peer.Host == "10.8.0.2"), Arg.Any<CancellationToken>());

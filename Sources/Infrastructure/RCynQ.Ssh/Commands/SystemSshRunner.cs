@@ -49,9 +49,22 @@ public sealed class SystemSshRunner : ISshExecutor
     }
 
     /// <inheritdoc />
-    public async Task<SshResult> ExecuteAsync(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string remoteCommand, CancellationToken cancellationToken = default)
+    public Task<SshResult> ExecuteAsync(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string remoteCommand, CancellationToken cancellationToken = default)
+        => RunAsync(target, _commands.BuildExec(target, jumps, remoteCommand), cancellationToken);
+
+    /// <inheritdoc />
+    public Task<SshResult> ExecuteWithKeyAsync(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string identityFile, string remoteCommand, CancellationToken cancellationToken = default)
+        => RunAsync(target, _commands.BuildExec(target, jumps, identityFile, remoteCommand), cancellationToken);
+
+    /// <summary>
+    /// Runs <c>ssh</c> with the arguments and turns its own failures into <see cref="SshExecutionException"/>.
+    /// </summary>
+    /// <param name="target">The SSH endpoint, named in the messages.</param>
+    /// <param name="args">The arguments.</param>
+    /// <param name="cancellationToken">A token to cancel the execution.</param>
+    /// <returns>The captured result.</returns>
+    private async Task<SshResult> RunAsync(SshEndpoint target, IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
-        var args = _commands.BuildExec(target, jumps, remoteCommand);
         ProcessResult result;
         try
         {

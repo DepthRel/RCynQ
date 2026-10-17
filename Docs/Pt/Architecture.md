@@ -55,6 +55,15 @@ Uma ligação com um só endereço não tem rotas: não é verificada nem altera
 
 O caminho através de vários Relay é definido pela extremidade: enumera-os por ordem e passa-os ela própria ao SSH. Um Relay fica passivo; apenas deixa as chaves das extremidades reencaminhar para os nós do papel oposto e para os servidores SSH dos Relay vizinhos, em cada endereço pelo qual os conhece.
 
+## Convites
+
+Um nó convida um vizinho com um bilhete de uso único: um segredo aleatório, do qual o nó guarda apenas o SHA-256, um papel e uma validade. O convite leva o cartão do nó, os cartões dos Relays no caminho, o bilhete, o token de ligação para a contraparte e o bilhete do Relay quando o nó tem um.
+
+- **Pelo servidor SSH.** O bilhete vem com uma chave Ed25519 de uso único. A sua linha em `authorized_keys` é `restrict,expiry-time=…,command="rcynq enroll --config …"`: não executa nada além da adesão e o servidor recusa-a depois da validade. O nó que se junta entra com ela, pelos Relays como saltos, e envia o seu cartão como comando; `rcynq enroll` entrega-o ao serviço por loopback. A linha é retirada logo que o bilhete é usado, revogado ou expira.
+- **Pela porta TLS própria.** A adesão é enviada para `/peer/enroll` dessa porta; a impressão digital do certificado do convite é fixada.
+
+O nó que convida verifica o bilhete, gasta-o num só passo, importa o cartão e permite a chave. Um Relay responde a um extremo com um bilhete para o extremo oposto, que o extremo passa no seu próprio convite. A chave de anfitrião ou o certificado de cada nó é fixado a partir do convite antes de se enviar qualquer coisa. A adesão automática passa no máximo por um Relay; um caminho mais longo precisa de ficheiros.
+
 ## Segurança da troca
 
 | Proteção | Mecanismo |
@@ -65,6 +74,7 @@ O caminho através de vários Relay é definido pela extremidade: enumera-os por
 | Saída de caminhos | Os caminhos de um patch são canónicos e têm de ficar dentro da árvore de trabalho |
 | Repositório errado | É recusado um patch para um repositório com o qual o recetor não trabalha |
 | Exposição do Origin | Um vizinho só conhece nomes de repositórios, nunca caminhos; um pacote só é servido para um nome registado |
+| Adesão | Bilhete de uso único com validade (guarda-se o hash); chave SSH de uso único limitada ao comando de adesão, com `expiry-time`; chave de anfitrião e certificado fixados a partir do convite |
 
 ## Repositórios
 

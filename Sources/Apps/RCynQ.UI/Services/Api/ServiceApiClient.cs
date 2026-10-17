@@ -99,6 +99,25 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public Task<LinkDto> SaveLinkAsync(ChainLinkOptions link, CancellationToken cancellationToken = default) => PostAsync<LinkDto>(ApiRoutes.LINKS, link, cancellationToken);
 
     /// <inheritdoc />
+    public Task<CreatedInvitation> CreateInvitationAsync(CreateInvitationRequest request, CancellationToken cancellationToken = default)
+        => PostAsync<CreatedInvitation>(ApiRoutes.CONFIG_INVITATIONS, request, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<InvitationDto>> GetInvitationsAsync(CancellationToken cancellationToken = default)
+        => await GetAsync<InvitationDto[]>(ApiRoutes.CONFIG_INVITATIONS, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RevokeInvitationAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync(ApiRoutes.InvitationPath(id), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<JoinResult> JoinAsync(string invitation, CancellationToken cancellationToken = default)
+        => PostAsync<JoinResult>(ApiRoutes.CONFIG_JOIN, new JoinRequest(invitation), cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
     public async Task DeleteLinkAsync(Guid linkId, CancellationToken cancellationToken = default)
     {
         using var response = await _http.DeleteAsync(ApiRoutes.LinkPath(linkId), cancellationToken);
@@ -174,9 +193,11 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         => PostAsync<NodeEnvironmentReport>(ApiRoutes.CONFIG_SSH_KEY, null, cancellationToken);
 
     /// <inheritdoc />
-    public Task<ExportedNodeConfiguration> ExportConfigAsync(string? host, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default)
+    public Task<ExportedNodeConfiguration> ExportConfigAsync(IReadOnlyList<string> addresses, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(addresses);
         var query = new List<string> { $"port={sshPort}" };
+        query.AddRange(addresses.Where(address => !string.IsNullOrWhiteSpace(address)).Select(address => "address=" + Uri.EscapeDataString(address)));
         if (!string.IsNullOrWhiteSpace(sshPublicKey))
         {
             query.Add("sshPublicKey=" + Uri.EscapeDataString(sshPublicKey));
@@ -185,11 +206,6 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         if (!string.IsNullOrWhiteSpace(hostKeyFingerprint))
         {
             query.Add("hostKeyFingerprint=" + Uri.EscapeDataString(hostKeyFingerprint));
-        }
-
-        if (!string.IsNullOrWhiteSpace(host))
-        {
-            query.Add("host=" + Uri.EscapeDataString(host));
         }
 
         if (!string.IsNullOrWhiteSpace(user))

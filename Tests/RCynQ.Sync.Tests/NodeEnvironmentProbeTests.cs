@@ -7,6 +7,7 @@ using RCynQ.Core.Data.Storage;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Ssh.Keys;
+using RCynQ.Ssh.Keys.AuthorizedKeys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Probing;
@@ -79,6 +80,24 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
         report.SshKeyFingerprint.Should().StartWith("SHA256:");
         report.HostKeyFingerprints.Should().ContainSingle().Which.Should().Be(report.SshKeyFingerprint);
         report.Warnings.Should().Equal(EnvironmentWarning.ServicePortNotListening);
+    }
+
+    /// <summary>
+    /// Verifies that a node whose authorized_keys needs administrator rights (an administrator account of Windows, not
+    /// elevated) is warned, and that an ordinary account is not.
+    /// </summary>
+    /// <param name="administrators">Whether the file is the one of the administrators.</param>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Administrator_Account_Is_Reported(bool administrators)
+    {
+        var keys = new AuthorizedKeysManager(new AuthorizedKeysTarget(Path.Combine(_dataRoot, "authorized_keys"), administrators), () => false);
+
+        var report = await Create(keys).ProbeAsync();
+
+        report.Warnings.Contains(EnvironmentWarning.AccessNeedsAdministrator).Should().Be(administrators);
     }
 
     /// <summary>
@@ -180,7 +199,7 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
     /// Creates the probe under test.
     /// </summary>
     /// <returns>The probe.</returns>
-    private NodeEnvironmentProbe Create()
+    private NodeEnvironmentProbe Create(AuthorizedKeysManager? authorizedKeys = null)
         => new(
             TestTexts.English,
             new NodeConfig(new NodeId("node-1"), "Node", NodeRole.Relay, null, null),
@@ -190,5 +209,6 @@ public sealed class NodeEnvironmentProbeTests : IDisposable
             new HostKeyVerifier(_processes, _options.Ssh),
             new SshKeyGenerator(TestTexts.English, _processes, _options.Ssh),
             new AppDataFactory(AppDataPaths.FromRoot(_dataRoot)),
-            TimeProvider.System);
+            TimeProvider.System,
+            authorizedKeys);
 }

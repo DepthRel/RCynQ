@@ -49,6 +49,8 @@ Le Relay utilise toujours la variante A. Pour la Workstation et l'Origin, choisi
 
 ### Variante A — serveur SSH
 
+Le plus rapide : **Rôle et nœuds → Exporter la configuration → Installer le serveur SSH** (ou `rcynq ssh install-server`), puis confirmez la demande d'administrateur. RCynQ installe, démarre et ouvre le serveur lui-même ; si c'est impossible, il affiche les commandes à exécuter à la main. Les commandes ci-dessous font la même chose à la main.
+
 **Windows** (PowerShell en tant qu'administrateur) :
 
 ```powershell
@@ -78,6 +80,8 @@ Vérifiez : `ssh -V` affiche une version et le service tourne (`Get-Service sshd
 
 Pour un ordinateur où l'on ne peut pas installer de serveur SSH. Ouvrez le port TCP entrant `18444`.
 
+Le plus rapide : **Rôle et nœuds → Exporter la configuration → Ouvrir le port 18444 dans le pare-feu** (ou `rcynq endpoint open-port`), puis confirmez la demande d'administrateur. À la main :
+
 **Windows** (PowerShell en tant qu'administrateur) :
 
 ```powershell
@@ -88,11 +92,26 @@ New-NetFirewallRule -Name rcynq -DisplayName 'RCynQ' -Enabled True -Direction In
 
 Le *client* SSH reste nécessaire sur cet ordinateur quand un Relay est utilisé : `ssh -V`.
 
+## Le plus rapide : les invitations
+
+Faites les étapes 1 à 3 et fixez le rôle de chaque ordinateur dans la fenêtre de configuration. Ensuite, deux lignes de texte configurent toute la chaîne .
+
+Après la première configuration, l'assistant **Connecter un nœud** s'ouvre de lui-même ; ensuite, il se trouve sous **Rôle et nœuds → Connecter un nœud**. Il vérifie que l'ordinateur accepte des voisins, propose d'installer le serveur SSH sinon, et dessine la chaîne pendant qu'il travaille.
+
+1. Sur le Relay : dans l'assistant **Suivant**, puis **Créer l'invitation** pour l'**Origin**, et copiez-la.
+2. Sur l'Origin : **Par un Relay → Suivant → J'ai une invitation**, collez-la, **Rejoindre**. L'assistant propose ensuite **Inviter un nœud** : créez l'invitation pour la Workstation et copiez-la.
+3. Sur la Workstation : **Par un Relay → Suivant → J'ai une invitation**, collez-la, **Rejoindre**.
+
+Sans Relay, choisissez **Directement** : l'Origin invite, la Workstation rejoint avec son invitation. Chaque étape de l'adhésion s'affiche avec son résultat ; poursuivez ensuite avec l'étape 9.
+
+Une invitation est un secret : quiconque la possède peut rejoindre une fois jusqu'à son expiration (1 heure, 24 heures ou 7 jours). Transmettez-la en privé. Elle contient le jeton de liaison, rien n'est à copier à la main. Ligne de commande : `rcynq invite --role Workstation`, `rcynq join <invitation>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
+
+Les étapes 4 à 8 ci-dessous sont la même configuration avec des fichiers, quand une invitation ne peut pas servir.
+
 ## 4. Configurer le Relay
 
 1. Lancez RCynQ. Dans la fenêtre de configuration, indiquez l'identifiant du nœud (par exemple `relay-1`), le rôle **Relay**, puis enregistrez.
-2. **Rôle et nœuds → Exporter la configuration.** Choisissez l'adresse à laquelle la Workstation atteint le Relay et exportez `relay-for-workstation.rcynq.json`.
-3. Exportez une nouvelle fois avec l'adresse à laquelle l'Origin l'atteint : `relay-for-origin.rcynq.json`. Si l'adresse est la même, un seul fichier suffit.
+2. **Rôle et nœuds → Exporter la configuration.** Toutes les adresses de l'ordinateur vont dans le fichier ; saisissez en plus un nom d'hôte si le Relay est atteint par un nom ou derrière un NAT. Exportez `relay.rcynq.json`. Les deux extrémités importent ce seul fichier, et chacune prend l'adresse qui lui répond.
 
 ## 5. Configurer l'Origin
 
@@ -103,7 +122,7 @@ Le *client* SSH reste nécessaire sur cet ordinateur quand un Relay est utilisé
    - **Comment les voisins se connectent à ce nœud** — *Par le serveur SSH de cet ordinateur* (variante A) ou *Sans serveur SSH : port propre avec TLS* (variante B).
 2. Copiez le **jeton de liaison partagé** généré. La Workstation a besoin du même.
 3. Enregistrez.
-4. **Rôle et nœuds → Exporter la configuration.** Créez la clé si on vous le demande, choisissez l'adresse à laquelle le Relay atteint l'Origin et exportez `origin.rcynq.json`.
+4. **Rôle et nœuds → Exporter la configuration.** La clé est créée d'elle-même si l'ordinateur n'en a pas. Exportez `origin.rcynq.json`.
 
 Le dépôt porte le nom de son dossier. C'est ce nom que verra la Workstation.
 
@@ -116,16 +135,16 @@ Le dépôt porte le nom de son dossier. C'est ce nom que verra la Workstation.
    - le **jeton de liaison partagé** copié depuis l'Origin ;
    - **Comment les voisins se connectent à ce nœud** — variante A ou B comme à l'étape 3.
 2. Enregistrez.
-3. **Rôle et nœuds → Exporter la configuration.** Créez la clé si on vous le demande, choisissez l'adresse à laquelle le Relay atteint la Workstation et exportez `workstation.rcynq.json`.
+3. **Rôle et nœuds → Exporter la configuration.** Exportez `workstation.rcynq.json`.
 
 ## 7. Échanger les fichiers des nœuds
 
-Sur chaque ordinateur : **Rôle et nœuds → Importer une configuration**, dans cet ordre.
+Sur chaque ordinateur : **Rôle et nœuds → Importer une configuration**, dans n'importe quel ordre. Après chaque import, RCynQ lance la vérification et dit si la liaison fonctionne.
 
 | Sur | Importer |
 |---|---|
-| Workstation | `relay-for-workstation.rcynq.json`, puis `origin.rcynq.json` |
-| Origin | `relay-for-origin.rcynq.json`, puis `workstation.rcynq.json` |
+| Workstation | `relay.rcynq.json` et `origin.rcynq.json` |
+| Origin | `relay.rcynq.json` et `workstation.rcynq.json` |
 | Relay | `workstation.rcynq.json` et `origin.rcynq.json` |
 
 Sans Relay : la Workstation importe `origin.rcynq.json`, l'Origin importe `workstation.rcynq.json`.

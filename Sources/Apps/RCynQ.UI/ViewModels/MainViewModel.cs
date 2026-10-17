@@ -175,6 +175,7 @@ public sealed partial class MainViewModel : ObservableObject
         _events.ConnectionChanged += (_, connected) => _dispatcher.Post(() => SetConnected(connected));
         _events.RepositoryChanged += (_, evt) => _dispatcher.Post(() => Repositories?.ApplyEvent(evt));
         _events.LinkRoutesChanged += (_, evt) => _dispatcher.Post(() => RoleAndNodes.ApplyRoutes(evt.Routes));
+        _events.JoinProgress += (_, evt) => _dispatcher.Post(() => RoleAndNodes.ApplyJoinProgress(evt));
         branches.Repositories = repositories;
         if (repositories is not null)
         {
@@ -505,6 +506,29 @@ public sealed partial class MainViewModel : ObservableObject
 
         _initialized = false;
         await InitializeAsync();
+        await OfferConnectionAsync();
+    }
+
+    /// <summary>
+    /// Opens the connect wizard after the first setup when the node has no links yet: the next thing to do is to link it.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    private async Task OfferConnectionAsync()
+    {
+        try
+        {
+            if ((await _api.GetLinksAsync()).Count > 0)
+            {
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is ServiceApiException or HttpRequestException)
+        {
+            return;
+        }
+
+        await RoleAndNodes.RefreshAsync();
+        await RoleAndNodes.OpenConnectWizardAsync();
     }
 
     /// <summary>

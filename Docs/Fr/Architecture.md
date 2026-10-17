@@ -55,6 +55,15 @@ Une liaison avec une seule adresse n'a pas de routes : elle n'est ni vérifiée 
 
 Le chemin par plusieurs Relay est défini par l'extrémité : elle les liste dans l'ordre et les transmet elle-même à SSH. Un Relay reste passif ; il laisse seulement les clés des extrémités transférer vers les nœuds du rôle opposé et vers les serveurs SSH des Relay voisins, à chaque adresse sous laquelle il les connaît.
 
+## Invitations
+
+Un nœud invite un voisin avec un ticket à usage unique : un secret aléatoire, dont le nœud ne garde que le SHA-256, un rôle et une expiration. L'invitation contient la carte du nœud, les cartes des Relays sur le chemin, le ticket, le jeton de liaison pour la contrepartie et le ticket du Relay quand le nœud en a un.
+
+- **Par le serveur SSH.** Le ticket est accompagné d'une clé Ed25519 à usage unique. Sa ligne dans `authorized_keys` est `restrict,expiry-time=…,command="rcynq enroll --config …"` : elle n'exécute que l'adhésion et le serveur la refuse après l'expiration. Le nœud qui rejoint se connecte avec elle, par les Relays comme hôtes de rebond, et envoie sa carte comme commande ; `rcynq enroll` la transmet au service sur loopback. La ligne est retirée dès que le ticket est utilisé, révoqué ou expiré.
+- **Par le port TLS propre.** L'adhésion est envoyée à `/peer/enroll` de ce port ; l'empreinte du certificat de l'invitation est épinglée.
+
+Le nœud qui invite vérifie le ticket, le consomme en une seule étape, importe la carte et autorise la clé. Un Relay répond à une extrémité par un ticket pour l'extrémité opposée, que l'extrémité transmet dans sa propre invitation. La clé d'hôte ou le certificat de chaque nœud est épinglé depuis l'invitation avant tout envoi. L'adhésion automatique passe par un Relay au plus ; un chemin plus long demande des fichiers.
+
 ## Sécurité de l'échange
 
 | Protection | Mécanisme |
@@ -65,6 +74,7 @@ Le chemin par plusieurs Relay est défini par l'extrémité : elle les liste dan
 | Sortie de l'arbre | Les chemins d'un patch sont canoniques et doivent rester dans l'arbre de travail |
 | Mauvais dépôt | Un patch pour un dépôt avec lequel le destinataire ne travaille pas est refusé |
 | Exposition de l'Origin | Un voisin n'apprend que des noms de dépôts, jamais des chemins ; un paquet n'est servi que pour un nom enregistré |
+| Adhésion | Ticket à usage unique avec expiration (seul le hachage est gardé) ; clé SSH à usage unique limitée à la commande d'adhésion, avec `expiry-time` ; clé d'hôte et certificat épinglés depuis l'invitation |
 
 ## Dépôts
 

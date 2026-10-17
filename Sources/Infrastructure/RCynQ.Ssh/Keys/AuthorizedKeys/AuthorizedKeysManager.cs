@@ -26,6 +26,24 @@ namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 /// </remarks>
 public sealed partial class AuthorizedKeysManager
 {
+    /// <summary>
+    /// The start of the comment of a one-time enrollment key; the ticket identifier follows. Lines with it are removed
+    /// once their ticket is no longer open.
+    /// </summary>
+    public const string ENROLLMENT_COMMENT_PREFIX = "rcynq:enroll-";
+
+    /// <summary>
+    /// The characters <c>cmd.exe</c> expands even inside quotes (variables, delayed expansion): a word of the enrollment
+    /// command with one of them is refused.
+    /// </summary>
+    private static readonly char[] _cmdVariableCharacters = { '%', '!' };
+
+    /// <summary>
+    /// The characters <c>cmd.exe</c> acts on outside quotes (command separators, redirections, its escape): a word of the
+    /// enrollment command with one of them is put in quotes.
+    /// </summary>
+    private static readonly char[] _cmdSpecialCharacters = { '&', '|', '<', '>', '^', '(', ')' };
+
     /// <summary>The file this manager reads and writes.</summary>
     private readonly AuthorizedKeysTarget _target;
 
@@ -121,6 +139,115 @@ public sealed partial class AuthorizedKeysManager
         var permits = string.Join(',', targets.Select(target => $"permitopen=\"{ValidatePermitOpen(target)}\""));
         var command = gitRepoPath is null ? "exit 1" : $"git-upload-pack '{ValidateRepoPath(gitRepoPath)}'";
         return $"restrict,port-forwarding,{permits},command=\"{command}\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} {comment}";
+    }
+
+    /// <summary>
+    /// Builds the line of a one-time enrollment key: it may only run the enrollment command, opens no terminal and no
+    /// forward, and the SSH server refuses it after its expiry even if the program never removes it.
+    /// </summary>
+    /// <param name="key">The public part of the one-time key.</param>
+    /// <param name="command">The words of the enrollment command: the program, its arguments and the paths it needs.</param>
+    /// <param name="windowsShell">Whether sshd runs the command with <c>cmd.exe</c> (Windows) rather than a POSIX shell.</param>
+    /// <param name="expiresLocal">The expiry in the local time of this computer, as <c>expiry-time</c> reads it.</param>
+    /// <param name="ticketId">The ticket identifier, kept in the comment.</param>
+    /// <returns>The line.</returns>
+    /// <exception cref="ArgumentException">A word of the command cannot be quoted safely.</exception>
+    public static string BuildEnrollmentLine(SshPublicKey key, IReadOnlyList<string> command, bool windowsShell, DateTime expiresLocal, Guid ticketId)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        EnsureEnrollmentCommandSafe(command, windowsShell);
+
+        string shellCommand;
+        if (windowsShell)
+        {
+            // The OpenSSH server of Windows puts the command in quotes itself before cmd.exe /c, which drops that outer
+            // pair again; a word with a space only needs its own quotes (checked against a running sshd). A word with a
+            // character cmd.exe acts on gets them as well, so the character stays part of the path.
+            shellCommand = string.Join(' ', command.Select(word => word.Any(char.IsWhiteSpace) || word.IndexOfAny(_cmdSpecialCharacters) >= 0 ? $"\"{word}\"" : word));
+        }
+        else
+        {
+            shellCommand = string.Join(' ', command.Select(word => $"'{word}'"));
+        }
+
+        var expiry = expiresLocal.ToString("yyyyMMddHHmm", System.Globalization.CultureInfo.InvariantCulture);
+        var quoted = shellCommand.Replace("\"", "\\\"", StringComparison.Ordinal);
+        return $"restrict,expiry-time=\"{expiry}\",command=\"{quoted}\" {key.Type} {key.Blob} {ENROLLMENT_COMMENT_PREFIX}{ticketId:N}";
+    }
+
+    /// <summary>
+    /// Checks that the words of an enrollment command can go into a line of <c>authorized_keys</c>: none may break out of
+    /// its quoting, here or in the shell sshd runs it with (<c>cmd.exe</c> on Windows, the login shell elsewhere).
+    /// </summary>
+    /// <param name="command">The words of the enrollment command.</param>
+    /// <param name="windowsShell">Whether sshd runs the command with <c>cmd.exe</c> (Windows) rather than a POSIX shell.</param>
+    /// <exception cref="ArgumentException">The command is empty, or a word of it cannot be quoted safely.</exception>
+    public static void EnsureEnrollmentCommandSafe(IReadOnlyList<string> command, bool windowsShell)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (command.Count == 0)
+        {
+            throw new ArgumentException("The enrollment command is empty.", nameof(command));
+        }
+
+        foreach (var word in command)
+        {
+            if (string.IsNullOrWhiteSpace(word) || word.Any(char.IsControl) || word.Contains('"') || (windowsShell ? word.IndexOfAny(_cmdVariableCharacters) >= 0 : word.Contains('\'')))
+            {
+                throw new ArgumentException($"The enrollment command word '{word}' cannot be quoted safely.", nameof(command));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes the lines of one-time enrollment keys except the given ones; other lines stay as they are.
+    /// </summary>
+    /// <param name="keepBlobs">The key blobs of the enrollment lines that stay (the open tickets).</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of lines removed.</returns>
+    public async Task<int> RemoveEnrollmentLinesAsync(IReadOnlySet<string> keepBlobs, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(keepBlobs);
+        if (!File.Exists(FilePath))
+        {
+            return 0;
+        }
+
+        var existing = await File.ReadAllLinesAsync(FilePath, cancellationToken);
+        var kept = existing.Where(line => !IsStaleEnrollmentLine(line.Trim(), keepBlobs)).ToArray();
+        if (kept.Length == existing.Length)
+        {
+            return 0;
+        }
+
+        await WriteLinesAsync(kept, cancellationToken);
+        return existing.Length - kept.Length;
+    }
+
+    /// <summary>
+    /// Tells whether a line is the line of an enrollment key that is not kept.
+    /// </summary>
+    /// <param name="line">The trimmed line.</param>
+    /// <param name="keepBlobs">The key blobs that stay.</param>
+    /// <returns><see langword="true"/> when the line goes.</returns>
+    private static bool IsStaleEnrollmentLine(string line, IReadOnlySet<string> keepBlobs)
+    {
+        if (line.Length == 0 || line.StartsWith('#'))
+        {
+            return false;
+        }
+
+        try
+        {
+            var entry = ParseLine(line, 0);
+            return entry.Key.Comment is { } comment &&
+                comment.StartsWith(ENROLLMENT_COMMENT_PREFIX, StringComparison.Ordinal) &&
+                !keepBlobs.Contains(entry.Key.Blob);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

@@ -169,6 +169,12 @@
       </StackPanel>
 
       <WrapPanel>
+        <Button Classes="accent" Margin="0,0,10,10" Command="{Binding ConnectCommand}" IsVisible="{Binding CanConnect}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.Send" />
+            <TextBlock Text="{loc:Loc Roles.Connect}" />
+          </StackPanel>
+        </Button>
         <Button Classes="outline" Margin="0,0,10,10" AutomationProperties.Name="{loc:Loc Roles.Export}" Command="{Binding ExportCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Upload" />

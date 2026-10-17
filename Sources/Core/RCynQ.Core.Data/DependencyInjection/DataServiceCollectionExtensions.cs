@@ -44,6 +44,7 @@ public static class DataServiceCollectionExtensions
         services.TryAddSingleton<ISnapshotRepository, SnapshotRepository>();
         services.TryAddSingleton<ISyncHistoryRepository, SyncHistoryRepository>();
         services.TryAddSingleton<IDiagnosticRunRepository, DiagnosticRunRepository>();
+        services.TryAddSingleton<IEnrollmentTicketRepository, EnrollmentTicketRepository>();
         services.TryAddSingleton<IPatchFileStorage, PatchFileStorage>();
         services.TryAddSingleton<ISecretStore, AesGcmSecretStore>();
         return services;

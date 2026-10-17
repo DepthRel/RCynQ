@@ -49,6 +49,8 @@ O Relay usa sempre a variante A. Para a Workstation e o Origin, escolha em cada 
 
 ### Variante A — servidor SSH
 
+O mais rápido: **Papel e nós → Exportar a configuração → Instalar o servidor SSH** (ou `rcynq ssh install-server`) e confirmar o pedido de administrador. O RCynQ instala, inicia e abre o servidor sozinho; se não for possível, mostra os comandos para executar à mão. Os comandos abaixo fazem o mesmo à mão.
+
 **Windows** (PowerShell como administrador):
 
 ```powershell
@@ -78,6 +80,8 @@ Verifique: `ssh -V` mostra uma versão e o serviço está em execução (`Get-Se
 
 Para um computador onde não é possível instalar um servidor SSH. Abra a porta TCP de entrada `18444`.
 
+O mais rápido: **Papel e nós → Exportar a configuração → Abrir a porta 18444 na firewall** (ou `rcynq endpoint open-port`) e confirmar o pedido de administrador. À mão:
+
 **Windows** (PowerShell como administrador):
 
 ```powershell
@@ -88,11 +92,26 @@ New-NetFirewallRule -Name rcynq -DisplayName 'RCynQ' -Enabled True -Direction In
 
 O *cliente* SSH continua a ser necessário neste computador quando é usado um Relay: `ssh -V`.
 
+## O mais rápido: convites
+
+Faça os passos 1–3 e defina o papel de cada computador na janela de configuração. Depois, duas linhas de texto configuram toda a cadeia.
+
+Depois da primeira configuração, o assistente **Ligar um nó** abre-se sozinho; mais tarde está em **Papel e nós → Ligar um nó**. Verifica se o computador aceita vizinhos, propõe instalar o servidor SSH se não aceitar e desenha a cadeia enquanto trabalha.
+
+1. No Relay: no assistente **Seguinte**, depois **Criar o convite** para o **Origin**, e copie-o.
+2. No Origin: **Através de um Relay → Seguinte → Tenho um convite**, cole-o, **Juntar-se**. Depois o assistente propõe **Convidar um nó**: crie o convite para a Workstation e copie-o.
+3. Na Workstation: **Através de um Relay → Seguinte → Tenho um convite**, cole-o, **Juntar-se**.
+
+Sem Relay escolha **Diretamente**: o Origin convida e a Workstation junta-se com o convite dele. Cada etapa da adesão é mostrada com o seu resultado; depois continue no passo 9.
+
+Um convite é um segredo: quem o tiver pode juntar-se uma vez até expirar (1 hora, 24 horas ou 7 dias). Passe-o em privado. Leva o token de ligação, por isso nada tem de ser copiado à mão. Linha de comandos: `rcynq invite --role Workstation`, `rcynq join <convite>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
+
+Os passos 4–8 abaixo são a mesma configuração com ficheiros, para quando não for possível usar um convite.
+
 ## 4. Configurar o Relay
 
 1. Inicie o RCynQ. Na janela de configuração indique o identificador do nó (por exemplo `relay-1`), o papel **Relay**, e guarde.
-2. **Papel e nós → Exportar a configuração.** Escolha o endereço pelo qual a Workstation alcança o Relay e exporte `relay-for-workstation.rcynq.json`.
-3. Exporte mais uma vez com o endereço pelo qual o Origin o alcança: `relay-for-origin.rcynq.json`. Se o endereço for o mesmo, basta um ficheiro.
+2. **Papel e nós → Exportar a configuração.** Todos os endereços do computador vão no ficheiro; escreva também um nome de anfitrião se o Relay for alcançado por um nome ou atrás de NAT. Exporte `relay.rcynq.json`. Os dois extremos importam este único ficheiro e cada um usa o endereço que lhe responde.
 
 ## 5. Configurar o Origin
 
@@ -103,7 +122,7 @@ O *cliente* SSH continua a ser necessário neste computador quando é usado um R
    - **Como os vizinhos se ligam a este nó** — *Através do servidor SSH deste computador* (variante A) ou *Sem servidor SSH: porta própria com TLS* (variante B).
 2. Copie o **token de ligação partilhado** gerado. A Workstation precisa do mesmo.
 3. Guarde.
-4. **Papel e nós → Exportar a configuração.** Crie a chave se lhe for pedido, escolha o endereço pelo qual o Relay alcança o Origin e exporte `origin.rcynq.json`.
+4. **Papel e nós → Exportar a configuração.** A chave é criada sozinha se o computador não tiver nenhuma. Exporte `origin.rcynq.json`.
 
 O repositório tem o nome da sua pasta. É esse o nome que a Workstation vai ver.
 
@@ -116,16 +135,16 @@ O repositório tem o nome da sua pasta. É esse o nome que a Workstation vai ver
    - o **token de ligação partilhado** copiado do Origin;
    - **Como os vizinhos se ligam a este nó** — variante A ou B como no passo 3.
 2. Guarde.
-3. **Papel e nós → Exportar a configuração.** Crie a chave se lhe for pedido, escolha o endereço pelo qual o Relay alcança a Workstation e exporte `workstation.rcynq.json`.
+3. **Papel e nós → Exportar a configuração.** Exporte `workstation.rcynq.json`.
 
 ## 7. Trocar os ficheiros dos nós
 
-Em cada computador: **Papel e nós → Importar uma configuração**, por esta ordem.
+Em cada computador: **Papel e nós → Importar uma configuração**, por qualquer ordem. Depois de cada importação o RCynQ faz a verificação e diz se a ligação funciona.
 
 | Em | Importar |
 |---|---|
-| Workstation | `relay-for-workstation.rcynq.json` e depois `origin.rcynq.json` |
-| Origin | `relay-for-origin.rcynq.json` e depois `workstation.rcynq.json` |
+| Workstation | `relay.rcynq.json` e `origin.rcynq.json` |
+| Origin | `relay.rcynq.json` e `workstation.rcynq.json` |
 | Relay | `workstation.rcynq.json` e `origin.rcynq.json` |
 
 Sem Relay: a Workstation importa `origin.rcynq.json` e o Origin importa `workstation.rcynq.json`.

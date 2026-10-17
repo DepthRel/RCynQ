@@ -10,6 +10,7 @@ using RCynQ.Ssh.Keys;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Ssh.Network;
+using RCynQ.Ssh.Server;
 
 namespace RCynQ.Ssh.DependencyInjection;
 
@@ -41,6 +42,9 @@ public static class SshServiceCollectionExtensions
         services.TryAddSingleton<SshKeyGenerator>();
         services.TryAddSingleton<AuthorizedKeysManager>();
         services.TryAddSingleton<HostKeyVerifier>();
+        services.TryAddSingleton<IHostSystemSource, SystemHostSystemSource>();
+        services.TryAddSingleton<IElevatedProcessLauncher, SystemElevatedProcessLauncher>();
+        services.TryAddSingleton<IServerSetup, ServerSetupService>();
         return services;
     }
 }

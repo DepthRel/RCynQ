@@ -53,6 +53,9 @@ public sealed class RCynQDbContext : DbContext
     /// <summary>Gets the diagnostics runs set.</summary>
     public DbSet<DiagnosticRunEntity> DiagnosticRuns => Set<DiagnosticRunEntity>();
 
+    /// <summary>Gets the set of the tickets of invitations.</summary>
+    public DbSet<EnrollmentTicketEntity> EnrollmentTickets => Set<EnrollmentTicketEntity>();
+
     /// <summary>
     /// Configures table names, keys, relations and value conversions.
     /// </summary>
@@ -110,6 +113,12 @@ public sealed class RCynQDbContext : DbContext
         {
             entity.ToTable("DiagnosticRuns");
             entity.HasKey(run => run.Id);
+        });
+
+        modelBuilder.Entity<EnrollmentTicketEntity>(entity =>
+        {
+            entity.ToTable("EnrollmentTickets");
+            entity.HasKey(ticket => ticket.Id);
         });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

@@ -55,6 +55,15 @@ A link with one address has no routes: it is neither checked nor changed, and th
 
 The way through several Relays is set by the endpoint: it lists them in order and passes them over SSH itself. A Relay stays passive; it only lets the keys of the endpoints forward to the nodes of the opposite role and to the SSH servers of the neighbouring Relays, at every address it knows them by.
 
+## Invitations
+
+A node invites a neighbour with a single-use ticket: a random secret, of which the node keeps only the SHA-256, a role and an expiry. The invitation carries the card of the node, the cards of the Relays on the way, the ticket, the link token for the counterpart, and the ticket of the Relay when the node holds one.
+
+- **Through the SSH server.** The ticket comes with a one-time Ed25519 key. Its line in `authorized_keys` is `restrict,expiry-time=…,command="rcynq enroll --config …"`: it runs nothing but the enrollment and the server refuses it after the expiry. The joining node logs in with it, through the Relays as jump hosts, and sends its card as the command; `rcynq enroll` hands it to the service on loopback. The line is removed once the ticket is used, revoked or expired.
+- **Through the own TLS port.** The enrollment is posted to `/peer/enroll` of that port; the certificate fingerprint of the invitation is pinned.
+
+The inviting node checks the ticket, uses it up in one step, imports the card and allows the key. A Relay answers an endpoint with a ticket for the opposite one, which the endpoint passes on in its own invitation. The host key or certificate of every node is pinned from the invitation before anything is sent. A Relay takes enrollments only for a way through one Relay; a longer way needs files.
+
 ## Security of the exchange
 
 | Protection | Mechanism |
@@ -65,6 +74,7 @@ The way through several Relays is set by the endpoint: it lists them in order an
 | Path traversal | Paths in a patch are canonical and must stay inside the working tree |
 | Wrong repository | A patch for a repository the receiver does not work with is refused |
 | Exposure of the Origin | A neighbour learns repository names only, never paths; a bundle is served only for a registered name |
+| Joining | Single-use, expiring ticket (hash stored); one-time SSH key restricted to the enrollment command with `expiry-time`; host key and certificate pinned from the invitation |
 
 ## Repositories
 

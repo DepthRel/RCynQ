@@ -5,6 +5,7 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Localization;
+using RCynQ.Ssh.Server;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
@@ -20,9 +21,12 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     /// <summary>The API client.</summary>
     private readonly IServiceApiClient _api;
 
-    /// <summary>The advertised host.</summary>
+    /// <summary>An address typed by hand (a host name, an address behind NAT); it is exported first.</summary>
     [ObservableProperty]
     private string _host = string.Empty;
+
+    /// <summary>Whether the dialog asked the service for a new SSH key already; it asks once.</summary>
+    private bool _keyRequested;
 
     /// <summary>The advertised SSH user.</summary>
     [ObservableProperty]
@@ -46,10 +50,6 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     [NotifyPropertyChangedFor(nameof(HasProbeError))]
     private string? _probeError;
 
-    /// <summary>The selected detected address.</summary>
-    [ObservableProperty]
-    private AddressOptionViewModel? _selectedAddress;
-
     /// <summary>The SSH public key line.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSshKey), nameof(CanGenerateKey))]
@@ -59,18 +59,10 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     [ObservableProperty]
     private string _sshKeyDescription = string.Empty;
 
-    /// <summary>Whether the SSH public key is exported.</summary>
-    [ObservableProperty]
-    private bool _includeSshKey;
-
     /// <summary>The sshd host key fingerprint.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasHostKey), nameof(HostKeyFingerprintText))]
     private string? _hostKeyFingerprint;
-
-    /// <summary>Whether the host key fingerprint is exported.</summary>
-    [ObservableProperty]
-    private bool _includeHostKey;
 
     /// <summary>The sshd check label.</summary>
     [ObservableProperty]
@@ -96,16 +88,31 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     /// </summary>
     /// <param name="localizer">The localizer of the messages.</param>
     /// <param name="api">The API client used for probing.</param>
-    public ExportDialogViewModel(ILocalizer localizer, IServiceApiClient api)
+    /// <param name="serverSetup">
+    /// Installs the SSH server or opens the TLS port with administrator rights, or <see langword="null"/> when the dialog
+    /// must not offer it.
+    /// </param>
+    public ExportDialogViewModel(ILocalizer localizer, IServiceApiClient api, IServerSetup? serverSetup = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _api = api ?? throw new ArgumentNullException(nameof(api));
+        ServerSetup = new ServerSetupPanelViewModel(_localizer, serverSetup, () => RunProbeAsync(() => _api.ProbeExportAsync()));
+        ServerSetup.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ServerSetupPanelViewModel.IsSettingUp))
+            {
+                OnPropertyChanged(nameof(CanConfirm));
+            }
+        };
         SshKeyDescription = _localizer.Get("Export.Detecting");
         SshdStatus = _localizer.Get("Export.SshdChecking");
         ServicePortStatus = _localizer.Get("Export.ServicePortChecking");
         Warnings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasWarnings));
         Addresses.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasAddresses));
     }
+
+    /// <summary>Gets the buttons that make this computer accept neighbours when it does not yet.</summary>
+    public ServerSetupPanelViewModel ServerSetup { get; }
 
     /// <summary>Gets the detected addresses, best first.</summary>
     public ObservableCollection<AddressOptionViewModel> Addresses { get; } = new();
@@ -151,13 +158,23 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     public bool IsSshEndpoint => !IsDirectEndpoint;
 
     /// <summary>Gets a value indicating whether the export can be confirmed.</summary>
-    public bool CanConfirm => !IsProbing;
+    public bool CanConfirm => !IsProbing && !ServerSetup.IsSettingUp;
 
-    /// <summary>Gets the SSH public key to export, or <see langword="null"/>.</summary>
-    public string? ExportedSshPublicKey => IncludeSshKey && HasSshKey ? SshPublicKey : null;
+    /// <summary>Gets the SSH public key to export, or <see langword="null"/> while there is none.</summary>
+    public string? ExportedSshPublicKey => HasSshKey ? SshPublicKey : null;
 
-    /// <summary>Gets the host key fingerprint to export, or <see langword="null"/>.</summary>
-    public string? ExportedHostKeyFingerprint => IncludeHostKey && HasHostKey ? HostKeyFingerprint : null;
+    /// <summary>Gets the host key fingerprint to export, or <see langword="null"/> while there is none.</summary>
+    public string? ExportedHostKeyFingerprint => HasHostKey ? HostKeyFingerprint : null;
+
+    /// <summary>
+    /// Gets the addresses to export, the preferred one first: the address typed by hand, then the included detected
+    /// ones in the order of the probe.
+    /// </summary>
+    public IReadOnlyList<string> ExportedAddresses
+        => (string.IsNullOrWhiteSpace(Host) ? Enumerable.Empty<string>() : new[] { Host.Trim() })
+            .Concat(Addresses.Where(option => option.IsIncluded).Select(option => option.Address))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     /// <summary>
     /// Applies a probe report to the form. Values the user already typed for the user name are kept.
@@ -174,7 +191,6 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
             Addresses.Add(new AddressOptionViewModel(_localizer, address, IsDirectEndpoint));
         }
 
-        SelectedAddress = Addresses.FirstOrDefault(option => option.Address == report.SuggestedHost) ?? Addresses.FirstOrDefault();
         if (string.IsNullOrWhiteSpace(User))
         {
             User = report.SshUser;
@@ -191,15 +207,14 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
             SshdOk = report.SshdListening;
             SshdStatus = _localizer.Format(report.SshdListening ? "Export.Ssh.Ok" : "Export.Ssh.Closed", report.SshPort);
         }
+
+        ServerSetup.Apply(IsDirectEndpoint, SshdOk, report.EndpointPort);
         ServicePortOk = report.ServicePortListening;
         ServicePortStatus = _localizer.Get(report.ServicePortListening ? "Export.ServicePort.Ok" : "Export.ServicePort.Closed");
 
         SshPublicKey = report.SshPublicKey;
         SshKeyDescription = report.SshPublicKey is null ? _localizer.Get("Export.SshKeyMissing") : $"{report.SshKeyFingerprint} · {report.SshPublicKeyPath}";
-        IncludeSshKey = HasSshKey;
-
         HostKeyFingerprint = report.HostKeyFingerprints.FirstOrDefault();
-        IncludeHostKey = HasHostKey;
 
         Warnings.Clear();
         foreach (var warning in report.Warnings)
@@ -209,23 +224,21 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     }
 
     /// <summary>
-    /// Copies the selected address into the host field.
-    /// </summary>
-    /// <param name="value">The new selection.</param>
-    partial void OnSelectedAddressChanged(AddressOptionViewModel? value)
-    {
-        if (value is not null)
-        {
-            Host = value.Address;
-        }
-    }
-
-    /// <summary>
-    /// Probes the environment through the service.
+    /// Probes the environment through the service. A node without an SSH key gets one without being asked, once: a
+    /// neighbour cannot let it in without it.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
-    private Task ProbeAsync() => RunProbeAsync(() => _api.ProbeExportAsync());
+    private async Task ProbeAsync()
+    {
+        await RunProbeAsync(() => _api.ProbeExportAsync());
+
+        if (!HasSshKey && !HasProbeError && !_keyRequested)
+        {
+            _keyRequested = true;
+            await RunProbeAsync(() => _api.GenerateSshKeyAsync());
+        }
+    }
 
     /// <summary>
     /// Generates the node SSH key and probes again.
@@ -241,15 +254,15 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     private void Confirm()
     {
         var host = Host.Trim();
-        if (host.Length == 0)
+        if (host.Length > 0 && !SshEndpoint.IsValidHost(host))
         {
-            Error = _localizer.Get("Export.Error.HostRequired");
+            Error = _localizer.Get("Export.Error.HostInvalid");
             return;
         }
 
-        if (!SshEndpoint.IsValidHost(host))
+        if (ExportedAddresses.Count == 0)
         {
-            Error = _localizer.Get("Export.Error.HostInvalid");
+            Error = _localizer.Get("Export.Error.HostRequired");
             return;
         }
 
@@ -274,6 +287,12 @@ public sealed partial class ExportDialogViewModel : DialogViewModelBase
     /// </summary>
     [RelayCommand]
     private void Cancel() => Close(false);
+
+    /// <summary>
+    /// Tells the panel of the SSH server that a check runs, so it offers nothing meanwhile.
+    /// </summary>
+    /// <param name="value">Whether a check runs.</param>
+    partial void OnIsProbingChanged(bool value) => ServerSetup.IsChecking = value;
 
     /// <summary>
     /// Runs a probe call and applies its report.

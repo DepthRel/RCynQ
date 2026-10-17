@@ -1,0 +1,203 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:wizard="using:RCynQ.UI.ViewModels.Wizard"
+                     xmlns:items="using:RCynQ.UI.ViewModels.Items"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     xmlns:views="using:RCynQ.UI.Views.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.ConnectWizard"
+                     x:DataType="wizard:ConnectWizardViewModel"
+                     Title="{loc:Loc Wizard.Title}"
+                     Icon="avares://RCynQ.UI/Assets/rcynq.ico"
+                     Width="680" SizeToContent="Height" MaxHeight="860" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- The chain: this node on the left; bytes run along the links while something happens. -->
+    <StackPanel Margin="22,22,22,6" Spacing="12">
+      <TextBlock Classes="page-title" Text="{loc:Loc Wizard.Title}" />
+      <Border Classes="card padded">
+        <controls:ChainAnimationView Labels="{Binding ChainLabels}" AllActive="{Binding ChainActive}" ActiveLink="{Binding ActiveLink}"
+                                     CompletedLinks="{Binding CompletedLinks}" FailedLink="{Binding FailedLink}" />
+      </Border>
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Margin="22,8,22,8" Spacing="14">
+
+        <!-- 1. Directly or through a Relay. -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsScenarioStep}">
+          <TextBlock FontWeight="SemiBold" Text="{loc:Loc Wizard.Scenario.Question}" />
+          <RadioButton GroupName="scenario" IsChecked="{Binding ThroughRelay}">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{loc:Loc Wizard.Scenario.Relay}" />
+              <TextBlock Classes="secondary" FontSize="12.5" TextWrapping="Wrap" Text="{loc:Loc Wizard.Scenario.RelayHint}" />
+            </StackPanel>
+          </RadioButton>
+          <RadioButton GroupName="scenario" IsChecked="{Binding IsDirect}">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{loc:Loc Wizard.Scenario.Direct}" />
+              <TextBlock Classes="secondary" FontSize="12.5" TextWrapping="Wrap" Text="{loc:Loc Wizard.Scenario.DirectHint}" />
+            </StackPanel>
+          </RadioButton>
+        </StackPanel>
+
+        <!-- 2. This computer accepts neighbours. -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsReadinessStep}">
+          <TextBlock FontWeight="SemiBold" Text="{loc:Loc Wizard.Readiness.Title}" />
+          <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsChecking}" />
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding !IsChecking}">
+            <Panel Margin="0,1,10,0" VerticalAlignment="Top">
+              <controls:IconView Classes="small" IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding IsReady}" />
+              <controls:IconView Classes="small" IconKey="Icon.X" Foreground="{StaticResource DangerBrush}" IsVisible="{Binding !IsReady}" />
+            </Panel>
+            <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding ReadinessText}" />
+          </Grid>
+          <views:ServerSetupPanel DataContext="{Binding Readiness}" />
+          <Border Classes="banner warning" IsVisible="{Binding HasAdminNote}">
+            <Grid ColumnDefinitions="Auto,*">
+              <controls:IconView Classes="small" IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,1,10,0" VerticalAlignment="Top" />
+              <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding AdminNote}" />
+            </Grid>
+          </Border>
+          <Button Classes="outline" HorizontalAlignment="Left" IsEnabled="{Binding !IsChecking}" Command="{Binding CheckCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <controls:IconView Classes="small" IconKey="Icon.Refresh" />
+              <TextBlock Text="{loc:Loc Export.Recheck}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <!-- 3. Join or invite. -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsActionStep}">
+          <TextBlock TextWrapping="Wrap" Text="{Binding ActionHint}" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Classes="accent" Command="{Binding ChooseJoinCommand}" IsVisible="{Binding IsEndpoint}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:IconView Classes="small" IconKey="Icon.Pull" />
+                <TextBlock Text="{loc:Loc Wizard.HaveInvitation}" />
+              </StackPanel>
+            </Button>
+            <Button Classes="outline" Command="{Binding ChooseInviteCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:IconView Classes="small" IconKey="Icon.Send" />
+                <TextBlock Text="{loc:Loc Roles.Invite}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </StackPanel>
+
+        <!-- 4. Invite and wait. -->
+        <Panel IsVisible="{Binding IsInviteStep}">
+          <StackPanel Spacing="12" DataContext="{Binding Invite}" x:DataType="wizard:InviteStepViewModel">
+            <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc Invite.Hint}" />
+            <Grid ColumnDefinitions="*,12,*" IsEnabled="{Binding CanCreate}">
+              <StackPanel IsVisible="{Binding HasRoleChoice}">
+                <TextBlock Classes="field-label" Text="{loc:Loc Invite.Role}" />
+                <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Classes="field-label" Text="{loc:Loc Invite.Lifetime}" />
+                <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Lifetimes}" SelectedItem="{Binding SelectedLifetime}" />
+              </StackPanel>
+            </Grid>
+            <Button Classes="accent" HorizontalAlignment="Left" IsVisible="{Binding CanCreate}" Command="{Binding CreateCommand}" Content="{loc:Loc Invite.Create}" />
+            <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+            <Border Classes="banner error" IsVisible="{Binding HasError}">
+              <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+            </Border>
+
+            <StackPanel Spacing="10" IsVisible="{Binding HasInvitation}">
+              <Border Classes="card padded">
+                <SelectableTextBlock Classes="mono" FontSize="11.5" TextWrapping="Wrap" MaxHeight="150" Text="{Binding InvitationText}" />
+              </Border>
+              <Grid ColumnDefinitions="Auto,*">
+                <controls:IconView Classes="small" IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,1,10,0" VerticalAlignment="Top" />
+                <TextBlock Grid.Column="1" Classes="secondary" TextWrapping="Wrap" Text="{Binding SecretWarning}" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Notes}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Classes="secondary" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,6" Text="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Classes="accent" Command="{Binding CopyCommand}" Content="{loc:Loc Invite.Copy}" />
+                <Button Classes="outline" Command="{Binding SaveCommand}" Content="{loc:Loc Invite.Save}" />
+              </StackPanel>
+              <TextBlock Classes="success" TextWrapping="Wrap" Text="{Binding Info}"
+                         IsVisible="{Binding Info, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding IsWaiting}">
+                <ProgressBar Classes="thin" IsIndeterminate="True" Width="80" VerticalAlignment="Center" />
+                <TextBlock Classes="secondary" VerticalAlignment="Center" Text="{loc:Loc Wizard.Waiting}" />
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+        </Panel>
+
+        <!-- 5. Join. -->
+        <Panel IsVisible="{Binding IsJoinStep}">
+          <StackPanel Spacing="12" DataContext="{Binding Join}" x:DataType="wizard:JoinStepViewModel">
+            <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc Join.Hint}" />
+            <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="True" TextWrapping="Wrap" Height="100"
+                     IsEnabled="{Binding !IsJoining}" Text="{Binding Invitation}" PlaceholderText="{loc:Loc Join.Watermark}" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Button Classes="accent" IsEnabled="{Binding CanJoin}" Command="{Binding JoinCommand}" Content="{loc:Loc Join.Start}" />
+              <Button Classes="outline" IsEnabled="{Binding !IsJoining}" Command="{Binding OpenFileCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <controls:IconView Classes="small" IconKey="Icon.Download" />
+                  <TextBlock Text="{loc:Loc Join.OpenFile}" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Steps}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="items:JoinStepItemViewModel">
+                  <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                    <Panel Margin="0,1,10,0" VerticalAlignment="Top">
+                      <controls:IconView Classes="small" IconKey="Icon.Refresh" Foreground="{StaticResource AccentBrush}" IsVisible="{Binding IsRunning}" />
+                      <controls:IconView Classes="small" IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding Succeeded}" />
+                      <controls:IconView Classes="small" IconKey="Icon.X" Foreground="{StaticResource DangerBrush}" IsVisible="{Binding HasFailed}" />
+                    </Panel>
+                    <StackPanel Grid.Column="1" Spacing="1">
+                      <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                      <TextBlock Classes="secondary" FontSize="12.5" TextWrapping="Wrap" Text="{Binding Message}" />
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock TextWrapping="Wrap" IsVisible="{Binding HasResult}" Text="{Binding Result}"
+                       Classes.success="{Binding Joined}" Classes.danger="{Binding !Joined}" />
+          </StackPanel>
+        </Panel>
+
+        <!-- 6. Done. -->
+        <StackPanel Spacing="12" IsVisible="{Binding IsDoneStep}">
+          <Grid ColumnDefinitions="Auto,*">
+            <controls:IconView Classes="small" IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" Margin="0,1,10,0" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Classes="success" TextWrapping="Wrap" Text="{Binding DoneMessage}" />
+          </Grid>
+          <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding CanInviteNext}" Text="{Binding NextHint}" />
+          <Button Classes="accent" HorizontalAlignment="Left" IsVisible="{Binding CanInviteNext}" Command="{Binding InviteNextCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <controls:IconView Classes="small" IconKey="Icon.Send" />
+              <TextBlock Text="{loc:Loc Roles.Invite}" />
+            </StackPanel>
+          </Button>
+          <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding IsWorkstation}" Text="{loc:Loc Wizard.Done.Pull}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="22,8,22,20">
+      <Button Classes="outline" IsVisible="{Binding CanGoBack}" Command="{Binding BackCommand}" Content="{loc:Loc Wizard.Back}" />
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+        <Button Classes="accent" IsDefault="True" IsVisible="{Binding IsScenarioStep}" Command="{Binding NextCommand}" Content="{loc:Loc Wizard.Next}" />
+        <Button Classes="accent" IsVisible="{Binding IsReadinessStep}" IsEnabled="{Binding !IsChecking}" Command="{Binding ContinueCommand}" Content="{loc:Loc Wizard.Next}" />
+        <Button Classes="outline" IsCancel="True" Command="{Binding FinishCommand}" Content="{loc:Loc Common.Close}" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</dialogs:DialogWindow>

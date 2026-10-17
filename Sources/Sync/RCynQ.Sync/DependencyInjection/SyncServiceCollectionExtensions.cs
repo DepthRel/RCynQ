@@ -98,6 +98,20 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<INetworkInterfaceSource, SystemNetworkInterfaceSource>();
         services.TryAddSingleton<INodeEnvironmentProbe, NodeEnvironmentProbe>();
         services.TryAddSingleton<Configuration.Access.PeerAccessService>();
+
+        // Invitations and enrollment; the host names the command the SSH server runs (IEnrollmentCommandSource).
+        services.TryAddSingleton<Enrollment.LocalCardBuilder>();
+        services.TryAddSingleton<Enrollment.RelayTicketStore>();
+        services.TryAddSingleton<Enrollment.TicketIssuer>();
+        services.TryAddSingleton<Enrollment.InvitationService>();
+        services.TryAddSingleton<Enrollment.EnrollmentService>();
+        services.TryAddSingleton<Enrollment.JoinService>();
+        services.TryAddSingleton<Enrollment.IEnrollmentChannel>(provider => ActivatorUtilities.CreateInstance<Enrollment.EnrollmentChannel>(
+            provider,
+            new PeerLinkFactory(
+                new SocketsHttpHandler { UseProxy = false },
+                provider.GetRequiredService<ILocalForwardManager>(),
+                hostKeys: provider.GetService<RCynQ.Ssh.Keys.HostKeys.IPinnedHostKeyGuard>())));
         services.TryAddSingleton<GitChannel.GitBundleService>();
         services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<GitChannel.GitBundleClient>(
             provider,

@@ -22,6 +22,9 @@ public interface INodeEventStream : IAsyncDisposable
     /// <summary>Raised when the routes of a link were checked or the route in use changed.</summary>
     event EventHandler<LinkRoutesChangedEvent>? LinkRoutesChanged;
 
+    /// <summary>Raised when a stage of joining with an invitation started or ended.</summary>
+    event EventHandler<JoinProgressEvent>? JoinProgress;
+
     /// <summary>Raised when the connection state changes; the argument tells whether the stream is connected.</summary>
     event EventHandler<bool>? ConnectionChanged;
 

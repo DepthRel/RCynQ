@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
+using RCynQ.Ssh.Server;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.ViewModels.Dialogs;
 
@@ -15,24 +16,28 @@ public sealed class ExportDialogViewModelTests
     /// <summary>A host key fingerprint.</summary>
     private const string FINGERPRINT = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU";
 
+    /// <summary>An SSH public key line.</summary>
+    private const string KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev";
+
     /// <summary>The API substitute.</summary>
     private readonly IServiceApiClient _api = Substitute.For<IServiceApiClient>();
 
     /// <summary>
-    /// Verifies that the probe report fills the form and selects the suggested address.
+    /// Verifies that the probe report fills the form and offers every address, all of them included.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Probe_Prefills_Form()
     {
-        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY));
         var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
 
         await dialog.ProbeCommand.ExecuteAsync(null);
 
         dialog.Addresses.Select(option => option.Address).Should().Equal("10.8.0.3", "192.168.1.10");
-        dialog.SelectedAddress!.KindText.Should().Be("VPN / туннель");
-        dialog.Host.Should().Be("10.8.0.3");
+        dialog.Addresses.Should().OnlyContain(option => option.IsIncluded);
+        dialog.Addresses[0].KindText.Should().Be("VPN / туннель");
+        dialog.ExportedAddresses.Should().Equal("10.8.0.3", "192.168.1.10");
         dialog.User.Should().Be("dev");
         dialog.SshPort.Should().Be(2222);
         dialog.SshdOk.Should().BeTrue();
@@ -40,38 +45,74 @@ public sealed class ExportDialogViewModelTests
         dialog.ExportedSshPublicKey.Should().StartWith("ssh-ed25519 ");
         dialog.ExportedHostKeyFingerprint.Should().Be(FINGERPRINT);
         dialog.Warnings.Should().ContainSingle().Which.Should().Contain("Порт сервиса");
-        dialog.CanGenerateKey.Should().BeFalse();
-
-        dialog.IncludeHostKey = false;
-        dialog.ExportedHostKeyFingerprint.Should().BeNull();
-        dialog.SelectedAddress = dialog.Addresses[1];
-        dialog.Host.Should().Be("192.168.1.10");
+        await _api.DidNotReceive().GenerateSshKeyAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>
-    /// Verifies that a missing key can be generated and the typed user name is kept.
+    /// Verifies that an address can be left out and that an address typed by hand comes first.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task Missing_Key_Can_Be_Generated()
+    public async Task Addresses_Can_Be_Left_Out_And_Added_By_Hand()
     {
-        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: null));
-        _api.GenerateSshKeyAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl rcynq:dev"));
-        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api) { User = "rcynq" };
-
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY));
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
         await dialog.ProbeCommand.ExecuteAsync(null);
-        dialog.CanGenerateKey.Should().BeTrue();
-        dialog.ExportedSshPublicKey.Should().BeNull();
 
-        await dialog.GenerateKeyCommand.ExecuteAsync(null);
+        dialog.Addresses[1].IsIncluded = false;
+        dialog.Host = " relay.example.com ";
 
-        dialog.HasSshKey.Should().BeTrue();
-        dialog.IncludeSshKey.Should().BeTrue();
-        dialog.User.Should().Be("rcynq");
+        dialog.ExportedAddresses.Should().Equal("relay.example.com", "10.8.0.3");
+        dialog.ConfirmCommand.Execute(null);
+        dialog.Confirmed.Should().BeTrue();
     }
 
     /// <summary>
-    /// Verifies that an unreachable service is reported and the export still needs a host.
+    /// Verifies that a missing key is created by itself, once, and the typed user name is kept.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Missing_Key_Is_Created_By_Itself()
+    {
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: null));
+        _api.GenerateSshKeyAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY));
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api) { User = "rcynq" };
+
+        await dialog.ProbeCommand.ExecuteAsync(null);
+
+        dialog.HasSshKey.Should().BeTrue();
+        dialog.ExportedSshPublicKey.Should().StartWith("ssh-ed25519 ");
+        dialog.User.Should().Be("rcynq");
+
+        // A probe that still finds no key (the key went missing) does not create one again behind the user's back.
+        await dialog.ProbeCommand.ExecuteAsync(null);
+        await _api.Received(1).GenerateSshKeyAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that an export without any address is not confirmed.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Export_Needs_An_Address()
+    {
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY));
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api);
+        await dialog.ProbeCommand.ExecuteAsync(null);
+
+        foreach (var option in dialog.Addresses)
+        {
+            option.IsIncluded = false;
+        }
+
+        dialog.ConfirmCommand.Execute(null);
+
+        dialog.Confirmed.Should().BeFalse();
+        dialog.Error.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Verifies that an unreachable service is reported and the export still needs an address.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
@@ -87,6 +128,85 @@ public sealed class ExportDialogViewModelTests
         dialog.IsProbing.Should().BeFalse();
         dialog.Confirmed.Should().BeFalse();
         dialog.Error.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Verifies that an SSH server that does not answer can be installed from the dialog, and that a successful
+    /// installation checks the node again.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Missing_Ssh_Server_Can_Be_Installed()
+    {
+        var setup = Substitute.For<IServerSetup>();
+        setup.InstallSshServerAsync(Arg.Any<CancellationToken>()).Returns(new ServerSetupResult(ServerSetupOutcome.Completed, "ready"));
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY) with { SshdListening = false });
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api, setup);
+        await dialog.ProbeCommand.ExecuteAsync(null);
+        dialog.ServerSetup.CanInstallSshServer.Should().BeTrue();
+        dialog.ServerSetup.CanOpenPort.Should().BeFalse();
+
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY));
+        await dialog.ServerSetup.InstallSshServerCommand.ExecuteAsync(null);
+
+        dialog.ServerSetup.SetupMessage.Should().Be("ready");
+        dialog.ServerSetup.IsSetupReady.Should().BeTrue();
+        dialog.ServerSetup.HasManualCommands.Should().BeFalse();
+        dialog.SshdOk.Should().BeTrue("the node was checked again");
+        dialog.ServerSetup.CanInstallSshServer.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a failed installation shows the commands by hand and does not check the node again, and that the
+    /// dialog offers nothing without the service that installs.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Failed_Installation_Shows_The_Commands_By_Hand()
+    {
+        var setup = Substitute.For<IServerSetup>();
+        setup.InstallSshServerAsync(Arg.Any<CancellationToken>()).Returns(new ServerSetupResult(ServerSetupOutcome.Failed, "failed", "sudo apt install openssh-server"));
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(Report(sshKey: KEY) with { SshdListening = false });
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api, setup);
+        await dialog.ProbeCommand.ExecuteAsync(null);
+
+        await dialog.ServerSetup.InstallSshServerCommand.ExecuteAsync(null);
+
+        dialog.ServerSetup.IsSetupReady.Should().BeFalse();
+        dialog.ServerSetup.ManualCommands.Should().Be("sudo apt install openssh-server");
+        await _api.Received(1).ProbeExportAsync(Arg.Any<CancellationToken>());
+
+        var withoutSetup = new ExportDialogViewModel(TestTexts.Russian, _api);
+        await withoutSetup.ProbeCommand.ExecuteAsync(null);
+        withoutSetup.ServerSetup.CanInstallSshServer.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a TLS port that does not answer can be opened from the dialog, with the port of the node.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Closed_Tls_Port_Can_Be_Opened()
+    {
+        var setup = Substitute.For<IServerSetup>();
+        setup.OpenEndpointPortAsync(18444, Arg.Any<CancellationToken>()).Returns(new ServerSetupResult(ServerSetupOutcome.Completed, "open"));
+        var closed = Report(sshKey: KEY) with
+        {
+            Addresses = new[] { new NetworkAddressInfo("10.8.0.3", "awg0", NetworkAddressKind.Tunnel, false) },
+            EndpointMode = EndpointMode.Direct,
+            EndpointPort = 18444
+        };
+        _api.ProbeExportAsync(Arg.Any<CancellationToken>()).Returns(closed);
+        var dialog = new ExportDialogViewModel(TestTexts.Russian, _api, setup);
+        await dialog.ProbeCommand.ExecuteAsync(null);
+
+        dialog.ServerSetup.CanOpenPort.Should().BeTrue();
+        dialog.ServerSetup.CanInstallSshServer.Should().BeFalse();
+        dialog.ServerSetup.OpenPortText.Should().Contain("18444");
+        await dialog.ServerSetup.OpenPortCommand.ExecuteAsync(null);
+
+        await setup.Received(1).OpenEndpointPortAsync(18444, Arg.Any<CancellationToken>());
+        dialog.ServerSetup.SetupMessage.Should().Be("open");
     }
 
     /// <summary>

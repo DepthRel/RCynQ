@@ -151,14 +151,14 @@ public interface IServiceApiClient
     Task<NodeEnvironmentReport> GenerateSshKeyAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Exports the public node configuration.</summary>
-    /// <param name="host">The advertised host.</param>
+    /// <param name="addresses">The advertised addresses, the preferred one first.</param>
     /// <param name="user">The advertised SSH user.</param>
     /// <param name="sshPort">The advertised SSH port.</param>
     /// <param name="sshPublicKey">The SSH public key line to include, or <see langword="null"/>.</param>
     /// <param name="hostKeyFingerprint">The sshd host key fingerprint to include, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The exported configuration.</returns>
-    Task<ExportedNodeConfiguration> ExportConfigAsync(string? host, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default);
+    Task<ExportedNodeConfiguration> ExportConfigAsync(IReadOnlyList<string> addresses, string? user, int sshPort, string? sshPublicKey, string? hostKeyFingerprint, CancellationToken cancellationToken = default);
 
     /// <summary>Imports a peer configuration.</summary>
     /// <param name="configuration">The configuration.</param>
@@ -170,6 +170,29 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The result; when it asks for a decision nothing was imported.</returns>
     Task<ImportResult> ImportConfigAsync(ExportedNodeConfiguration configuration, ImportDecision? decision = null, Guid? linkId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Creates an invitation for a neighbour.</summary>
+    /// <param name="request">The role of the invited node and the lifetime.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The invitation.</returns>
+    Task<CreatedInvitation> CreateInvitationAsync(CreateInvitationRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists the invitations of the node, the newest first.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The invitations.</returns>
+    Task<IReadOnlyList<InvitationDto>> GetInvitationsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes an open invitation.</summary>
+    /// <param name="id">The identifier of the invitation.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>A task representing the request.</returns>
+    Task RevokeInvitationAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Joins the node that wrote an invitation.</summary>
+    /// <param name="invitation">The invitation text.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>How every stage ended.</returns>
+    Task<JoinResult> JoinAsync(string invitation, CancellationToken cancellationToken = default);
 
     /// <summary>Gets the routes of the links that have any, with the outcome of their last check.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>

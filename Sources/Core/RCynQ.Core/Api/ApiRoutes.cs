@@ -114,6 +114,21 @@ public static class ApiRoutes
     /// </summary>
     public const string PEER_REPOSITORIES = "/peer/repositories";
 
+    /// <summary>
+    /// Takes a node that enrolls with an invitation of this node (POST). It needs no local API token and no link token:
+    /// the single-use ticket of the invitation protects it.
+    /// </summary>
+    public const string PEER_ENROLL = "/peer/enroll";
+
+    /// <summary>The open invitations of this node (GET) and creating one (POST).</summary>
+    public const string CONFIG_INVITATIONS = "/config/invitations";
+
+    /// <summary>Revokes an open invitation (DELETE).</summary>
+    public const string CONFIG_INVITATION_BY_ID = "/config/invitations/{id}";
+
+    /// <summary>Joins the node that wrote an invitation (POST).</summary>
+    public const string CONFIG_JOIN = "/config/join";
+
     /// <summary>The repositories of the node (GET) and adding one (POST).</summary>
     public const string REPOSITORIES = "/repositories";
 
@@ -250,6 +265,13 @@ public static class ApiRoutes
     /// <param name="routeId">The route identifier.</param>
     /// <returns>The path.</returns>
     public static string LinkRoutePath(Guid id, Guid routeId) => $"/links/{id}/routes/{routeId}";
+
+    /// <summary>
+    /// Builds the path of one open invitation.
+    /// </summary>
+    /// <param name="id">The ticket identifier of the invitation.</param>
+    /// <returns>The path.</returns>
+    public static string InvitationPath(Guid id) => $"/config/invitations/{id}";
 
     /// <summary>
     /// Builds the path of the preference of one route of a link.

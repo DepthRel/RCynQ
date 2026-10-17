@@ -23,4 +23,18 @@ public interface ISshExecutor
     /// <exception cref="ArgumentException"><paramref name="remoteCommand"/> is blank or contains control characters.</exception>
     /// <exception cref="SshExecutionException">SSH could not be executed.</exception>
     Task<SshResult> ExecuteAsync(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string remoteCommand, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a remote command that logs in to the target with the given key (a one-time enrollment key); the jump
+    /// hosts are reached with the key of the node.
+    /// </summary>
+    /// <param name="target">The SSH endpoint.</param>
+    /// <param name="jumps">The ordered jump hosts; empty for none.</param>
+    /// <param name="identityFile">The private key file for the target.</param>
+    /// <param name="remoteCommand">The remote command.</param>
+    /// <param name="cancellationToken">A token to cancel the execution.</param>
+    /// <returns>The captured result.</returns>
+    /// <exception cref="ArgumentException">The key file or the command cannot be passed safely.</exception>
+    /// <exception cref="SshExecutionException">SSH could not be executed.</exception>
+    Task<SshResult> ExecuteWithKeyAsync(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string identityFile, string remoteCommand, CancellationToken cancellationToken = default);
 }

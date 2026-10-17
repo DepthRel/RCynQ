@@ -67,11 +67,22 @@ public sealed class PeerLink : IAsyncDisposable
     /// <returns>The request.</returns>
     public HttpRequestMessage CreateRequest(HttpMethod method, string path, string nodeId, string token)
     {
-        var authority = Host.Contains(':', StringComparison.Ordinal) && !Host.StartsWith('[') ? $"[{Host}]" : Host;
-        var request = new HttpRequestMessage(method, $"{Scheme}://{authority}:{Port}{path}");
+        var request = CreateRequest(method, path);
         request.Headers.Add(ApiHeaders.NODE_ID, nodeId);
         request.Headers.Add(ApiHeaders.LINK_TOKEN, token);
         return request;
+    }
+
+    /// <summary>
+    /// Creates a request to the peer without authentication headers: an enrollment, which its ticket protects.
+    /// </summary>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="path">The path.</param>
+    /// <returns>The request.</returns>
+    public HttpRequestMessage CreateRequest(HttpMethod method, string path)
+    {
+        var authority = Host.Contains(':', StringComparison.Ordinal) && !Host.StartsWith('[') ? $"[{Host}]" : Host;
+        return new HttpRequestMessage(method, $"{Scheme}://{authority}:{Port}{path}");
     }
 
     /// <inheritdoc />

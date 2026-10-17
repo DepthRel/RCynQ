@@ -1,5 +1,6 @@
 using RCynQ.Core.Enums;
 using RCynQ.UI.ViewModels.Dialogs;
+using RCynQ.UI.ViewModels.Wizard;
 
 namespace RCynQ.UI.Services.Dialogs;
 
@@ -35,6 +36,13 @@ public interface IDialogService
     /// <param name="dialog">The dialog view model.</param>
     /// <returns><see langword="true"/> when the user confirmed a decision.</returns>
     Task<bool> ShowImportDecisionDialogAsync(ImportDecisionDialogViewModel dialog);
+
+    /// <summary>
+    /// Shows the connect wizard.
+    /// </summary>
+    /// <param name="wizard">The wizard view model.</param>
+    /// <returns><see langword="true"/> when the wizard ended with a link set up.</returns>
+    Task<bool> ShowConnectWizardAsync(ConnectWizardViewModel wizard);
 
     /// <summary>
     /// Shows read-only text such as a diff.

@@ -8,6 +8,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Localization;
 using RCynQ.Ssh.Keys;
+using RCynQ.Ssh.Keys.AuthorizedKeys;
 using RCynQ.Ssh.Keys.HostKeys;
 using RCynQ.Sync.Endpoint;
 
@@ -47,6 +48,9 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
     /// <summary>The time provider.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>The authorized_keys file of this account, or <see langword="null"/> when it is not checked.</summary>
+    private readonly AuthorizedKeysManager? _authorizedKeys;
+
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
@@ -62,6 +66,7 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
     /// <param name="keys">The SSH key generator.</param>
     /// <param name="appData">The node data directories; the SSH key is kept in <c>keys/ssh</c>.</param>
     /// <param name="timeProvider">The time provider.</param>
+    /// <param name="authorizedKeys">The authorized_keys file of this account, or <see langword="null"/> when it is not checked.</param>
     public NodeEnvironmentProbe(
         ILocalizer localizer,
         NodeConfig node,
@@ -71,8 +76,10 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
         HostKeyVerifier hostKeys,
         SshKeyGenerator keys,
         IAppDataFactory appData,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AuthorizedKeysManager? authorizedKeys = null)
     {
+        _authorizedKeys = authorizedKeys;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -142,6 +149,13 @@ public sealed class NodeEnvironmentProbe : INodeEnvironmentProbe
         if (!servicePortListening)
         {
             warnings.Add(EnvironmentWarning.ServicePortNotListening);
+        }
+
+        // A node of variant A lets neighbours in through authorized_keys; on an administrator account of Windows only an
+        // administrator may change that file.
+        if (!direct && _authorizedKeys is { CanWrite: false })
+        {
+            warnings.Add(EnvironmentWarning.AccessNeedsAdministrator);
         }
 
         if (sshdListening && hostKeys.Count == 0)

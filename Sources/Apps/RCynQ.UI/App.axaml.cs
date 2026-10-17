@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using RCynQ.Localization;
+using RCynQ.Ssh.Server;
 using RCynQ.UI.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
@@ -176,7 +177,7 @@ public sealed class App : Application
     {
         var command = ServiceExecutableLocator.Locate(AppContext.BaseDirectory, args, Environment.GetEnvironmentVariable, OperatingSystem.IsWindows());
         cli = ExecutableLocator.Locate(AppContext.BaseDirectory, "rcynq", "cli", "RCynQ.Cli", OperatingSystem.IsWindows(), Environment.GetEnvironmentVariable);
-        return new ServiceProcessController(Localizer, settings, api, new SystemChildProcessLauncher(), command);
+        return new ServiceProcessController(Localizer, settings, api, new SystemChildProcessLauncher(), command, cli: cli);
     }
 
     /// <summary>
@@ -211,7 +212,13 @@ public sealed class App : Application
             controller,
             new SetupViewModel(Localizer, settings.ConfigPath, dialogs, languageSelector),
             new OverviewViewModel(Localizer, api),
-            new RoleAndNodesViewModel(Localizer, api, dialogs, new ElevatedCliRunner(Localizer, settings.ConfigPath, cli), new LocalNodeSettings(Localizer, settings.ConfigPath)),
+            new RoleAndNodesViewModel(
+                Localizer,
+                api,
+                dialogs,
+                new ElevatedCliRunner(Localizer, settings.ConfigPath, cli),
+                new LocalNodeSettings(Localizer, settings.ConfigPath),
+                new ServerSetupService(Localizer, new SystemHostSystemSource(), new SystemElevatedProcessLauncher())),
             new SyncViewModel(Localizer, api, dialogs),
             new TunnelViewModel(Localizer, api),
             new DiagnosticsViewModel(Localizer, api, dialogs),

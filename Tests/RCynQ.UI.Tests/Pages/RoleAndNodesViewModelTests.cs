@@ -3,7 +3,9 @@ using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
+using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Events;
 using RCynQ.Core.Ids;
 using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
@@ -26,6 +28,16 @@ public sealed class RoleAndNodesViewModelTests
 
     /// <summary>The dialog substitute.</summary>
     private readonly IDialogService _dialogs = Substitute.For<IDialogService>();
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoleAndNodesViewModelTests"/> class: the check an import runs finds
+    /// nothing to report unless a test says otherwise.
+    /// </summary>
+    public RoleAndNodesViewModelTests()
+    {
+        _api.RunDiagnosticsAsync(Arg.Any<CancellationToken>())
+            .Returns(new DiagnosticsEvent(NodeRole.Workstation, Array.Empty<DiagnosticResult>(), DateTimeOffset.UnixEpoch));
+    }
 
     /// <summary>
     /// Verifies the chain node rows and their statuses.
@@ -288,6 +300,50 @@ public sealed class RoleAndNodesViewModelTests
             await _api.Received(confirmed ? 1 : 0).ImportConfigAsync(
                 Arg.Any<ExportedNodeConfiguration>(), ImportDecision.AlternativeRoute, null, Arg.Any<CancellationToken>());
             (page.InfoMessage ?? string.Empty).Contains("RELAY-1", StringComparison.OrdinalIgnoreCase).Should().Be(confirmed);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that an import runs the check by itself and says what it found: a node set up with files learns at once
+    /// whether the link works.
+    /// </summary>
+    /// <param name="passed">Whether every check passes.</param>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Import_Runs_The_Check(bool passed)
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"rcynq-import-{Guid.NewGuid():N}.json");
+        var relayId = new NodeId("relay-1");
+        var export = new ExportedNodeConfiguration(
+            ExportedNodeConfiguration.CURRENT_FORMAT_VERSION, relayId, "Relay", NodeRole.Relay, null,
+            "10.9.0.4", "jump", 22, 18443, null, DateTimeOffset.UtcNow);
+        await File.WriteAllTextAsync(file, JsonSerializer.Serialize(export, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        try
+        {
+            _dialogs.PickOpenFileAsync(Arg.Any<string>()).Returns(file);
+            _api.ImportConfigAsync(Arg.Any<ExportedNodeConfiguration>(), null, null, Arg.Any<CancellationToken>())
+                .Returns(new ImportResult(relayId, NodeRole.Relay, true, Guid.NewGuid(), "added"));
+            _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
+            _api.AllowPeerAccessAsync(Arg.Any<CancellationToken>()).Returns(
+                new PeerAccessResult(false, false, "keys", 0, Array.Empty<string>(), Array.Empty<string>(), "none"));
+            _api.RunDiagnosticsAsync(Arg.Any<CancellationToken>()).Returns(new DiagnosticsEvent(
+                NodeRole.Workstation,
+                new[] { new DiagnosticResult("link", true, "ok", null), new DiagnosticResult("route", passed, "route", null) },
+                DateTimeOffset.UtcNow));
+            var page = new RoleAndNodesViewModel(TestTexts.Russian, _api, _dialogs);
+
+            await page.ImportCommand.ExecuteAsync(null);
+
+            await _api.Received(1).RunDiagnosticsAsync(Arg.Any<CancellationToken>());
+            page.InfoMessage.Should().Contain(passed
+                ? TestTexts.Russian.Format("Roles.CheckPassed", 2, 2)
+                : TestTexts.Russian.Format("Roles.CheckFailed", 1, 2));
         }
         finally
         {

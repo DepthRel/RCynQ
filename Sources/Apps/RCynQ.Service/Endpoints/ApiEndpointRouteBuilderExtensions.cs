@@ -23,6 +23,7 @@ public static class ApiEndpointRouteBuilderExtensions
             .MapGitEndpoints()
             .MapDiagnosticsEndpoints()
             .MapConfigEndpoints()
+            .MapEnrollmentEndpoints()
             .MapLogEndpoints()
             .MapDataEndpoints()
             .MapPeerEndpoints()

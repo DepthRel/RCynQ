@@ -5,6 +5,7 @@
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      xmlns:items="using:RCynQ.UI.ViewModels.Items"
                      xmlns:controls="using:RCynQ.UI.Controls"
+                     xmlns:views="using:RCynQ.UI.Views.Controls"
                      x:Class="RCynQ.UI.Views.Dialogs.ExportDialog"
                      x:DataType="vm:ExportDialogViewModel"
                      Title="{loc:Loc Export.Title}"
@@ -41,16 +42,17 @@
         <StackPanel>
           <TextBlock Classes="field-label" Text="{loc:Loc Export.Address}" />
           <Border Classes="card" IsVisible="{Binding HasAddresses}" Margin="0,0,0,8">
-            <ListBox Classes="addresses" MaxHeight="190" ItemsSource="{Binding Addresses}" SelectedItem="{Binding SelectedAddress}">
+            <ListBox Classes="addresses" MaxHeight="190" ItemsSource="{Binding Addresses}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="items:AddressOptionViewModel">
-                  <Grid ColumnDefinitions="*,Auto,120">
-                    <StackPanel Spacing="1">
+                  <Grid ColumnDefinitions="Auto,*,Auto,120">
+                    <CheckBox VerticalAlignment="Center" Margin="0,0,6,0" IsChecked="{Binding IsIncluded}" />
+                    <StackPanel Grid.Column="1" Spacing="1">
                       <TextBlock Classes="mono" Text="{Binding Address}" />
                       <TextBlock Classes="muted" FontSize="11.5" Text="{Binding InterfaceName}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Classes="badge" Margin="12,0" VerticalAlignment="Center" Text="{Binding KindText}" />
-                    <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="12"
+                    <TextBlock Grid.Column="2" Classes="badge" Margin="12,0" VerticalAlignment="Center" Text="{Binding KindText}" />
+                    <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12"
                                Classes.success="{Binding SshReachable}" Classes.danger="{Binding !SshReachable}"
                                Text="{Binding StatusText}" />
                   </Grid>
@@ -89,10 +91,12 @@
               <TextBlock Grid.Column="1" Text="{Binding ServicePortStatus}" TextWrapping="Wrap" />
             </Grid>
 
+            <views:ServerSetupPanel DataContext="{Binding ServerSetup}" />
+
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="2">
-                <CheckBox IsChecked="{Binding IncludeSshKey}" IsEnabled="{Binding HasSshKey}" Content="{loc:Loc Export.IncludeSshKey}" />
-                <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap" Text="{Binding SshKeyDescription}" />
+                <TextBlock Text="{loc:Loc Export.SshKeyLabel}" TextWrapping="Wrap" />
+                <TextBlock Classes="mono muted" FontSize="11.5" TextWrapping="Wrap" Text="{Binding SshKeyDescription}" />
               </StackPanel>
               <Button Grid.Column="1" Classes="outline" VerticalAlignment="Center" IsVisible="{Binding CanGenerateKey}" IsEnabled="{Binding !IsProbing}" Command="{Binding GenerateKeyCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -103,9 +107,9 @@
             </Grid>
 
             <StackPanel Spacing="2" IsVisible="{Binding IsSshEndpoint}">
-              <CheckBox IsChecked="{Binding IncludeHostKey}" IsEnabled="{Binding HasHostKey}" Content="{loc:Loc Export.IncludeHostKey}" />
-              <TextBlock Classes="mono muted" FontSize="11.5" Margin="28,0,0,0" TextWrapping="Wrap"
-                         Text="{Binding HostKeyFingerprintText}" />
+              <TextBlock Text="{loc:Loc Export.HostKeyLabel}" TextWrapping="Wrap" />
+              <SelectableTextBlock Classes="mono muted" FontSize="11.5" TextWrapping="Wrap"
+                                   Text="{Binding HostKeyFingerprintText}" />
             </StackPanel>
 
             <StackPanel Spacing="2" IsVisible="{Binding IsDirectEndpoint}">

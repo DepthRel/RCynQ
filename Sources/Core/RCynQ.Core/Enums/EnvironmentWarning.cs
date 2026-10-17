@@ -41,5 +41,12 @@ public enum EnvironmentWarning
     /// The node accepts connections on its own TLS port, but no local address answers on it.
     /// </summary>
     [Description("No local address accepts connections on the node's TLS port.")]
-    EndpointNotListening = 6
+    EndpointNotListening = 6,
+
+    /// <summary>
+    /// The node runs under an administrator account of Windows, whose <c>authorized_keys</c> only an administrator may
+    /// change: every neighbour that joins or is allowed waits for the administrator prompt on this computer.
+    /// </summary>
+    [Description("The authorized_keys file of this account needs administrator rights to change.")]
+    AccessNeedsAdministrator = 7
 }

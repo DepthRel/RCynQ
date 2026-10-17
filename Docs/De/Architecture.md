@@ -55,6 +55,15 @@ Eine Verbindung mit einer Adresse hat keine Routen: sie wird weder geprüft noch
 
 Der Weg über mehrere Relays wird vom Endpunkt festgelegt: er listet sie in Reihenfolge auf und übergibt sie selbst an SSH. Ein Relay bleibt passiv; es lässt die Schlüssel der Endpunkte nur zu den Knoten der Gegenrolle und zu den SSH-Servern der benachbarten Relays weiterleiten, unter jeder Adresse, unter der es sie kennt.
 
+## Einladungen
+
+Ein Knoten lädt einen Nachbarn mit einem Einmal-Ticket ein: ein zufälliges Geheimnis, von dem der Knoten nur den SHA-256 behält, eine Rolle und ein Ablaufdatum. Die Einladung enthält die Karte des Knotens, die Karten der Relays auf dem Weg, das Ticket, das Verbindungstoken für das Gegenstück und das Ticket des Relays, wenn der Knoten eines hat.
+
+- **Über den SSH-Server.** Zum Ticket gehört ein Einmal-Ed25519-Schlüssel. Seine Zeile in `authorized_keys` lautet `restrict,expiry-time=…,command="rcynq enroll --config …"`: er führt nur den Beitritt aus, und der Server lehnt ihn nach dem Ablauf ab. Der beitretende Knoten meldet sich damit an, über die Relays als Sprunghosts, und sendet seine Karte als Befehl; `rcynq enroll` übergibt sie dem Dienst auf Loopback. Die Zeile wird entfernt, sobald das Ticket benutzt, widerrufen oder abgelaufen ist.
+- **Über den eigenen TLS-Port.** Der Beitritt geht an `/peer/enroll` dieses Ports; der Zertifikat-Fingerabdruck der Einladung wird festgelegt.
+
+Der einladende Knoten prüft das Ticket, verbraucht es in einem Schritt, importiert die Karte und lässt den Schlüssel zu. Ein Relay antwortet einem Endpunkt mit einem Ticket für das Gegenüber, das der Endpunkt in seiner eigenen Einladung weitergibt. Hostschlüssel oder Zertifikat jedes Knotens werden aus der Einladung festgelegt, bevor etwas gesendet wird. Automatisch geht der Beitritt über höchstens ein Relay; ein längerer Weg braucht Dateien.
+
 ## Sicherheit des Austauschs
 
 | Schutz | Mechanismus |
@@ -65,6 +74,7 @@ Der Weg über mehrere Relays wird vom Endpunkt festgelegt: er listet sie in Reih
 | Pfadausbruch | Pfade in einem Patch sind kanonisch und müssen im Arbeitsverzeichnis bleiben |
 | Falsches Repository | Ein Patch für ein Repository, mit dem der Empfänger nicht arbeitet, wird abgelehnt |
 | Offenlegung von Origin | Ein Nachbar erfährt nur Repository-Namen, nie Pfade; ein Bundle wird nur für einen registrierten Namen bereitgestellt |
+| Beitritt | Einmal-Ticket mit Ablauf (gespeichert wird der Hash); Einmal-SSH-Schlüssel nur für den Beitrittsbefehl, mit `expiry-time`; Hostschlüssel und Zertifikat aus der Einladung festgelegt |
 
 ## Repositories
 

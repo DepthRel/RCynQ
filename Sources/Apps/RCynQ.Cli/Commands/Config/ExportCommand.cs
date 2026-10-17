@@ -24,9 +24,9 @@ public sealed class ExportCommand : NodeCommandBase
     [CommandOption("output", 'o', Description = "Output file; printed to stdout when omitted.")]
     public string? Output { get; set; }
 
-    /// <summary>Gets or sets the advertised host.</summary>
-    [CommandOption("host", Description = "Host at which neighbours reach this node's sshd.")]
-    public string? Host { get; set; }
+    /// <summary>Gets or sets the advertised addresses, the preferred one first.</summary>
+    [CommandOption("host", Description = "Addresses at which neighbours reach this node, the preferred one first (repeat or list several).")]
+    public IReadOnlyList<string>? Hosts { get; set; }
 
     /// <summary>Gets or sets the advertised SSH user.</summary>
     [CommandOption("user", Description = "SSH user neighbours log in with.")]
@@ -52,7 +52,7 @@ public sealed class ExportCommand : NodeCommandBase
     protected override async ValueTask ExecuteAsync(NodeContext context, IConsole console, CancellationToken cancellationToken)
     {
         var service = context.Get<ExportImportService>();
-        var host = Host;
+        var hosts = Hosts is { Count: > 0 } ? Hosts : null;
         var user = User;
         var port = SshPort;
         var sshKey = SshPublicKeyFile is null ? null : (await File.ReadAllTextAsync(SshPublicKeyFile, cancellationToken)).Trim();
@@ -61,7 +61,7 @@ public sealed class ExportCommand : NodeCommandBase
         if (Auto)
         {
             var report = await service.ProbeAsync(cancellationToken);
-            host ??= report.SuggestedHost;
+            hosts ??= report.Addresses.Select(address => address.Address).ToArray();
             user ??= string.IsNullOrEmpty(report.SshUser) ? null : report.SshUser;
             port ??= report.SshPort;
             sshKey ??= report.SshPublicKey;
@@ -71,10 +71,10 @@ public sealed class ExportCommand : NodeCommandBase
                 await console.Error.WriteLineAsync($"warning: {warning}");
             }
 
-            await console.Error.WriteLineAsync($"Detected host {host ?? "-"}, user {user ?? "-"}, SSH port {port}, key {report.SshKeyFingerprint ?? "-"}.");
+            await console.Error.WriteLineAsync($"Detected host {(hosts.Count == 0 ? "-" : string.Join(", ", hosts))}, user {user ?? "-"}, SSH port {port}, key {report.SshKeyFingerprint ?? "-"}.");
         }
 
-        var json = await service.ExportAsync(host, user, port ?? 22, sshKey, fingerprint, cancellationToken);
+        var json = await service.ExportAsync(hosts ?? Array.Empty<string>(), user, port ?? 22, sshKey, fingerprint, cancellationToken);
         if (Output is null)
         {
             await console.Output.WriteLineAsync(json);

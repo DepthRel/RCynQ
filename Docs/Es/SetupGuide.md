@@ -49,6 +49,8 @@ El Relay usa siempre la variante A. Para la Workstation y el Origin elige en cad
 
 ### Variante A — servidor SSH
 
+Lo más rápido: **Rol y nodos → Exportar la configuración → Instalar el servidor SSH** (o `rcynq ssh install-server`) y confirmar la solicitud de administrador. RCynQ instala, inicia y abre el servidor por sí mismo; si no es posible, muestra los comandos para ejecutarlos a mano. Los comandos de abajo hacen lo mismo a mano.
+
 **Windows** (PowerShell como administrador):
 
 ```powershell
@@ -78,6 +80,8 @@ Comprueba: `ssh -V` muestra una versión y el servicio está en marcha (`Get-Ser
 
 Para un equipo donde no se puede instalar un servidor SSH. Abre el puerto TCP de entrada `18444`.
 
+Lo más rápido: **Rol y nodos → Exportar la configuración → Abrir el puerto 18444 en el cortafuegos** (o `rcynq endpoint open-port`) y confirmar la solicitud de administrador. A mano:
+
 **Windows** (PowerShell como administrador):
 
 ```powershell
@@ -88,11 +92,26 @@ New-NetFirewallRule -Name rcynq -DisplayName 'RCynQ' -Enabled True -Direction In
 
 El *cliente* SSH sigue haciendo falta en este equipo cuando se usa un Relay: `ssh -V`.
 
+## Lo más rápido: invitaciones
+
+Haz los pasos 1–3 y fija el rol de cada equipo en la ventana de configuración. Después, dos líneas de texto configuran toda la cadena.
+
+Tras la primera configuración el asistente **Conectar un nodo** se abre solo; después está en **Rol y nodos → Conectar un nodo**. Comprueba que el equipo acepta vecinos, ofrece instalar el servidor SSH si no es así y dibuja la cadena mientras trabaja.
+
+1. En el Relay: en el asistente **Siguiente**, luego **Crear la invitación** para el **Origin** y cópiala.
+2. En el Origin: **A través de un Relay → Siguiente → Tengo una invitación**, pégala, **Unirse**. Después el asistente ofrece **Invitar a un nodo**: crea la invitación para la Workstation y cópiala.
+3. En la Workstation: **A través de un Relay → Siguiente → Tengo una invitación**, pégala, **Unirse**.
+
+Sin Relay elige **Directamente**: el Origin invita y la Workstation se une con su invitación. Cada etapa de la unión se muestra con su resultado; luego sigue con el paso 9.
+
+Una invitación es un secreto: quien la tenga puede unirse una vez hasta que caduque (1 hora, 24 horas o 7 días). Pásala en privado. Lleva el token de enlace, así que no hay que copiar nada a mano. Línea de comandos: `rcynq invite --role Workstation`, `rcynq join <invitación>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
+
+Los pasos 4–8 de abajo son la misma configuración con archivos, para cuando no se puede usar una invitación.
+
 ## 4. Configura el Relay
 
 1. Inicia RCynQ. En la ventana de configuración indica el identificador del nodo (por ejemplo `relay-1`), el rol **Relay**, y guarda.
-2. **Rol y nodos → Exportar la configuración.** Elige la dirección por la que la Workstation llega al Relay y exporta `relay-for-workstation.rcynq.json`.
-3. Exporta otra vez con la dirección por la que llega el Origin: `relay-for-origin.rcynq.json`. Si la dirección es la misma, basta con un archivo.
+2. **Rol y nodos → Exportar la configuración.** Todas las direcciones del equipo van en el archivo; escribe además un nombre de host si al Relay se llega por un nombre o tras NAT. Exporta `relay.rcynq.json`. Los dos extremos importan este único archivo y cada uno usa la dirección que le responde.
 
 ## 5. Configura el Origin
 
@@ -103,7 +122,7 @@ El *cliente* SSH sigue haciendo falta en este equipo cuando se usa un Relay: `ss
    - **Cómo se conectan los vecinos a este nodo** — *A través del servidor SSH de este equipo* (variante A) o *Sin servidor SSH: puerto propio con TLS* (variante B).
 2. Copia el **token de enlace compartido** generado. La Workstation necesita el mismo.
 3. Guarda.
-4. **Rol y nodos → Exportar la configuración.** Crea la clave si se te pide, elige la dirección por la que el Relay llega al Origin y exporta `origin.rcynq.json`.
+4. **Rol y nodos → Exportar la configuración.** La clave se crea sola si el equipo no tiene ninguna. Exporta `origin.rcynq.json`.
 
 El repositorio se llama como su carpeta. Ese es el nombre que verá la Workstation.
 
@@ -116,16 +135,16 @@ El repositorio se llama como su carpeta. Ese es el nombre que verá la Workstati
    - el **token de enlace compartido** copiado del Origin;
    - **Cómo se conectan los vecinos a este nodo** — variante A o B como en el paso 3.
 2. Guarda.
-3. **Rol y nodos → Exportar la configuración.** Crea la clave si se te pide, elige la dirección por la que el Relay llega a la Workstation y exporta `workstation.rcynq.json`.
+3. **Rol y nodos → Exportar la configuración.** Exporta `workstation.rcynq.json`.
 
 ## 7. Intercambia los archivos de nodo
 
-En cada equipo: **Rol y nodos → Importar una configuración**, en este orden.
+En cada equipo: **Rol y nodos → Importar una configuración**, en cualquier orden. Tras cada importación RCynQ ejecuta la comprobación y dice si el enlace funciona.
 
 | En | Importar |
 |---|---|
-| Workstation | `relay-for-workstation.rcynq.json` y después `origin.rcynq.json` |
-| Origin | `relay-for-origin.rcynq.json` y después `workstation.rcynq.json` |
+| Workstation | `relay.rcynq.json` y `origin.rcynq.json` |
+| Origin | `relay.rcynq.json` y `workstation.rcynq.json` |
 | Relay | `workstation.rcynq.json` y `origin.rcynq.json` |
 
 Sin Relay: la Workstation importa `origin.rcynq.json` y el Origin importa `workstation.rcynq.json`.

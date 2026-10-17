@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Controls.ServerSetupPanel"
+             x:DataType="items:ServerSetupPanelViewModel">
+  <!-- Install the SSH server or open the TLS port in one button, the outcome and the commands to run by hand. -->
+  <StackPanel Spacing="10">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <Button Classes="accent" IsVisible="{Binding CanInstallSshServer}" Command="{Binding InstallSshServerCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <controls:IconView Classes="small" IconKey="Icon.Plus" />
+          <TextBlock Text="{loc:Loc ServerSetup.InstallSsh}" />
+        </StackPanel>
+      </Button>
+      <Button Classes="accent" IsVisible="{Binding CanOpenPort}" Command="{Binding OpenPortCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <controls:IconView Classes="small" IconKey="Icon.Plus" />
+          <TextBlock Text="{Binding OpenPortText}" />
+        </StackPanel>
+      </Button>
+    </StackPanel>
+    <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsSettingUp}" />
+    <TextBlock TextWrapping="Wrap" IsVisible="{Binding HasSetupMessage}" Text="{Binding SetupMessage}"
+               Classes.success="{Binding IsSetupReady}" />
+    <SelectableTextBlock Classes="mono" FontSize="11.5" TextWrapping="Wrap"
+                         IsVisible="{Binding HasManualCommands}" Text="{Binding ManualCommands}" />
+  </StackPanel>
+</UserControl>

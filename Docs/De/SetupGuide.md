@@ -49,6 +49,8 @@ Das Relay verwendet immer Variante A. Für Workstation und Origin wählen Sie je
 
 ### Variante A — SSH-Server
 
+Am schnellsten: **Rolle und Knoten → Konfiguration exportieren → SSH-Server installieren** (oder `rcynq ssh install-server`) und die Administratorabfrage bestätigen. RCynQ installiert, startet und öffnet den Server selbst; geht das nicht, zeigt es die Befehle für die Ausführung von Hand. Die Befehle unten tun dasselbe von Hand.
+
 **Windows** (PowerShell als Administrator):
 
 ```powershell
@@ -78,6 +80,8 @@ Prüfen: `ssh -V` gibt eine Version aus, und der Dienst läuft (`Get-Service ssh
 
 Für einen Rechner, auf dem kein SSH-Server installiert werden kann. Öffnen Sie den eingehenden TCP-Port `18444`.
 
+Am schnellsten: **Rolle und Knoten → Konfiguration exportieren → Port 18444 in der Firewall öffnen** (oder `rcynq endpoint open-port`) und die Administratorabfrage bestätigen. Von Hand:
+
 **Windows** (PowerShell als Administrator):
 
 ```powershell
@@ -88,11 +92,26 @@ New-NetFirewallRule -Name rcynq -DisplayName 'RCynQ' -Enabled True -Direction In
 
 Der SSH-*Client* wird auf diesem Rechner trotzdem gebraucht, wenn ein Relay verwendet wird: `ssh -V`.
 
+## Am schnellsten: Einladungen
+
+Führen Sie die Schritte 1–3 aus und legen Sie im Einrichtungsfenster die Rolle jedes Rechners fest. Danach richten zwei Textzeilen die ganze Kette ein.
+
+Nach der ersten Einrichtung öffnet sich der Assistent **Knoten verbinden** von selbst; später findet er sich unter **Rolle und Knoten → Knoten verbinden**. Er prüft, ob der Rechner Nachbarn annimmt, bietet die Installation des SSH-Servers an, wenn nicht, und zeichnet die Kette, während er arbeitet.
+
+1. Auf dem Relay: im Assistenten **Weiter**, dann **Einladung erstellen** für **Origin** und kopieren.
+2. Auf Origin: **Über ein Relay → Weiter → Ich habe eine Einladung**, einfügen, **Beitreten**. Danach bietet der Assistent **Knoten einladen** an: Einladung für die Workstation erstellen und kopieren.
+3. Auf der Workstation: **Über ein Relay → Weiter → Ich habe eine Einladung**, einfügen, **Beitreten**.
+
+Ohne Relay wählen Sie **Direkt**: Origin lädt ein, die Workstation tritt mit dieser Einladung bei. Jede Stufe des Beitritts wird mit ihrem Ergebnis gezeigt; danach geht es mit Schritt 9 weiter.
+
+Eine Einladung ist ein Geheimnis: wer sie hat, kann einmal beitreten, bis sie abläuft (1 Stunde, 24 Stunden oder 7 Tage). Geben Sie sie vertraulich weiter. Sie enthält das Verbindungstoken, nichts muss von Hand kopiert werden. Befehlszeile: `rcynq invite --role Workstation`, `rcynq join <Einladung>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
+
+Die Schritte 4–8 unten sind dieselbe Einrichtung mit Dateien, falls keine Einladung verwendet werden kann.
+
 ## 4. Das Relay einrichten
 
 1. Starten Sie RCynQ. Legen Sie im Einrichtungsfenster die Knotenkennung fest (zum Beispiel `relay-1`), die Rolle **Relay**, und speichern Sie.
-2. **Rolle und Knoten → Konfiguration exportieren.** Wählen Sie die Adresse, unter der die Workstation das Relay erreicht, und exportieren Sie `relay-for-workstation.rcynq.json`.
-3. Exportieren Sie noch einmal mit der Adresse, unter der Origin es erreicht: `relay-for-origin.rcynq.json`. Ist die Adresse dieselbe, genügt eine Datei.
+2. **Rolle und Knoten → Konfiguration exportieren.** Jede Adresse des Rechners kommt in die Datei; geben Sie zusätzlich einen Hostnamen ein, wenn das Relay unter einem Namen oder hinter NAT erreicht wird. Exportieren Sie `relay.rcynq.json`. Beide Endpunkte importieren diese eine Datei, und jeder nimmt die Adresse, die ihm antwortet.
 
 ## 5. Origin einrichten
 
@@ -103,7 +122,7 @@ Der SSH-*Client* wird auf diesem Rechner trotzdem gebraucht, wenn ein Relay verw
    - **Wie Nachbarn sich mit diesem Knoten verbinden** — *Über den SSH-Server dieses Rechners* (Variante A) oder *Ohne SSH-Server: eigener Port mit TLS* (Variante B).
 2. Kopieren Sie das erzeugte **gemeinsame Verbindungstoken**. Die Workstation braucht dasselbe.
 3. Speichern Sie.
-4. **Rolle und Knoten → Konfiguration exportieren.** Erstellen Sie auf Nachfrage den Schlüssel, wählen Sie die Adresse, unter der das Relay Origin erreicht, und exportieren Sie `origin.rcynq.json`.
+4. **Rolle und Knoten → Konfiguration exportieren.** Der Schlüssel wird von selbst erstellt, wenn der Rechner keinen hat. Exportieren Sie `origin.rcynq.json`.
 
 Das Repository heißt wie sein Ordner. Unter diesem Namen sieht es die Workstation.
 
@@ -116,16 +135,16 @@ Das Repository heißt wie sein Ordner. Unter diesem Namen sieht es die Workstati
    - das von Origin kopierte **gemeinsame Verbindungstoken**;
    - **Wie Nachbarn sich mit diesem Knoten verbinden** — Variante A oder B wie in Schritt 3.
 2. Speichern Sie.
-3. **Rolle und Knoten → Konfiguration exportieren.** Erstellen Sie auf Nachfrage den Schlüssel, wählen Sie die Adresse, unter der das Relay die Workstation erreicht, und exportieren Sie `workstation.rcynq.json`.
+3. **Rolle und Knoten → Konfiguration exportieren.** Exportieren Sie `workstation.rcynq.json`.
 
 ## 7. Die Knotendateien austauschen
 
-Auf jedem Rechner: **Rolle und Knoten → Konfiguration importieren**, in dieser Reihenfolge.
+Auf jedem Rechner: **Rolle und Knoten → Konfiguration importieren**, in beliebiger Reihenfolge. Nach jedem Import führt RCynQ die Prüfung aus und sagt, ob die Verbindung funktioniert.
 
 | Auf | Importieren |
 |---|---|
-| Workstation | `relay-for-workstation.rcynq.json`, dann `origin.rcynq.json` |
-| Origin | `relay-for-origin.rcynq.json`, dann `workstation.rcynq.json` |
+| Workstation | `relay.rcynq.json` und `origin.rcynq.json` |
+| Origin | `relay.rcynq.json` und `workstation.rcynq.json` |
 | Relay | `workstation.rcynq.json` und `origin.rcynq.json` |
 
 Ohne Relay: die Workstation importiert `origin.rcynq.json`, Origin importiert `workstation.rcynq.json`.

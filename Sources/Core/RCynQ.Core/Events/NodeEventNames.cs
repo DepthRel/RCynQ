@@ -29,4 +29,9 @@ public static class NodeEventNames
     /// Published when the routes of a link were checked or the route in use changed.
     /// </summary>
     public const string LINK_ROUTES_CHANGED = "LinkRoutesChanged";
+
+    /// <summary>
+    /// Published when a stage of joining with an invitation started or ended.
+    /// </summary>
+    public const string JOIN_PROGRESS = "JoinProgress";
 }

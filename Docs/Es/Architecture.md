@@ -55,6 +55,15 @@ Un enlace con una sola dirección no tiene rutas: ni se comprueba ni se cambia, 
 
 El camino a través de varios Relay lo define el extremo: los enumera en orden y se los pasa él mismo a SSH. Un Relay permanece pasivo; solo deja que las claves de los extremos reenvíen hacia los nodos del rol opuesto y hacia los servidores SSH de los Relay vecinos, en cada dirección por la que los conoce.
 
+## Invitaciones
+
+Un nodo invita a un vecino con un ticket de un solo uso: un secreto aleatorio, del que el nodo solo guarda el SHA-256, un rol y una caducidad. La invitación lleva la tarjeta del nodo, las tarjetas de los Relays del camino, el ticket, el token de enlace para la contraparte y el ticket del Relay cuando el nodo tiene uno.
+
+- **Por el servidor SSH.** El ticket viene con una clave Ed25519 de un solo uso. Su línea en `authorized_keys` es `restrict,expiry-time=…,command="rcynq enroll --config …"`: no ejecuta nada más que la unión y el servidor la rechaza tras la caducidad. El nodo que se une entra con ella, a través de los Relays como saltos, y envía su tarjeta como comando; `rcynq enroll` la pasa al servicio por loopback. La línea se quita en cuanto el ticket se usa, se revoca o caduca.
+- **Por el puerto TLS propio.** La unión se envía a `/peer/enroll` de ese puerto; se fija la huella del certificado de la invitación.
+
+El nodo que invita comprueba el ticket, lo consume en un solo paso, importa la tarjeta y permite la clave. Un Relay responde a un extremo con un ticket para el extremo opuesto, que el extremo pasa en su propia invitación. La clave de host o el certificado de cada nodo se fija desde la invitación antes de enviar nada. La unión automática pasa como mucho por un Relay; un camino más largo necesita archivos.
+
 ## Seguridad del intercambio
 
 | Protección | Mecanismo |
@@ -65,6 +74,7 @@ El camino a través de varios Relay lo define el extremo: los enumera en orden y
 | Salida de rutas | Las rutas de un parche son canónicas y deben quedar dentro del árbol de trabajo |
 | Repositorio equivocado | Se rechaza un parche para un repositorio con el que el receptor no trabaja |
 | Exposición del Origin | Un vecino solo conoce nombres de repositorios, nunca rutas; un paquete solo se sirve para un nombre registrado |
+| Unión | Ticket de un solo uso con caducidad (se guarda el hash); clave SSH de un solo uso limitada al comando de unión, con `expiry-time`; clave de host y certificado fijados desde la invitación |
 
 ## Repositorios
 

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Abstractions.Repositories;
@@ -44,7 +45,7 @@ public sealed class NodeConfigurationTransferTests
     [Fact]
     public async Task Export_Includes_Normalized_Fingerprint()
     {
-        var exported = await Create(NodeRole.Relay).ExportAsync("203.0.113.4", "jump", 22, null, _fingerprintBody);
+        var exported = await Create(NodeRole.Relay).ExportAsync(new[] { "203.0.113.4" }, "jump", 22, null, _fingerprintBody);
 
         exported.HostKeyFingerprint.Should().Be("SHA256:" + _fingerprintBody);
         NodeConfigurationTransfer.Parse(NodeConfigurationTransfer.Serialize(exported)).HostKeyFingerprint.Should().Be("SHA256:" + _fingerprintBody);
@@ -59,10 +60,10 @@ public sealed class NodeConfigurationTransferTests
     {
         var transfer = Create(NodeRole.Relay);
 
-        var export = () => transfer.ExportAsync("203.0.113.4", "jump", 22, null, "SHA256:short");
+        var export = () => transfer.ExportAsync(new[] { "203.0.113.4" }, "jump", 22, null, "SHA256:short");
         await export.Should().ThrowAsync<ArgumentException>();
 
-        var valid = await transfer.ExportAsync("203.0.113.4", "jump");
+        var valid = await transfer.ExportAsync(new[] { "203.0.113.4" }, "jump");
         var parse = () => NodeConfigurationTransfer.Parse(NodeConfigurationTransfer.Serialize(valid with { HostKeyFingerprint = "garbage\"with quotes" }));
         parse.Should().Throw<FormatException>();
     }
@@ -339,6 +340,161 @@ public sealed class NodeConfigurationTransferTests
 
         saved.Routes.Should().HaveCount(2, "the configuration file names one address and must not erase the others");
         saved.Peer.Host.Should().Be("10.9.0.4", "the node chose this route while running");
+    }
+
+    /// <summary>
+    /// Verifies that an export lists every address in the given order, names the first one as the host for nodes of
+    /// 0.1.0, carries the protocol version and survives serialization.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Export_Lists_Every_Address_With_The_First_As_Host()
+    {
+        var exported = await Create(NodeRole.Relay).ExportAsync(new[] { "203.0.113.4", "10.9.0.4" }, "jump");
+
+        exported.Host.Should().Be("203.0.113.4");
+        exported.Addresses.Should().Equal("203.0.113.4", "10.9.0.4");
+        exported.ProtocolVersion.Should().Be(ExportedNodeConfiguration.CURRENT_PROTOCOL_VERSION);
+        exported.FormatVersion.Should().Be(1, "a node of 0.1.0 refuses any other format version");
+
+        var parsed = NodeConfigurationTransfer.Parse(NodeConfigurationTransfer.Serialize(exported));
+        parsed.Addresses.Should().Equal("203.0.113.4", "10.9.0.4");
+        parsed.ReachableAt().Should().Equal("203.0.113.4", "10.9.0.4");
+    }
+
+    /// <summary>
+    /// Verifies that an export refuses an address that is not a host name or an IP address.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Export_Refuses_An_Invalid_Address()
+    {
+        var export = () => Create(NodeRole.Relay).ExportAsync(new[] { "203.0.113.4", "bad host;rm" }, "jump");
+
+        await export.Should().ThrowAsync<ArgumentException>();
+    }
+
+    /// <summary>
+    /// Verifies that a file of 0.1.0, without the address list, is read with its host as the only address.
+    /// </summary>
+    [Fact]
+    public void Card_Of_An_Earlier_Version_Is_Read_With_Its_Host()
+    {
+        // A file written by 0.1.0 has no such fields at all, not even as null.
+        var old = JsonNode.Parse(NodeConfigurationTransfer.Serialize(RelayExport("relay-1", "203.0.113.4")))!.AsObject();
+        old.Remove("addresses");
+        old.Remove("protocolVersion");
+
+        var parsed = NodeConfigurationTransfer.Parse(old.ToJsonString());
+
+        parsed.Addresses.Should().BeNull();
+        parsed.ProtocolVersion.Should().BeNull();
+        parsed.ReachableAt().Should().Equal("203.0.113.4");
+    }
+
+    /// <summary>
+    /// Verifies that a file with an unsafe address or with too many addresses is refused.
+    /// </summary>
+    [Fact]
+    public void Card_With_Bad_Addresses_Is_Refused()
+    {
+        var card = RelayExport("relay-1", "203.0.113.4");
+
+        var unsafeAddress = () => NodeConfigurationTransfer.Parse(NodeConfigurationTransfer.Serialize(card with { Addresses = new[] { "203.0.113.4", "x\" command=\"sh" } }));
+        var tooMany = () => NodeConfigurationTransfer.Parse(NodeConfigurationTransfer.Serialize(card with
+        {
+            Addresses = Enumerable.Range(1, ExportedNodeConfiguration.MAX_ADDRESSES + 1).Select(i => $"10.0.0.{i}").ToArray()
+        }));
+
+        unsafeAddress.Should().Throw<FormatException>();
+        tooMany.Should().Throw<FormatException>();
+    }
+
+    /// <summary>
+    /// Verifies that every address of a card becomes a route of the new link, in the order of the card, and the link
+    /// starts at the first one.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Import_Turns_Every_Address_Into_A_Route()
+    {
+        var card = RelayExport("relay-1", "203.0.113.4") with { Addresses = new[] { "203.0.113.4", "10.9.0.4" } };
+
+        var result = await Create(NodeRole.Workstation).ImportAsync(card);
+
+        result.LinkCreated.Should().BeTrue();
+        await _links.Received(1).UpsertAsync(
+            Arg.Is<ChainLinkConfig>(saved =>
+                saved.Peer.Host == "203.0.113.4" &&
+                saved.Routes.Select(route => route.Ssh.Host).SequenceEqual(new[] { "203.0.113.4", "10.9.0.4" }) &&
+                saved.Routes[0].Priority < saved.Routes[1].Priority),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that an address a card repeats becomes one route, and a card that names one address twice gives a link
+    /// without routes.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Import_Makes_One_Route_Per_Repeated_Address()
+    {
+        var repeated = RelayExport("relay-1", "203.0.113.4") with { Addresses = new[] { "203.0.113.4", "10.9.0.4", "203.0.113.4" } };
+        var single = RelayExport("relay-2", "198.51.100.7") with { Addresses = new[] { "198.51.100.7", "198.51.100.7" } };
+
+        await Create(NodeRole.Workstation).ImportAsync(repeated);
+        await Create(NodeRole.Workstation).ImportAsync(single);
+
+        await _links.Received(1).UpsertAsync(
+            Arg.Is<ChainLinkConfig>(saved => saved.Peer.Id.Value == "relay-1" && saved.Routes.Select(route => route.Ssh.Host).SequenceEqual(new[] { "203.0.113.4", "10.9.0.4" })),
+            Arg.Any<CancellationToken>());
+        await _links.Received(1).UpsertAsync(
+            Arg.Is<ChainLinkConfig>(saved => saved.Peer.Id.Value == "relay-2" && saved.Routes.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that a new card of a known node replaces the routes of its link without a question, keeps a pinned route
+    /// whose address is still in the card and keeps using it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task New_Card_Of_A_Known_Node_Replaces_Its_Routes()
+    {
+        var link = StoredRelayLink("203.0.113.4");
+        var tcp = new LinkRoute(Guid.NewGuid(), "tcp", new SshEndpoint("jump", "10.9.0.4", 22));
+        var routed = link.WithRoutes(new[] { new LinkRoute(Guid.NewGuid(), "udp", link.Peer.Ssh), tcp }).WithPinnedRoute(tcp.Id);
+        _links.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { routed });
+        var card = RelayExport("relay-1", "198.51.100.7") with { Addresses = new[] { "198.51.100.7", "10.9.0.4" } };
+
+        var result = await Create(NodeRole.Workstation).ImportAsync(card);
+
+        result.NeedsDecision.Should().BeFalse();
+        await _links.Received(1).UpsertAsync(
+            Arg.Is<ChainLinkConfig>(saved =>
+                saved.Routes.Select(route => route.Ssh.Host).SequenceEqual(new[] { "198.51.100.7", "10.9.0.4" }) &&
+                saved.PinnedRouteId == tcp.Id &&
+                saved.Peer.Host == "10.9.0.4"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that a new card of a known node whose address in use is gone moves the link to the first address of
+    /// the card, and that a card with one address leaves a link without routes.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task New_Card_Without_The_Address_In_Use_Moves_The_Link_To_Its_First_Address()
+    {
+        StoredRelayLink("203.0.113.4");
+        var card = RelayExport("relay-1", "198.51.100.7") with { Addresses = new[] { "198.51.100.7" } };
+
+        var result = await Create(NodeRole.Workstation).ImportAsync(card);
+
+        result.NeedsDecision.Should().BeFalse();
+        await _links.Received(1).UpsertAsync(
+            Arg.Is<ChainLinkConfig>(saved => saved.Routes.Count == 0 && saved.Peer.Host == "198.51.100.7" && saved.PinnedRouteId == null),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>

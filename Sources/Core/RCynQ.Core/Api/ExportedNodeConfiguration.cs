@@ -32,6 +32,13 @@ namespace RCynQ.Core.Api;
 /// The SHA-256 fingerprint of the node's TLS certificate, pinned by the importing neighbour; required in
 /// <see cref="Enums.EndpointMode.Direct"/>.
 /// </param>
+/// <param name="Addresses">
+/// Every address the node is reachable at, the preferred one first; <see cref="Host"/> repeats the first one for nodes
+/// of 0.1.0. <see langword="null"/> in a card of 0.1.0.
+/// </param>
+/// <param name="ProtocolVersion">
+/// The <see cref="CURRENT_PROTOCOL_VERSION"/> of the exporting node, or <see langword="null"/> for a node of 0.1.0.
+/// </param>
 public sealed record ExportedNodeConfiguration(
     int FormatVersion,
     NodeId NodeId,
@@ -47,10 +54,33 @@ public sealed record ExportedNodeConfiguration(
     string? HostKeyFingerprint = null,
     EndpointMode EndpointMode = EndpointMode.SshTunnel,
     int EndpointPort = 0,
-    string? TlsFingerprint = null)
+    string? TlsFingerprint = null,
+    IReadOnlyList<string>? Addresses = null,
+    int? ProtocolVersion = null)
 {
     /// <summary>
-    /// The current format version.
+    /// The current format version. It stays 1 while new fields are optional: a node of 0.1.0 refuses any other
+    /// version but ignores fields it does not know.
     /// </summary>
     public const int CURRENT_FORMAT_VERSION = 1;
+
+    /// <summary>
+    /// The version of the exchange between nodes; it rises when nodes of different versions can no longer talk.
+    /// </summary>
+    public const int CURRENT_PROTOCOL_VERSION = 1;
+
+    /// <summary>
+    /// The most addresses one card may list.
+    /// </summary>
+    public const int MAX_ADDRESSES = 16;
+
+    /// <summary>
+    /// The addresses the node is reachable at, the preferred one first: the list of the card, or its host alone in a
+    /// card of 0.1.0.
+    /// </summary>
+    /// <returns>The addresses; empty when the card names none.</returns>
+    public IReadOnlyList<string> ReachableAt()
+        => Addresses is { Count: > 0 }
+            ? Addresses
+            : Host is null ? Array.Empty<string>() : new[] { Host };
 }

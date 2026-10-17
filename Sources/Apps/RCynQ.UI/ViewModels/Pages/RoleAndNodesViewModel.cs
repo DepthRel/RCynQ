@@ -6,8 +6,10 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Events;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.Ssh.Server;
 using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
@@ -17,6 +19,7 @@ using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
 using RCynQ.UI.ViewModels.Setup;
+using RCynQ.UI.ViewModels.Wizard;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
@@ -39,6 +42,12 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
 
     /// <summary>The settings stored in the configuration file, or <see langword="null"/> when it is unavailable.</summary>
     private readonly ILocalNodeSettings? _settings;
+
+    /// <summary>Installs the SSH server or opens the TLS port with administrator rights, or <see langword="null"/>.</summary>
+    private readonly IServerSetup? _serverSetup;
+
+    /// <summary>The connect wizard while it is open, which gets the stages of a joining; otherwise <see langword="null"/>.</summary>
+    private ConnectWizardViewModel? _wizard;
 
     /// <summary>The loaded configuration.</summary>
     private NodeConfigurationDto? _loaded;
@@ -90,14 +99,20 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="elevation">Runs the SSH access update with administrator rights, or <see langword="null"/> when unavailable.</param>
     /// <param name="settings">The settings kept in the configuration file (link token, endpoint mode), or <see langword="null"/> when the page must not edit them.</param>
+    /// <param name="serverSetup">
+    /// Installs the SSH server or opens the TLS port with administrator rights, or <see langword="null"/> when the export
+    /// dialog must not offer it.
+    /// </param>
     public RoleAndNodesViewModel(
         ILocalizer localizer,
         IServiceApiClient api,
         IDialogService dialogs,
         IPeerAccessElevation? elevation = null,
-        ILocalNodeSettings? settings = null)
+        ILocalNodeSettings? settings = null,
+        IServerSetup? serverSetup = null)
         : base(localizer)
     {
+        _serverSetup = serverSetup;
         // The choice made here is the state the page starts with, not an edit of the user.
         EndpointModes = EndpointModeOption.CreateAll(localizer);
         SelectedEndpointMode = EndpointModes[0];
@@ -156,10 +171,14 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>Gets the path of the configuration file, shown under the settings.</summary>
     public string ConfigPath => _settings?.ConfigPath ?? string.Empty;
 
+    /// <summary>Gets a value indicating whether the connect wizard can open: the running node is loaded.</summary>
+    public bool CanConnect => _loaded is not null;
+
     /// <inheritdoc />
     protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
         _loaded = await _api.GetConfigAsync();
+        OnPropertyChanged(nameof(CanConnect));
         SelectedRole = _loaded.Role;
         Path = (_loaded.Role == NodeRole.Origin ? _loaded.RepoPath : _loaded.WorkdirPath) ?? string.Empty;
         IsDirty = false;
@@ -379,7 +398,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     [RelayCommand]
     private async Task ExportAsync()
     {
-        var dialog = new ExportDialogViewModel(Localizer, _api);
+        var dialog = new ExportDialogViewModel(Localizer, _api, _serverSetup);
         _ = dialog.ProbeCommand.ExecuteAsync(null);
         if (!await _dialogs.ShowExportDialogAsync(dialog))
         {
@@ -395,7 +414,7 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         await RunSafeAsync(async () =>
         {
             var exported = await _api.ExportConfigAsync(
-                NullIfEmpty(dialog.Host),
+                dialog.ExportedAddresses,
                 NullIfEmpty(dialog.User),
                 (int)dialog.SshPort,
                 dialog.ExportedSshPublicKey,
@@ -444,6 +463,73 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
         NotifyDataChanged();
         await RunQuietAsync(RefreshNodesAsync);
         await AllowAccessCoreAsync(Localizer.Format("Roles.Imported", result.PeerId.Value));
+        await RunQuietAsync(ReportCheckAsync);
+    }
+
+    /// <summary>
+    /// Opens the connect wizard, which sets up a link with invitations; afterwards the chain is shown again and the
+    /// neighbours are let in.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private Task ConnectAsync() => OpenConnectWizardAsync();
+
+    /// <summary>
+    /// Opens the connect wizard; the main window calls it after the first setup of a node without links.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    public async Task OpenConnectWizardAsync()
+    {
+        if (_loaded is null)
+        {
+            return;
+        }
+
+        var wizard = new ConnectWizardViewModel(Localizer, _api, _dialogs, _loaded.Role, _loaded.NodeId.Value, _serverSetup, () => AllowAccessCoreAsync(null));
+        _wizard = wizard;
+        _ = wizard.StartAsync();
+        bool connected;
+        try
+        {
+            connected = await _dialogs.ShowConnectWizardAsync(wizard);
+        }
+        finally
+        {
+            _wizard = null;
+            wizard.Invite.Stop();
+        }
+
+        NotifyDataChanged();
+        await RunQuietAsync(RefreshNodesAsync);
+        if (connected)
+        {
+            await AllowAccessCoreAsync(wizard.DoneMessage);
+            await RunQuietAsync(ReportCheckAsync);
+        }
+    }
+
+    /// <summary>
+    /// Passes a stage of a joining to the connect wizard, when it is open.
+    /// </summary>
+    /// <param name="progress">The stage.</param>
+    public void ApplyJoinProgress(JoinProgressEvent progress) => _wizard?.ApplyJoinProgress(progress);
+
+    /// <summary>
+    /// Runs the check of the node after an import and adds its outcome to the message, so the user learns at once
+    /// whether the new link works.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    private async Task ReportCheckAsync()
+    {
+        var check = await _api.RunDiagnosticsAsync();
+        if (check.Results.Count == 0)
+        {
+            return;
+        }
+
+        var passed = check.Results.Count(item => item.Passed);
+        var outcome = Localizer.Format(check.AllPassed ? "Roles.CheckPassed" : "Roles.CheckFailed", passed, check.Results.Count);
+        InfoMessage = string.IsNullOrEmpty(InfoMessage) ? outcome : $"{InfoMessage} {outcome}";
     }
 
     /// <summary>

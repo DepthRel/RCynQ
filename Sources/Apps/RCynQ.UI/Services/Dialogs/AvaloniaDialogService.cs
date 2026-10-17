@@ -3,6 +3,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using RCynQ.Core.Enums;
 using RCynQ.UI.ViewModels.Dialogs;
+using RCynQ.UI.ViewModels.Wizard;
 using RCynQ.UI.Views.Dialogs;
 
 namespace RCynQ.UI.Services.Dialogs;
@@ -50,6 +51,13 @@ public sealed class AvaloniaDialogService : IDialogService
     {
         ArgumentNullException.ThrowIfNull(dialog);
         return ShowAsync(new ImportDecisionDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ShowConnectWizardAsync(ConnectWizardViewModel wizard)
+    {
+        ArgumentNullException.ThrowIfNull(wizard);
+        return ShowAsync(new ConnectWizard { DataContext = wizard });
     }
 
     /// <inheritdoc />

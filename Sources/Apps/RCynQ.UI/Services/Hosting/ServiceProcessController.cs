@@ -28,6 +28,12 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
     /// <summary>The launch command, or <see langword="null"/> when the service was not found.</summary>
     private readonly ServiceLaunchCommand? _command;
 
+    /// <summary>
+    /// The command line tool the service names in the one-time keys of invitations, or <see langword="null"/> when it
+    /// was not found; the service then looks for it beside itself.
+    /// </summary>
+    private readonly ServiceLaunchCommand? _cli;
+
     /// <summary>The timing options.</summary>
     private readonly ServiceControllerOptions _options;
 
@@ -56,6 +62,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
     /// <param name="command">The launch command, or <see langword="null"/> when the service was not found.</param>
     /// <param name="options">The timing options, or <see langword="null"/> for defaults.</param>
     /// <param name="timeProvider">The source of the current time, or <see langword="null"/> for the system clock.</param>
+    /// <param name="cli">The command line tool, passed on to the service, or <see langword="null"/>.</param>
     public ServiceProcessController(
         ILocalizer localizer,
         Connection.ServiceConnectionSettings settings,
@@ -63,8 +70,10 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
         IChildProcessLauncher launcher,
         ServiceLaunchCommand? command,
         ServiceControllerOptions? options = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ServiceLaunchCommand? cli = null)
     {
+        _cli = cli;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -209,6 +218,7 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
         Status = ServiceControllerStatus.Starting;
         var arguments = _command.PrefixArguments
             .Concat(new[] { "--config", ConfigPath, "--parent-pid", _options.ParentProcessId.ToString(CultureInfo.InvariantCulture), "--language", _localizer.Current.Code })
+            .Concat(CliArguments())
             .ToArray();
 
         IChildProcess process;
@@ -280,5 +290,25 @@ public sealed class ServiceProcessController : IServiceController, IDisposable
     {
         _process?.Dispose();
         _process = null;
+    }
+
+    /// <summary>
+    /// Builds the arguments that tell the service where the command line tool is.
+    /// </summary>
+    /// <returns>The arguments; empty when the tool was not found.</returns>
+    private IEnumerable<string> CliArguments()
+    {
+        if (_cli is null)
+        {
+            yield break;
+        }
+
+        yield return "--cli";
+        yield return _cli.FileName;
+        foreach (var argument in _cli.PrefixArguments)
+        {
+            yield return "--cli-arg";
+            yield return argument;
+        }
     }
 }

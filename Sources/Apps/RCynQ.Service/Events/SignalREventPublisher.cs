@@ -68,6 +68,13 @@ public sealed class SignalREventPublisher : IEventPublisher
         return SendAsync(NodeEventNames.LINK_ROUTES_CHANGED, routesEvent, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task PublishJoinProgressAsync(JoinProgressEvent progressEvent, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Joining with an invitation: stage {Step} is {State}.", progressEvent.Step, progressEvent.State);
+        return SendAsync(NodeEventNames.JOIN_PROGRESS, progressEvent, cancellationToken);
+    }
+
     /// <summary>
     /// Broadcasts an event, logging delivery failures instead of throwing.
     /// </summary>

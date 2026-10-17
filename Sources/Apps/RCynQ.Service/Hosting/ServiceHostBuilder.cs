@@ -122,6 +122,7 @@ public static class ServiceHostBuilder
         services.AddSingleton(localizer);
         services.AddSingleton<ILocalizer>(localizer);
         services.AddSingleton(new ServiceRuntimeInfo(configPath));
+        services.AddSingleton<RCynQ.Sync.Enrollment.IEnrollmentCommandSource>(new ServiceEnrollmentCommandSource(args, configPath, AppContext.BaseDirectory));
         services.AddSingleton(new RCynQ.Sync.Repositories.RepositoryCatalogStorage(configPath));
         services.AddSingleton<InMemoryLogSink>();
         services.AddSingleton<ApiTokenStore>();

@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using RCynQ.Core.Api;
 using RCynQ.Localization;
 using RCynQ.UI.ViewModels.Formatting;
@@ -5,12 +6,16 @@ using RCynQ.UI.ViewModels.Formatting;
 namespace RCynQ.UI.ViewModels.Items;
 
 /// <summary>
-/// A detected local address offered in the export dialog.
+/// A detected local address offered in the export dialog; every one is exported unless the user leaves it out.
 /// </summary>
-public sealed class AddressOptionViewModel
+public sealed partial class AddressOptionViewModel : ObservableObject
 {
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
+
+    /// <summary>Whether the address goes into the export.</summary>
+    [ObservableProperty]
+    private bool _isIncluded = true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AddressOptionViewModel"/> class.

@@ -52,6 +52,30 @@ public sealed class LinkTokenProvider
             : await _secrets.GetAsync(SECRET_NAME, cancellationToken);
 
     /// <summary>
+    /// Replaces the link token of this node with the one an invitation of its counterpart carried: in the running
+    /// options at once and in the configuration file for the next start.
+    /// </summary>
+    /// <param name="token">The new token.</param>
+    /// <param name="configPath">The configuration file of this node.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task representing the operation.</returns>
+    /// <exception cref="ArgumentException">The token is shorter than <see cref="MINIMUM_LENGTH"/>.</exception>
+    public async Task ReplaceAsync(string token, string configPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+        if (string.IsNullOrWhiteSpace(token) || token.Trim().Length < MINIMUM_LENGTH)
+        {
+            throw new ArgumentException("The link token is too short.", nameof(token));
+        }
+
+        await Configuration.ConfigurationFileEditor.UpdateAsync(
+            configPath,
+            section => Configuration.ConfigurationFileEditor.SetProperty(section, nameof(SyncBridgeOptions.LinkToken), token.Trim()),
+            cancellationToken);
+        _options.LinkToken = token.Trim();
+    }
+
+    /// <summary>
     /// Compares tokens in constant time.
     /// </summary>
     /// <param name="expected">The expected token.</param>

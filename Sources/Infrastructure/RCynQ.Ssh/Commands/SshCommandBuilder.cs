@@ -146,6 +146,29 @@ public sealed class SshCommandBuilder
     }
 
     /// <summary>
+    /// Builds the arguments of a remote command that logs in to the target with the given key: the key of a one-time
+    /// enrollment. The jump hosts are still reached with the key of the node. Keys of the command line are tried before
+    /// the key of the configuration file, so the target sees the given one first.
+    /// </summary>
+    /// <param name="target">The host the command runs on.</param>
+    /// <param name="jumps">The jump hosts, in order.</param>
+    /// <param name="identityFile">The private key file for the target.</param>
+    /// <param name="remoteCommand">The command.</param>
+    /// <returns>The arguments.</returns>
+    /// <exception cref="ArgumentException">The key file or the command cannot be passed safely.</exception>
+    public IReadOnlyList<string> BuildExec(SshEndpoint target, IReadOnlyList<SshEndpoint> jumps, string identityFile, string remoteCommand)
+    {
+        var identity = Guard.NotBlank(identityFile, nameof(identityFile));
+        if (identity.Any(char.IsControl))
+        {
+            throw new ArgumentException("The key file must not contain control characters.", nameof(identityFile));
+        }
+
+        var exec = BuildExec(target, jumps, remoteCommand);
+        return new[] { "-i", identity, "-o", "IdentitiesOnly=yes" }.Concat(exec).ToArray();
+    }
+
+    /// <summary>
     /// Builds the connection that asks a host for its host key of one kind and logs in nowhere.
     /// </summary>
     /// <param name="target">The host to ask.</param>
