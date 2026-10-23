@@ -304,6 +304,66 @@ public sealed class SyncBaseManagerTests : IDisposable
     }
 
     /// <summary>
+    /// Regression: a commit made on the Workstation on top of the commit of the Origin (a cherry-pick) is delivered as a
+    /// commit, so its files are not changes to send; only what is not committed is. The base still holds the version of
+    /// the Origin, so a file edited again after its commit is sent against what the Origin has.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Workstation_Commits_On_Top_Of_The_Origin_Are_Not_Listed_As_Files()
+    {
+        if (!await GitAvailableAsync())
+        {
+            return;
+        }
+
+        await InitAsync(_fixture.WorkstationWork);
+        await RunAsync(_fixture.WorkstationWork, "update-ref", "refs/remotes/rcynq/main", "HEAD");
+        SyncFixture.Write(_fixture.WorkstationWork, "b.txt", "cherry-picked\n");
+        await CommitAsync(_fixture.WorkstationWork, "b.txt");
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "committed\n");
+        await CommitAsync(_fixture.WorkstationWork, "a.txt");
+        var tracker = _fixture.CreateTracker(_fixture.WorkstationNode);
+
+        var clean = await tracker.CaptureAsync();
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "edited after the commit\n");
+        var edited = await tracker.CaptureAsync();
+
+        clean.PendingChanges.Should().BeEmpty("everything is committed and goes as commits");
+        clean.ChangedFiles.Should().BeEmpty();
+        edited.PendingChanges.Select(change => change.Path).Should().Equal("a.txt");
+        edited.ChangedFiles.Select(file => file.Path).Should().Equal("a.txt");
+        SyncFixture.Read(_fixture.WorkstationPaths.SyncBase, "a.txt").Should().Be("v1\n", "the base is what the Origin has");
+    }
+
+    /// <summary>
+    /// Verifies that the commits of a branch that diverged from the Origin, which cannot go as commits, are still offered as files.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Workstation_Commits_Of_A_Diverged_Branch_Are_Still_Listed_As_Files()
+    {
+        if (!await GitAvailableAsync())
+        {
+            return;
+        }
+
+        await InitAsync(_fixture.WorkstationWork);
+        var first = await FirstCommitAsync(_fixture.WorkstationWork);
+        SyncFixture.Write(_fixture.WorkstationWork, "b.txt", "local commit\n");
+        await CommitAsync(_fixture.WorkstationWork, "b.txt");
+
+        // The Origin moved on from the first commit in its own way.
+        var tree = (await _git.RunAsync(new[] { "rev-parse", first + "^{tree}" }, _fixture.WorkstationWork)).StandardOutput.Trim();
+        var origin = (await _git.RunAsync(new[] { "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-p", first, "-m", "origin" }, _fixture.WorkstationWork)).StandardOutput.Trim();
+        await RunAsync(_fixture.WorkstationWork, "update-ref", "refs/remotes/rcynq/main", origin);
+
+        var snapshot = await _fixture.CreateTracker(_fixture.WorkstationNode).CaptureAsync();
+
+        snapshot.PendingChanges.Select(change => change.Path).Should().Equal("b.txt");
+    }
+
+    /// <summary>
     /// Verifies that switching to another branch starts the base from that branch's commit alone.
     /// </summary>
     /// <returns>A task representing the test.</returns>

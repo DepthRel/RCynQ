@@ -48,6 +48,13 @@ public sealed class InMemoryPatchRepository : IPatchRepository
         => Task.FromResult(Items.Values.Count(patch => patch.Direction == direction && patch.Status == status));
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<PatchMetadata>> GetByStatusAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<PatchMetadata>>(Items.Values
+            .Where(patch => patch.Direction == direction && patch.Status == status)
+            .OrderByDescending(patch => patch.CreatedAtUtc)
+            .ToArray());
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<Guid>> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, IReadOnlyCollection<PatchStatus> keepStatuses, CancellationToken cancellationToken = default)
     {
         var ids = Items.Values.Where(patch => patch.CreatedAtUtc < createdBeforeUtc && !keepStatuses.Contains(patch.Status)).Select(patch => patch.Id).ToArray();

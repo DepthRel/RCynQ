@@ -16,12 +16,12 @@ Une chaîne est `Workstation → Relay(s) → Origin`. Sans Relay, les deux extr
 
 ## Règle : le dépôt de l'Origin est seulement lu
 
-- RCynQ n'écrit rien dans un dépôt Git d'un Origin : ni remote, ni réglage, ni référence, ni commit, ni rafraîchissement de l'index (Git tourne avec `GIT_OPTIONAL_LOCKS=0`).
-- Les fichiers de travail de l'Origin ne changent que lorsqu'un patch envoyé par l'utilisateur est appliqué.
-- Tout ce que l'Origin conserve (la liste des dépôts, la base de synchronisation, l'historique, les sauvegardes) se trouve dans `syncbridge.json` et dans le dossier de données du nœud.
+- RCynQ ne pousse jamais et ne crée dans un dépôt Git d'un Origin ni commit, ni remote, ni réglage, ni référence qui lui soient propres ; il ne rafraîchit pas son index (Git tourne avec `GIT_OPTIONAL_LOCKS=0`).
+- L'arbre de travail et la branche extraite de l'Origin ne changent que par ce que l'utilisateur a envoyé : les fichiers d'un patch ou, si l'Origin accepte les commits, les propres commits de l'utilisateur, jusqu'auxquels la branche avance (fast-forward). Le reflog de la branche garde cette avance, et Git l'annule simplement.
+- Tout ce que l'Origin conserve (la liste des dépôts, la base de synchronisation, l'historique, les sauvegardes, les commits en attente d'application) se trouve dans `syncbridge.json` et dans le dossier de données du nœud.
 - L'entretien Git (créer le dépôt dans un dossier vide, le remote `rcynq`, `refs/remotes/rcynq/*`, l'avance rapide au Pull) n'a lieu que dans la copie de travail de la Workstation.
 
-Un test de bout en bout compare chaque fichier sous `.git` avant et après l'enregistrement, la bascule, la mise à disposition et l'inspection d'un dépôt.
+Des tests de bout en bout comparent chaque fichier sous `.git` avant et après l'enregistrement, la bascule, la mise à disposition et l'inspection d'un dépôt, ainsi qu'avant et après une livraison de commits refusée ou mise en attente.
 
 ## Canaux
 
@@ -30,6 +30,8 @@ Les deux canaux utilisent la même connexion et la même autorisation.
 **Canal Git (Origin → Workstation).** La Workstation nomme un dépôt et les commits qu'elle possède déjà. L'Origin répond avec un paquet Git incrémental. La Workstation le récupère dans `refs/remotes/rcynq/*` et fait une avance rapide. Rien n'est jamais poussé. Ensuite, l'Origin liste toutes ses branches et `refs/remotes/rcynq/*` est aligné sur cette liste : un paquet ne porte que les branches qui ont de nouveaux commits, donc une branche créée sur un commit que la Workstation possède déjà, une branche ramenée en arrière et une branche supprimée arrivent par ce biais. Un Pull fait suivre `rcynq/<branche>` à la branche courante, pour que Git la compare avec l'Origin et non avec un remote que cet ordinateur ne peut pas joindre.
 
 **Canal des patchs (dans les deux sens).** Un patch est la différence entre l'arbre de travail et la *base de synchronisation* — ce que l'autre nœud est censé avoir. La base de synchronisation est construite automatiquement à partir du commit Git commun aux deux nœuds, plus les fichiers déjà échangés. Livraison : un manifeste signé, puis chaque fichier selon son SHA-256, puis un commit qui applique tout ou rien. Un conflit se résout en gardant le fichier local, en prenant le fichier entrant (avec sauvegarde) ou par une fusion Git à trois voies.
+
+**Livraison de commits (Workstation → Origin).** Les commits préparés sur la Workstation (cherry-picks, fusions) arrivent sur l'Origin tels quels : mêmes hachages, mêmes auteurs, même ordre. La Workstation envoie un bloc de ses commits non envoyés qui commence par le plus ancien, sous forme de paquet Git avec une enveloppe signée ; la session du patch le transporte. L'Origin ne l'accepte que si l'utilisateur a activé **Accepter les commits de la Workstation**, seulement pour la branche extraite et seulement si son `HEAD` est le commit sur lequel repose le bloc ; sinon il refuse aussitôt. Les objets sont décompressés dans une quarantaine à côté du dépôt et comparés à la liste signée (la chaîne des premiers parents, chaque chemin que touche un commit) ; alors seulement les packs sont déplacés dans `.git` et la branche avance. Si l'avance échoue, les packs sont retirés. Tant que l'arbre de travail de l'Origin a des modifications, les commits attendent : l'utilisateur les applique ou les refuse là-bas, et les patchs de fichiers sont refusés entre-temps. Une fois les commits appliqués, un Fetch met la Workstation à jour avec l'Origin. Tant qu'une branche repose directement sur le commit de l'Origin, ses commits ne sont pas des modifications à envoyer : le canal des patchs ne propose que ce qui n'est pas commité, toujours par rapport à la version qu'a l'Origin. Une Workstation annule des commits non envoyés (Soft, Mixed, Hard) seulement si son arbre de travail n'a pas de modifications.
 
 ## Comment un nœud accepte les connexions
 
@@ -74,6 +76,7 @@ Le nœud qui invite vérifie le ticket, le consomme en une seule étape, importe
 | Sortie de l'arbre | Les chemins d'un patch sont canoniques et doivent rester dans l'arbre de travail |
 | Mauvais dépôt | Un patch pour un dépôt avec lequel le destinataire ne travaille pas est refusé |
 | Exposition de l'Origin | Un voisin n'apprend que des noms de dépôts, jamais des chemins ; un paquet n'est servi que pour un nom enregistré |
+| Commits | Désactivé tant que l'utilisateur ne les autorise pas sur l'Origin ; la branche, la base, chaque commit et le hachage du paquet sont signés ; les objets restent en quarantaine jusqu'à vérification ; uniquement une avance (fast-forward) de la branche extraite |
 | Adhésion | Ticket à usage unique avec expiration (seul le hachage est gardé) ; clé SSH à usage unique limitée à la commande d'adhésion, avec `expiry-time` ; clé d'hôte et certificat épinglés depuis l'invitation |
 
 ## Dépôts

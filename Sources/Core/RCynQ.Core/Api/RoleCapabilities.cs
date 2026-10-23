@@ -23,6 +23,16 @@ public sealed record RoleCapabilities(bool SendsPatches, bool ReceivesPatches, b
     public bool ShowsBranchesTab => ServesGit || FetchesGit;
 
     /// <summary>
+    /// Gets a value indicating whether the node sends its own commits: the node that fetches branches, the Workstation.
+    /// </summary>
+    public bool SendsCommits => FetchesGit;
+
+    /// <summary>
+    /// Gets a value indicating whether the node may take commits: the node that serves branches, the Origin.
+    /// </summary>
+    public bool ReceivesCommits => ServesGit;
+
+    /// <summary>
     /// Gets the capabilities of a role.
     /// </summary>
     /// <param name="role">The role.</param>

@@ -73,6 +73,15 @@ public interface IPatchRepository
     Task<int> CountAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the patches of one direction that are in one state, newest first.
+    /// </summary>
+    /// <param name="direction">The direction.</param>
+    /// <param name="status">The status.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The patches.</returns>
+    Task<IReadOnlyList<PatchMetadata>> GetByStatusAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes the patches created before a moment, except those in one of the given states.
     /// </summary>
     /// <param name="createdBeforeUtc">Patches created before this moment are deleted.</param>

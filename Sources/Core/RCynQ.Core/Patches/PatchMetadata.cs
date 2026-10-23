@@ -132,6 +132,18 @@ public sealed record PatchMetadata
     public string? Repository { get; init; }
 
     /// <summary>
+    /// Gets the commits the patch delivers instead of files, or <see langword="null"/> for a patch of files.
+    /// </summary>
+    public CommitDelivery? Commits { get; init; }
+
+    /// <summary>
+    /// Rebuilds the envelope the patch was stored from.
+    /// </summary>
+    /// <returns>The envelope.</returns>
+    public PatchEnvelope ToEnvelope()
+        => new(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, Signature, Repository, Commits);
+
+    /// <summary>
     /// Creates metadata describing the given envelope.
     /// </summary>
     /// <param name="envelope">The envelope.</param>
@@ -157,7 +169,8 @@ public sealed record PatchMetadata
             null,
             envelope.Signature)
         {
-            Repository = envelope.Repository
+            Repository = envelope.Repository,
+            Commits = envelope.Commits
         };
     }
 
@@ -178,7 +191,8 @@ public sealed record PatchMetadata
             Id, Direction, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash,
             result.Status, finalTime, Manifest, result.Conflicts, result.Error, Signature)
         {
-            Repository = Repository
+            Repository = Repository,
+            Commits = Commits
         };
     }
 }

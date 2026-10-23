@@ -95,4 +95,22 @@ public sealed record PatchApplyResult
     /// <returns>The result.</returns>
     public static PatchApplyResult Failed(Guid patchId, string error)
         => new(patchId, PatchStatus.Failed, 0, Array.Empty<ConflictFile>(), error);
+
+    /// <summary>
+    /// Creates a result for a delivery that waits until the working tree of the receiver allows applying it.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="reason">Why it cannot be applied now.</param>
+    /// <returns>The result.</returns>
+    public static PatchApplyResult Waiting(Guid patchId, string reason)
+        => new(patchId, PatchStatus.Waiting, 0, Array.Empty<ConflictFile>(), reason);
+
+    /// <summary>
+    /// Creates a result for a patch that was refused by validation or by the user.
+    /// </summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="reason">Why it was refused.</param>
+    /// <returns>The result.</returns>
+    public static PatchApplyResult Rejected(Guid patchId, string reason)
+        => new(patchId, PatchStatus.Rejected, 0, Array.Empty<ConflictFile>(), reason);
 }

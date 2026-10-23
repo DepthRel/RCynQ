@@ -43,6 +43,7 @@
   <SolidColorBrush x:Key="WarningSubtleBrush" Color="{StaticResource WarningColor}" Opacity="0.12" />
   <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
   <SolidColorBrush x:Key="DangerSubtleBrush" Color="{StaticResource DangerColor}" Opacity="0.12" />
+  <SolidColorBrush x:Key="DangerMutedBrush" Color="{StaticResource DangerColor}" Opacity="0.55" />
 
   <!-- Fluent accent overrides so built-in controls (selection, focus, check marks) use the RCynQ blue. -->
   <Color x:Key="SystemAccentColor">#4A8FF7</Color>

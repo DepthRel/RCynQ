@@ -27,7 +27,7 @@ public class NodeRoleTests
         Enum.GetNames<TransportKind>().Should().Equal("Direct", "AmneziaWG", "WireGuard", "OpenConnect", "Tailscale");
         Enum.GetNames<ChangeKind>().Should().Equal("Added", "Modified", "Deleted", "Renamed");
         Enum.GetNames<ConflictPolicy>().Should().Equal("KeepLocal", "ApplyIncomingOverLocal", "UseGit");
-        Enum.GetNames<PatchStatus>().Should().Equal("Pending", "Applied", "Rejected", "ConflictPending", "ConflictResolved", "Failed");
+        Enum.GetNames<PatchStatus>().Should().Equal("Pending", "Applied", "Rejected", "ConflictPending", "ConflictResolved", "Failed", "Waiting");
         Enum.GetNames<LinkStatus>().Should().Equal("Unknown", "Starting", "Ready", "Degraded", "Stopped", "Failed");
     }
 

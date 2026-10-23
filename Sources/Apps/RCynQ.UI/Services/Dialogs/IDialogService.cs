@@ -17,6 +17,13 @@ public interface IDialogService
     Task<ConflictPolicy?> ShowConflictDialogAsync(ConflictDialogViewModel dialog);
 
     /// <summary>
+    /// Shows the dialog that rolls back unsent commits.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns>The choice, or <see langword="null"/> when cancelled.</returns>
+    Task<CommitRollbackChoice?> ShowRollbackCommitsDialogAsync(RollbackCommitsDialogViewModel dialog);
+
+    /// <summary>
     /// Shows the export dialog that asks for the advertised SSH address.
     /// </summary>
     /// <param name="dialog">The dialog view model.</param>

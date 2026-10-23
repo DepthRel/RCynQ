@@ -7,6 +7,7 @@ using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Tests.Support;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Security;
+using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
@@ -15,6 +16,7 @@ using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Ssh.Keys.AuthorizedKeys;
+using RCynQ.Sync.Commits;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Access;
 using RCynQ.Sync.Services;
@@ -133,6 +135,36 @@ public sealed class CliCommandTests : IDisposable
         (await RunAsync(Register, "patch", "resolve", id.ToString(), "--policy", "Whatever")).Code.Should().NotBe(0);
         (await RunAsync(Register, "patch", "resolve", "not-a-guid", "--policy", "KeepLocal")).Code.Should().NotBe(0);
         await patches.Received(1).ResolveAsync(Arg.Any<Guid>(), Arg.Any<ConflictPolicy>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies parsing of <c>commits send</c> and <c>commits reset</c>, and that a short name is matched to the full one.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Commits_Send_And_Reset_Parse_Arguments()
+    {
+        var commits = Substitute.For<ICommitService>();
+        var origin = new string('0', 40);
+        var tip = new string('1', 40);
+        var unsent = new UnsentCommitsResponse(
+            UnsentCommitsState.Ready, "main", origin, tip,
+            new[] { new CommitInfo(tip, "fix", "dev <dev@example.com>", DateTimeOffset.UtcNow) }, Array.Empty<string>(), null);
+        commits.GetUnsentAsync(Arg.Any<CancellationToken>()).Returns(unsent);
+        commits.SendAsync(tip, Arg.Any<CancellationToken>())
+            .Returns(new SendPatchResult(true, Guid.NewGuid(), PatchApplyResult.Applied(Guid.NewGuid(), 1), "The Origin took the commits: 1."));
+        commits.ResetAsync(origin, CommitResetMode.Mixed, tip, Arg.Any<CancellationToken>()).Returns(new GitOperationResult(true, "Rolled back.", null));
+        void Register(IServiceCollection services) => services.AddSingleton(commits);
+
+        var send = await RunAsync(Register, "commits", "send", "--up-to", tip);
+        var reset = await RunAsync(Register, "commits", "reset", "--to", origin[..8], "--mode", "Mixed");
+
+        send.Code.Should().Be(0);
+        send.Output.Should().Contain("The Origin took the commits: 1.");
+        reset.Code.Should().Be(0, reset.Error);
+        reset.Output.Should().Contain("Rolled back.");
+        (await RunAsync(Register, "commits", "reset", "--to", origin)).Code.Should().NotBe(0, "the mode is required");
+        await commits.Received(1).ResetAsync(origin, CommitResetMode.Mixed, tip, Arg.Any<CancellationToken>());
     }
 
     /// <summary>

@@ -50,6 +50,7 @@ public sealed class PageRefreshTests : IDisposable
         _events.IsConnected.Returns(true);
         _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
+        _api.GetUnsentCommitsAsync(Arg.Any<CancellationToken>()).Returns(TestData.UnsentCommits());
         _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
         _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkState>());

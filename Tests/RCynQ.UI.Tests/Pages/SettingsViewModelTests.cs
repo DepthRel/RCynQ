@@ -74,6 +74,34 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
+    /// Verifies that the switch for commits shows only on an Origin, saves what the user chose, and switches back when the
+    /// service could not save it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Accepting_Commits_Is_Saved_And_Switched_Back_On_Failure()
+    {
+        var settings = Create();
+        settings.Configure(TestData.Config(Core.Enums.NodeRole.Workstation));
+        settings.CanAcceptCommits.Should().BeFalse("only an Origin takes commits");
+
+        settings.Configure(TestData.Config(Core.Enums.NodeRole.Origin));
+        settings.CanAcceptCommits.Should().BeTrue();
+        settings.AcceptCommits.Should().BeFalse("commits are not taken unless the user allows it");
+
+        settings.AcceptCommits = true;
+        await settings.SaveAcceptCommitsCommand.ExecuteAsync(null);
+        await _api.Received(1).SetAcceptCommitsAsync(true, Arg.Any<CancellationToken>());
+        settings.AcceptCommits.Should().BeTrue();
+
+        _api.SetAcceptCommitsAsync(false, Arg.Any<CancellationToken>()).Returns(_ => throw new ServiceApiException(System.Net.HttpStatusCode.BadRequest, "cannot write"));
+        settings.AcceptCommits = false;
+        await settings.SaveAcceptCommitsCommand.ExecuteAsync(null);
+        settings.AcceptCommits.Should().BeTrue("the service kept taking commits");
+        settings.ErrorMessage.Should().Be("cannot write");
+    }
+
+    /// <summary>
     /// Creates the view model.
     /// </summary>
     /// <returns>The view model.</returns>

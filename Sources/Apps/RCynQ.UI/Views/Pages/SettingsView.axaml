@@ -23,6 +23,18 @@
         </Border>
       </StackPanel>
 
+      <!-- Commits from the Workstation (Origin only): off unless the user allows them -->
+      <StackPanel IsVisible="{Binding CanAcceptCommits}">
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Commits.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10">
+            <CheckBox IsChecked="{Binding AcceptCommits}" IsEnabled="{Binding !IsBusy}" Command="{Binding SaveAcceptCommitsCommand}"
+                      Content="{loc:Loc Settings.Commits.Accept}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Commits.Hint}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <StackPanel>
         <TextBlock Classes="section" Text="{loc:Loc Settings.Data.Title}" />
         <Border Classes="card">

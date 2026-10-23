@@ -213,6 +213,21 @@ Ligne de commande : `rcynq import <file> --as route|replace|hop [--link <link>]`
 
 Dans `syncbridge.json`, les adresses de secours d'une liaison sont listées dans `Routes` (`Host`, `Name` facultatif, `SshPort`, `SshUser`, `Priority`) ; la priorité de l'adresse de la liaison elle-même est `RoutePriority`.
 
+## 12. Commits préparés sur la Workstation
+
+Quand une branche est préparée sur la Workstation (cherry-picks, fusions pour une version), ses commits peuvent arriver sur l'Origin tels quels : mêmes hachages, mêmes auteurs, même ordre, dans la branche locale de l'Origin et prêts à être poussés depuis là. RCynQ lui-même ne pousse jamais.
+
+1. Sur l'Origin : **Réglages → Commits de la Workstation → Accepter les commits de la Workstation**. C'est désactivé par défaut ; tant que c'est désactivé, l'Origin refuse les commits.
+2. Sur la Workstation, la branche doit exister sur l'Origin et reposer directement sur son dernier commit : faites d'abord un **Pull**.
+3. **Synchronisation → Commits à envoyer** liste les commits que l'Origin n'a pas, les plus récents en haut. Cochez le plus récent à envoyer ; tous les plus anciens sont cochés avec lui.
+4. Cliquez sur **Envoyer les commits**. L'Origin fait avancer la même branche et la liste se vide.
+
+Si l'arbre de travail de l'Origin a des modifications, les commits y attendent : occupez-vous des modifications (stash ou abandon) puis cliquez sur **Appliquer** sur l'Origin, ou sur **Refuser**. D'ici là, l'Origin refuse les patchs de fichiers. Les commits qui reposent sur un autre commit, ou destinés à une autre branche que celle extraite sur l'Origin, sont refusés aussitôt.
+
+**Annuler des commits** annule les commits non envoyés les plus récents, comme `git reset` : Soft garde leurs modifications dans l'index, Mixed dans l'arbre de travail, Hard les abandonne. Cela ne fonctionne que si l'arbre de travail n'a pas de modifications.
+
+Ligne de commande : `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, sur l'Origin `rcynq commits apply <id>` et `rcynq commits decline <id>`. Dans `syncbridge.json`, l'interrupteur s'appelle `AcceptCommits`.
+
 ## Mise à jour depuis une version antérieure
 
 Les versions antérieures appelaient les rôles Source, Mediator et Dest. Ils s'appellent désormais Workstation, Relay et Origin.

@@ -26,6 +26,17 @@ public interface IPatchReceiver
     Task<PatchSession> OpenSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Opens (or resumes) the session of a delivery of commits: the same checks as for a patch, and that this Origin takes
+    /// commits and has the branch they are built on checked out at the commit they are built on.
+    /// </summary>
+    /// <param name="envelope">The envelope with the commits.</param>
+    /// <param name="context">The request context.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The session with the content that is still missing.</returns>
+    /// <exception cref="PatchRejectedException">The envelope was refused.</exception>
+    Task<PatchSession> OpenCommitSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Accepts the content of one file of an open session.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>

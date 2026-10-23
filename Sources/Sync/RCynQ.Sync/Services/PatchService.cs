@@ -90,6 +90,10 @@ public sealed class PatchService : IPatchService
         => _receiver.OpenSessionAsync(envelope, context, cancellationToken);
 
     /// <inheritdoc />
+    public Task<PatchSession> OpenCommitSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => _receiver.OpenCommitSessionAsync(envelope, context, cancellationToken);
+
+    /// <inheritdoc />
     public Task ReceiveContentAsync(Guid patchId, string sha256, Stream content, PatchReceiveContext context, CancellationToken cancellationToken = default)
         => _receiver.ReceiveContentAsync(patchId, sha256, content, context, cancellationToken);
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
@@ -31,6 +32,7 @@ public sealed class SyncViewModelTests
     public SyncViewModelTests()
     {
         _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
+        _api.GetUnsentCommitsAsync(Arg.Any<CancellationToken>()).Returns(TestData.UnsentCommits());
     }
 
     /// <summary>
@@ -631,6 +633,82 @@ public sealed class SyncViewModelTests
         settings.Received(1).Set(SyncViewModel.FILES_VIEW_SETTING, "tree");
         settings.Get(SyncViewModel.FILES_VIEW_SETTING).Returns("tree");
         new SyncViewModel(TestTexts.Russian, _api, _dialogs, settings).IsTreeView.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies that the chosen block of commits is sent up to its newest commit, and the choice is forgotten afterwards.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Commits_Are_Sent_Up_To_The_Newest_Chosen_One()
+    {
+        _api.GetUnsentCommitsAsync(Arg.Any<CancellationToken>())
+            .Returns(TestData.UnsentCommits(TestData.Commit('1', "one"), TestData.Commit('2', "two"), TestData.Commit('3', "three")));
+        _api.SendCommitsAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new SendPatchResult(true, Guid.NewGuid(), PatchApplyResult.Applied(Guid.NewGuid(), 2), "Origin принял коммиты: 2."));
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+        await sync.RefreshAsync();
+        sync.SendCommitsCommand.CanExecute(null).Should().BeFalse("no commit is chosen");
+
+        sync.Commits.Items[1].IsChecked = true;
+        sync.SendCommitsCommand.CanExecute(null).Should().BeTrue();
+        await sync.SendCommitsCommand.ExecuteAsync(null);
+
+        await _api.Received(1).SendCommitsAsync(new string('2', 40), Arg.Any<CancellationToken>());
+        sync.SuccessMessage.Should().Be("Origin принял коммиты: 2.");
+    }
+
+    /// <summary>
+    /// Verifies that a rollback sends the choice of the dialog with the commit the user saw checked out, and shows a refusal.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Rollback_Sends_The_Choice_And_Shows_A_Refusal()
+    {
+        var unsent = TestData.UnsentCommits(TestData.Commit('1', "one"), TestData.Commit('2', "two"));
+        _api.GetUnsentCommitsAsync(Arg.Any<CancellationToken>()).Returns(unsent);
+        _dialogs.ShowRollbackCommitsDialogAsync(Arg.Any<RollbackCommitsDialogViewModel>())
+            .Returns(new CommitRollbackChoice(new string('1', 40), CommitResetMode.Hard));
+        _api.ResetCommitsAsync(Arg.Any<ResetCommitsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new GitOperationResult(false, "Сначала разберитесь с изменениями.", null));
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+        await sync.RefreshAsync();
+
+        await sync.RollBackCommitsCommand.ExecuteAsync(null);
+
+        await _api.Received(1).ResetCommitsAsync(new ResetCommitsRequest(new string('1', 40), CommitResetMode.Hard, unsent.HeadCommit!), Arg.Any<CancellationToken>());
+        sync.ErrorMessage.Should().Be("Сначала разберитесь с изменениями.");
+    }
+
+    /// <summary>
+    /// Verifies that commits waiting on an Origin are announced, counted in the history, and can be applied.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Waiting_Commits_Are_Announced_And_Can_Be_Applied()
+    {
+        _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status(NodeRole.Origin));
+        var commits = new[] { TestData.Commit('1', "one"), TestData.Commit('2', "two") };
+        var waiting = new PatchMetadata(
+            Guid.NewGuid(), PatchDirection.Incoming, new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow, TestData.HashA, TestData.HashA,
+            PatchStatus.Waiting, null, Array.Empty<FileChange>(), error: "в рабочем дереве есть изменения")
+        {
+            Commits = new CommitDelivery("main", new string('0', 40), commits, TestData.HashB, 100)
+        };
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { waiting });
+        _api.ApplyWaitingCommitsAsync(waiting.Id, Arg.Any<CancellationToken>()).Returns(PatchApplyResult.Applied(waiting.Id, 2));
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+        await sync.RefreshAsync();
+
+        sync.HasWaitingCommits.Should().BeTrue();
+        sync.WaitingCommitsText.Should().Contain("в рабочем дереве есть изменения");
+        sync.History[0].ContentText.Should().Be("2 коммита");
+        sync.History[0].CanResolve.Should().BeFalse("commits are applied, not resolved");
+        await sync.ApplyWaitingCommitsCommand.ExecuteAsync(sync.WaitingCommits);
+
+        await _api.Received(1).ApplyWaitingCommitsAsync(waiting.Id, Arg.Any<CancellationToken>());
+        await _api.DidNotReceive().GetUnsentCommitsAsync(Arg.Any<CancellationToken>());
+        sync.SuccessMessage.Should().NotBeNullOrEmpty();
     }
 
     /// <summary>

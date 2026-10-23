@@ -193,6 +193,38 @@ public sealed class RepositoryTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that the commits of a delivery are stored with it and that deliveries are found by their state.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchRepository_Stores_Commits_And_Finds_Them_By_State()
+    {
+        var repository = new PatchRepository(_database.ContextFactory);
+        var commits = new CommitDelivery(
+            "release/1.2",
+            new string('0', 40),
+            new[] { new CommitInfo(new string('1', 40), "fix", "dev <dev@example.com>", new DateTimeOffset(2026, 10, 23, 9, 0, 0, TimeSpan.Zero)) },
+            HASH,
+            123);
+        var waiting = new PatchMetadata(
+            Guid.NewGuid(), PatchDirection.Incoming, new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow, HASH, HASH,
+            PatchStatus.Waiting, null, Array.Empty<FileChange>())
+        {
+            Repository = "app",
+            Commits = commits
+        };
+
+        await repository.UpsertAsync(waiting);
+        await repository.UpsertAsync(CreatePatch(DateTimeOffset.UtcNow));
+
+        var loaded = (await repository.GetAsync(waiting.Id))!;
+        loaded.Commits.Should().BeEquivalentTo(commits);
+        loaded.Commits!.TipCommit.Should().Be(new string('1', 40));
+        (await repository.GetByStatusAsync(PatchDirection.Incoming, PatchStatus.Waiting)).Select(patch => patch.Id).Should().Equal(waiting.Id);
+        (await repository.GetByStatusAsync(PatchDirection.Outgoing, PatchStatus.Waiting)).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Verifies that the patches are read page by page, newest first, and that the pages neither repeat nor lose a record,
     /// even for patches created at the same moment.
     /// </summary>

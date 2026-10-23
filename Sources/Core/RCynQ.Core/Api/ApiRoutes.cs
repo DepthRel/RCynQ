@@ -33,6 +33,30 @@ public static class ApiRoutes
     /// <summary>The path prefix shared by the patch session routes, which are the only routes open to the peer.</summary>
     public const string PATCH_SESSION_PREFIX = "/patch/sessions";
 
+    /// <summary>
+    /// Opens a session of a delivery of commits with the signed, gzip-compressed envelope; content and commit then use the
+    /// routes of a patch session. A node of an earlier version does not know the route.
+    /// </summary>
+    public const string COMMIT_SESSIONS = "/patch/sessions/commits";
+
+    /// <summary>The commits of the current branch the Origin does not have yet (Workstation).</summary>
+    public const string COMMITS = "/commits";
+
+    /// <summary>Send unsent commits to the Origin (Workstation).</summary>
+    public const string COMMITS_SEND = "/commits/send";
+
+    /// <summary>Roll back unsent commits (Workstation).</summary>
+    public const string COMMITS_RESET = "/commits/reset";
+
+    /// <summary>Apply a delivery of commits that waits (Origin).</summary>
+    public const string APPLY_PATCH = "/patches/{id:guid}/apply";
+
+    /// <summary>Decline a delivery of commits that waits (Origin).</summary>
+    public const string DECLINE_PATCH = "/patches/{id:guid}/decline";
+
+    /// <summary>Whether this Origin takes commits from the Workstation.</summary>
+    public const string CONFIG_ACCEPT_COMMITS = "/config/accept-commits";
+
     /// <summary>Recent patches, newest first, a page at a time (<c>?skip=&amp;take=</c>).</summary>
     public const string PATCHES = "/patches";
 
@@ -225,6 +249,20 @@ public static class ApiRoutes
     /// <param name="id">The patch identifier.</param>
     /// <returns>The path.</returns>
     public static string ResolvePatchPath(Guid id) => $"/patches/{id}/resolve";
+
+    /// <summary>
+    /// Builds the path that applies a delivery of commits that waits.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <returns>The path.</returns>
+    public static string ApplyPatchPath(Guid id) => $"/patches/{id}/apply";
+
+    /// <summary>
+    /// Builds the path that declines a delivery of commits that waits.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <returns>The path.</returns>
+    public static string DeclinePatchPath(Guid id) => $"/patches/{id}/decline";
 
     /// <summary>
     /// Builds the diff path of a patch.

@@ -40,6 +40,20 @@ public sealed class PatchHistoryItemViewModel : ObservableObject
     /// <summary>Gets the number of files.</summary>
     public int FileCount => Patch.Manifest.Count;
 
+    /// <summary>Gets a value indicating whether the patch delivered commits rather than files.</summary>
+    public bool IsCommits => Patch.Commits is not null;
+
+    /// <summary>Gets what the patch carried: the number of files, or of commits.</summary>
+    public string ContentText => Patch.Commits is { } commits
+        ? DisplayText.Count(_localizer, "Commits.Count", commits.Commits.Count)
+        : DisplayText.Count(_localizer, "Sync.FileCount", FileCount);
+
+    /// <summary>Gets the tool tip of the button that shows what the patch carried: its diff, or its commits.</summary>
+    public string DiffTip => _localizer.Get(IsCommits ? "Commits.ShowList" : "Sync.ShowDiff");
+
+    /// <summary>Gets a value indicating whether the patch delivered commits that wait on this node to be applied.</summary>
+    public bool CanApplyCommits => IsCommits && Patch.Direction == PatchDirection.Incoming && Patch.Status == PatchStatus.Waiting;
+
     /// <summary>Gets the status label.</summary>
     public string StatusText => DisplayText.Patch(_localizer, Patch.Status);
 
@@ -50,7 +64,7 @@ public sealed class PatchHistoryItemViewModel : ObservableObject
     public bool IsSuccess => Patch.Status is PatchStatus.Applied or PatchStatus.ConflictResolved;
 
     /// <summary>Gets a value indicating whether the patch needs attention.</summary>
-    public bool IsProblem => Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed;
+    public bool IsProblem => Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed or PatchStatus.Waiting;
 
     /// <summary>
     /// Tells the bindings that the texts of the row changed with the language.
@@ -58,5 +72,5 @@ public sealed class PatchHistoryItemViewModel : ObservableObject
     public void RefreshTexts() => OnPropertyChanged(string.Empty);
 
     /// <summary>Gets a value indicating whether the patch can be resolved on this node.</summary>
-    public bool CanResolve => Patch.Direction == PatchDirection.Incoming && Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed;
+    public bool CanResolve => !IsCommits && Patch.Direction == PatchDirection.Incoming && Patch.Status is PatchStatus.ConflictPending or PatchStatus.Failed;
 }

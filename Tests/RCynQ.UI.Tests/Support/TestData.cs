@@ -80,6 +80,30 @@ public static class TestData
         => new(new NodeId("node-1"), "Node", role, new SyncState(HashA, HashA, null, null), GitSyncBase, Array.Empty<FileChange>(), 0);
 
     /// <summary>
+    /// Creates the answer about the unsent commits of a Workstation.
+    /// </summary>
+    /// <param name="commits">The unsent commits, oldest first; none by default.</param>
+    /// <returns>The answer, on branch <c>main</c> built on the commit of the Origin.</returns>
+    public static UnsentCommitsResponse UnsentCommits(params CommitInfo[] commits)
+        => new(
+            UnsentCommitsState.Ready,
+            "main",
+            new string('0', 40),
+            commits.Length == 0 ? new string('0', 40) : commits[^1].Hash,
+            commits,
+            Array.Empty<string>(),
+            null);
+
+    /// <summary>
+    /// Creates a commit.
+    /// </summary>
+    /// <param name="digit">The hexadecimal digit its whole name consists of.</param>
+    /// <param name="subject">The first line of its message.</param>
+    /// <returns>The commit.</returns>
+    public static CommitInfo Commit(char digit, string subject)
+        => new(new string(digit, 40), subject, "dev <dev@example.com>", new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+
+    /// <summary>
     /// Gets a ready sync base built from Git.
     /// </summary>
     public static SyncBaseStatus GitSyncBase { get; } = new(SyncBaseMode.Git, "main", new string('e', 40), null, false);

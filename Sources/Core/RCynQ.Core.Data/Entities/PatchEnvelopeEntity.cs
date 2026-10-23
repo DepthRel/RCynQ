@@ -46,4 +46,7 @@ public sealed class PatchEnvelopeEntity
 
     /// <summary>Gets or sets the name of the repository the patch belongs to, or <see langword="null"/>.</summary>
     public string? Repository { get; set; }
+
+    /// <summary>Gets or sets the JSON commits the patch delivers instead of files, or <see langword="null"/> for a patch of files.</summary>
+    public string? CommitsJson { get; set; }
 }

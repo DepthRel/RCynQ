@@ -5,6 +5,7 @@ using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Abstractions.Processes;
 using RCynQ.Core.Config;
 using RCynQ.Git.Commands;
+using RCynQ.Git.Commits;
 using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
@@ -57,6 +58,7 @@ public static class GitServiceCollectionExtensions
         services.TryAddSingleton<IPatchBuilder, DefaultPatchBuilder>();
         services.TryAddSingleton<PatchEnvelopeSerializer>();
         services.TryAddSingleton<IGitRepositoryService, GitRepositoryService>();
+        services.TryAddSingleton<IGitCommitService, GitCommitService>();
         return services;
     }
 }

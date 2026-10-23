@@ -31,6 +31,7 @@ public sealed record PatchEnvelope
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A node identifier is empty, the identifier is empty or a hash is blank.</exception>
     /// <param name="repository">The name of the repository the patch belongs to, or <see langword="null"/>.</param>
+    /// <param name="commits">The commits the envelope delivers instead of files, or <see langword="null"/> for a patch of files.</param>
     public PatchEnvelope(
         Guid id,
         NodeId sourceNode,
@@ -40,7 +41,8 @@ public sealed record PatchEnvelope
         string incomingStateHash,
         IReadOnlyList<FileChange> manifest,
         byte[]? signature = null,
-        string? repository = null)
+        string? repository = null,
+        CommitDelivery? commits = null)
     {
         if (id == Guid.Empty)
         {
@@ -70,8 +72,25 @@ public sealed record PatchEnvelope
             throw new ArgumentException($"Repository name \"{repository}\" is not valid.", nameof(repository));
         }
 
+        if (commits is not null && Manifest.Count > 0)
+        {
+            throw new ArgumentException("A delivery of commits carries no files.", nameof(commits));
+        }
+
         Repository = repository;
+        Commits = commits;
     }
+
+    /// <summary>
+    /// Gets the commits the envelope delivers instead of files, or <see langword="null"/> for a patch of files. They are
+    /// part of what is signed.
+    /// </summary>
+    public CommitDelivery? Commits { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the envelope delivers commits rather than files.
+    /// </summary>
+    public bool IsCommitDelivery => Commits is not null;
 
     /// <summary>
     /// Gets the name of the repository the patch belongs to, or <see langword="null"/> when the sender does not know the
@@ -119,13 +138,15 @@ public sealed record PatchEnvelope
     /// </summary>
     /// <remarks>
     /// Added and modified entries need content; a symbolic link needs the UTF-8 text of its target. Entries with the
-    /// same content share one hash, so the content is sent once.
+    /// same content share one hash, so the content is sent once. A delivery of commits needs only its bundle.
     /// </remarks>
-    public IReadOnlyList<string> ContentHashes => Manifest
-        .Where(change => change.Kind != ChangeKind.Deleted && change.Sha256 is not null)
-        .Select(change => change.Sha256!)
-        .Distinct(StringComparer.Ordinal)
-        .ToArray();
+    public IReadOnlyList<string> ContentHashes => Commits is not null
+        ? new[] { Commits.BundleSha256 }
+        : Manifest
+            .Where(change => change.Kind != ChangeKind.Deleted && change.Sha256 is not null)
+            .Select(change => change.Sha256!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>
     /// Gets the signature bytes; empty for an unsigned envelope.
@@ -146,6 +167,6 @@ public sealed record PatchEnvelope
     public PatchEnvelope WithSignature(byte[] signature)
     {
         ArgumentNullException.ThrowIfNull(signature);
-        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, signature, Repository);
+        return new PatchEnvelope(Id, SourceNode, TargetNode, CreatedAtUtc, BaseStateHash, IncomingStateHash, Manifest, signature, Repository, Commits);
     }
 }

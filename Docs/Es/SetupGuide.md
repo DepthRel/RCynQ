@@ -213,6 +213,21 @@ Línea de comandos: `rcynq import <file> --as route|replace|hop [--link <link>]`
 
 En `syncbridge.json`, las direcciones de reserva de un enlace se indican en `Routes` (`Host`, `Name` opcional, `SshPort`, `SshUser`, `Priority`); la prioridad de la dirección del propio enlace es `RoutePriority`.
 
+## 12. Commits preparados en la Workstation
+
+Cuando preparas una rama en la Workstation (cherry-picks, fusiones para una versión), sus commits pueden llegar al Origin tal cual: los mismos hashes, autores y orden, en la rama local del Origin y listos para que hagas push desde allí. RCynQ nunca hace push por sí mismo.
+
+1. En el Origin: **Ajustes → Commits de la Workstation → Aceptar commits de la Workstation**. Está desactivado por defecto; mientras lo esté, el Origin rechaza los commits.
+2. En la Workstation, la rama debe existir en el Origin y partir justo de su último commit: haz primero un **Pull**.
+3. **Sincronización → Commits por enviar** muestra los commits que el Origin no tiene, los más recientes arriba. Marca el más reciente que quieras enviar; todos los anteriores se marcan con él.
+4. Pulsa **Enviar commits**. El Origin avanza la misma rama y la lista se vacía.
+
+Si el árbol de trabajo del Origin tiene cambios, los commits esperan allí: ocúpate de los cambios (guárdalos con stash o descártalos) y pulsa **Aplicar** en el Origin, o **Rechazar**. Hasta entonces el Origin rechaza los parches de archivos. Los commits construidos sobre otro commit, o para otra rama distinta de la activa en el Origin, se rechazan en el acto.
+
+**Deshacer commits** deshace los commits sin enviar más recientes, como `git reset`: Soft deja sus cambios en el índice, Mixed en el árbol de trabajo y Hard los descarta. Solo funciona si el árbol de trabajo no tiene cambios.
+
+Línea de comandos: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, en el Origin `rcynq commits apply <id>` y `rcynq commits decline <id>`. En `syncbridge.json` el interruptor es `AcceptCommits`.
+
 ## Actualizar desde una versión anterior
 
 Las versiones anteriores llamaban a los roles Source, Mediator y Dest. Ahora son Workstation, Relay y Origin.

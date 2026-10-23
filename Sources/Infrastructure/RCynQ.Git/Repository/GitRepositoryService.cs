@@ -254,7 +254,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
             commits.AddRange(refs.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
 
-        return commits.Where(commit => CommitName().IsMatch(commit)).Distinct(StringComparer.Ordinal).ToArray();
+        return commits.Where(commit => GitNames.IsCommit(commit)).Distinct(StringComparer.Ordinal).ToArray();
     }
 
     /// <inheritdoc />
@@ -262,7 +262,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         ArgumentNullException.ThrowIfNull(commits);
         var existing = new List<string>();
-        foreach (var commit in commits.Where(commit => commit is not null && CommitName().IsMatch(commit)).Distinct(StringComparer.Ordinal).Take(MAX_KNOWN_COMMITS))
+        foreach (var commit in commits.Where(commit => commit is not null && GitNames.IsCommit(commit)).Distinct(StringComparer.Ordinal).Take(MAX_KNOWN_COMMITS))
         {
             var check = await _git.RunAsync(new[] { "cat-file", "-e", commit + "^{commit}" }, directory, cancellationToken: cancellationToken);
             if (check.ExitCode == 0)
@@ -280,7 +280,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         Guard.NotBlank(directory, nameof(directory));
         Guard.NotBlank(bundlePath, nameof(bundlePath));
         ArgumentNullException.ThrowIfNull(have);
-        var exclusions = have.Select(commit => CommitName().IsMatch(commit) ? "^" + commit : throw new ArgumentException($"'{commit}' is not a commit name.", nameof(have))).ToArray();
+        var exclusions = have.Select(commit => GitNames.IsCommit(commit) ? "^" + commit : throw new ArgumentException($"'{commit}' is not a commit name.", nameof(have))).ToArray();
 
         // Git refuses to create an empty bundle and words the refusal in the language of the system, so ask first.
         var probe = await _git.RunAsync(new[] { "rev-list", "--branches", "-n", "1" }.Concat(exclusions).ToArray(), directory, cancellationToken: cancellationToken);
@@ -349,8 +349,8 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         {
             if (branch?.Name is not { } name ||
                 branch.Commit is not { } target ||
-                !IsSafeBranchName(name) ||
-                !CommitName().IsMatch(target) ||
+                !GitNames.IsBranch(name) ||
+                !GitNames.IsCommit(target) ||
                 (tracked.TryGetValue(name, out var commit) && commit == target))
             {
                 continue;
@@ -431,7 +431,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var space = line.IndexOf(' ', StringComparison.Ordinal);
-            if (space > 0 && CommitName().IsMatch(line[..space]) && line.Length > space + 1)
+            if (space > 0 && GitNames.IsCommit(line[..space]) && line.Length > space + 1)
             {
                 yield return (line[(space + 1)..], line[..space]);
             }
@@ -532,7 +532,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     public async Task<IReadOnlyList<GitPathChange>> GetChangedPathsAsync(string directory, string fromCommit, string toCommit, CancellationToken cancellationToken = default)
     {
         Guard.NotBlank(directory, nameof(directory));
-        if (!CommitName().IsMatch(fromCommit) || !CommitName().IsMatch(toCommit))
+        if (!GitNames.IsCommit(fromCommit) || !GitNames.IsCommit(toCommit))
         {
             throw new ArgumentException("Both commits must be full object names.");
         }
@@ -607,7 +607,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         ValidateTreeish(second);
         var result = await _git.RunAsync(new[] { "merge-base", first, second }, directory, cancellationToken: cancellationToken);
         var commit = result.StandardOutput.Trim();
-        return result.ExitCode == 0 && CommitName().IsMatch(commit) ? commit : null;
+        return result.ExitCode == 0 && GitNames.IsCommit(commit) ? commit : null;
     }
 
     /// <inheritdoc />
@@ -704,7 +704,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     public async Task<bool> MatchesCommitAsync(string directory, string commit, string path, CancellationToken cancellationToken = default)
     {
         Guard.NotBlank(directory, nameof(directory));
-        if (!CommitName().IsMatch(commit ?? string.Empty))
+        if (!GitNames.IsCommit(commit))
         {
             throw new ArgumentException("The commit must be a full object name.", nameof(commit));
         }
@@ -782,7 +782,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         }
 
         var branch = line[PREFIX.Length..].Split('\t')[0].Trim();
-        return SafeBranchName().IsMatch(branch) && !branch.Contains("..", StringComparison.Ordinal) ? branch : null;
+        return GitNames.IsBranch(branch) ? branch : null;
     }
 
     /// <summary>
@@ -834,39 +834,16 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     /// <exception cref="ArgumentException">The name is empty, starts with a dash or contains unusual characters.</exception>
     private static void ValidateBranchName(string branch)
     {
-        if (!IsSafeBranchName(branch))
+        if (!GitNames.IsBranch(branch))
         {
             throw new ArgumentException($"Branch name '{branch}' may contain only letters, digits, '.', '_', '/' and '-'.", nameof(branch));
         }
     }
 
     /// <summary>
-    /// Checks whether a branch name is safe to pass to Git.
-    /// </summary>
-    /// <param name="branch">The branch name.</param>
-    /// <returns><see langword="true"/> for letters, digits, '.', '_', '/' and '-' without "..".</returns>
-    private static bool IsSafeBranchName(string? branch)
-        => branch is not null && SafeBranchName().IsMatch(branch) && !branch.Contains("..", StringComparison.Ordinal);
-
-    /// <summary>
     /// The largest number of commits a peer may name as known.
     /// </summary>
     private const int MAX_KNOWN_COMMITS = 200;
-
-    /// <summary>
-    /// Matches a branch name that is safe to pass to Git: up to 100 characters of letters, digits and <c>. _ / -</c>,
-    /// not starting with a punctuation mark.
-    /// </summary>
-    /// <returns>The compiled pattern.</returns>
-    [GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9._/-]{0,99}$")]
-    private static partial Regex SafeBranchName();
-
-    /// <summary>
-    /// Matches a full commit name: 40 (SHA-1) or 64 (SHA-256) lower-case hexadecimal digits.
-    /// </summary>
-    /// <returns>The compiled pattern.</returns>
-    [GeneratedRegex("^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
-    private static partial Regex CommitName();
 
     /// <summary>
     /// Matches a remote name that is safe to pass to Git: up to 64 characters of letters, digits and <c>. _ -</c>, not

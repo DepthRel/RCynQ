@@ -8,6 +8,7 @@ using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.ViewModels.Commits;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Items;
@@ -136,7 +137,27 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
             OnPropertyChanged(nameof(HasNoHistory));
             OnPropertyChanged(nameof(CanToggleHistory));
         };
+        Commits = new UnsentCommitListViewModel(localizer);
+        Commits.SelectionChanged += (_, _) =>
+        {
+            SendCommitsCommand.NotifyCanExecuteChanged();
+            RollBackCommitsCommand.NotifyCanExecuteChanged();
+        };
     }
+
+    /// <summary>Gets the commits of the current branch the Origin does not have yet (Workstation).</summary>
+    public UnsentCommitListViewModel Commits { get; }
+
+    /// <summary>Gets the received delivery of commits that waits to be applied on this node, or <see langword="null"/>.</summary>
+    public PatchHistoryItemViewModel? WaitingCommits => History.FirstOrDefault(item => item.CanApplyCommits);
+
+    /// <summary>Gets a value indicating whether received commits wait to be applied on this node.</summary>
+    public bool HasWaitingCommits => WaitingCommits is not null;
+
+    /// <summary>Gets the banner text about the received commits that wait.</summary>
+    public string WaitingCommitsText => WaitingCommits?.Patch.Commits is { } commits
+        ? Localizer.Format("Commits.WaitingBanner", commits.Commits.Count, commits.Branch, LocalizedText.Render(WaitingCommits.Patch.Error, Localizer) ?? string.Empty)
+        : string.Empty;
 
     /// <summary>Gets the files that differ from the Git commit: the ones waiting to be sent and the ones the neighbour already has.</summary>
     public ObservableCollection<ChangedFileItemViewModel> ChangedFiles { get; } = new();
@@ -269,6 +290,13 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
 
         HasMoreHistory = patches.Count > shown;
         UpdateShownHistory();
+        OnWaitingCommitsChanged();
+
+        // Only a Workstation sends its commits; the answer says whether there are any and whether they can go.
+        if (status.Role == NodeRole.Workstation)
+        {
+            Commits.Load(await _api.GetUnsentCommitsAsync());
+        }
     });
 
     /// <inheritdoc />
@@ -280,6 +308,8 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
         OnPropertyChanged(nameof(CountText));
         OnPropertyChanged(nameof(NoMatchesText));
         OnPropertyChanged(nameof(HistoryToggleTip));
+        OnPropertyChanged(nameof(WaitingCommitsText));
+        Commits.RefreshTexts();
         foreach (var item in History)
         {
             item.RefreshTexts();
@@ -648,7 +678,157 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     }
 
     /// <summary>
-    /// Shows the diff of a patch.
+    /// Sends the chosen commits, from the oldest unsent one up to the newest chosen one, to the Origin.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand(CanExecute = nameof(CanSendCommits))]
+    private async Task SendCommitsAsync()
+    {
+        var upTo = Commits.SelectedTip;
+        if (upTo is null)
+        {
+            return;
+        }
+
+        if (await RunSafeAsync(async () =>
+        {
+            var result = await _api.SendCommitsAsync(upTo);
+            switch (result.Result?.Status)
+            {
+                case PatchStatus.Applied:
+                    SuccessMessage = result.Message;
+                    break;
+                case PatchStatus.Waiting or PatchStatus.Pending:
+                    InfoMessage = result.Message;
+                    break;
+                default:
+                    ErrorMessage = result.Message;
+                    break;
+            }
+        }))
+        {
+            Commits.ClearSelection();
+            NotifyDataChanged();
+            await RefreshAsync();
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether chosen commits can be sent.
+    /// </summary>
+    /// <returns><see langword="true"/> when at least one commit is chosen and the branch allows it.</returns>
+    private bool CanSendCommits() => Commits.CanSend;
+
+    /// <summary>
+    /// Asks how far and how to roll back unsent commits, then rolls them back; the service refuses while the working tree has changes.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand(CanExecute = nameof(CanRollBackCommits))]
+    private async Task RollBackCommitsAsync()
+    {
+        if (Commits.OriginCommit is not { } origin || Commits.HeadCommit is not { } head)
+        {
+            return;
+        }
+
+        var dialog = new RollbackCommitsDialogViewModel(Localizer, Commits.Items.Select(item => item.Commit).ToArray(), origin);
+        if (await _dialogs.ShowRollbackCommitsDialogAsync(dialog) is not { } choice)
+        {
+            return;
+        }
+
+        if (await RunSafeAsync(async () =>
+        {
+            var result = await _api.ResetCommitsAsync(new ResetCommitsRequest(choice.Target, choice.Mode, head));
+            if (result.Succeeded)
+            {
+                SuccessMessage = result.Output;
+            }
+            else
+            {
+                ErrorMessage = result.Output;
+            }
+        }))
+        {
+            NotifyDataChanged();
+            await RefreshAsync();
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether unsent commits can be rolled back.
+    /// </summary>
+    /// <returns><see langword="true"/> when there are unsent commits and the branch allows it.</returns>
+    private bool CanRollBackCommits() => Commits.CanRollBack;
+
+    /// <summary>
+    /// Applies received commits that wait, after the service checked everything again; they keep waiting when it still cannot.
+    /// </summary>
+    /// <param name="item">The delivery.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task ApplyWaitingCommitsAsync(PatchHistoryItemViewModel? item)
+    {
+        if (item is not { CanApplyCommits: true } || item.Patch.Commits is not { } commits)
+        {
+            return;
+        }
+
+        if (await RunSafeAsync(async () =>
+        {
+            var result = await _api.ApplyWaitingCommitsAsync(item.Id);
+            if (result.Status == PatchStatus.Applied)
+            {
+                SuccessMessage = Localizer.Format("Commits.AppliedHere", commits.Commits.Count, commits.Branch);
+            }
+            else
+            {
+                ErrorMessage = LocalizedText.Render(result.Error, Localizer) ?? DisplayText.Patch(Localizer, result.Status);
+            }
+        }))
+        {
+            NotifyDataChanged();
+            await RefreshAsync();
+        }
+    }
+
+    /// <summary>
+    /// Declines received commits that wait, after confirmation; their bundle is dropped.
+    /// </summary>
+    /// <param name="item">The delivery.</param>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task DeclineWaitingCommitsAsync(PatchHistoryItemViewModel? item)
+    {
+        if (item is not { CanApplyCommits: true } ||
+            !await _dialogs.ConfirmAsync(Localizer.Get("Commits.Decline"), Localizer.Get("Commits.DeclineConfirm")))
+        {
+            return;
+        }
+
+        if (await RunSafeAsync(async () =>
+        {
+            await _api.DeclineWaitingCommitsAsync(item.Id);
+            InfoMessage = Localizer.Get("Commits.DeclinedHere");
+        }))
+        {
+            NotifyDataChanged();
+            await RefreshAsync();
+        }
+    }
+
+    /// <summary>
+    /// Tells the bindings that the received commits that wait may have changed.
+    /// </summary>
+    private void OnWaitingCommitsChanged()
+    {
+        OnPropertyChanged(nameof(WaitingCommits));
+        OnPropertyChanged(nameof(HasWaitingCommits));
+        OnPropertyChanged(nameof(WaitingCommitsText));
+    }
+
+    /// <summary>
+    /// Shows the diff of a patch, or the list of the commits a delivery of commits carried.
     /// </summary>
     /// <param name="item">The patch.</param>
     /// <returns>A task representing the operation.</returns>
@@ -657,6 +837,14 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     {
         if (item is null)
         {
+            return;
+        }
+
+        if (item.Patch.Commits is { } commits)
+        {
+            var lines = commits.Commits.Reverse().Select(commit =>
+                $"{commit.ShortHash}  {DisplayText.Time(Localizer, commit.AuthoredAtUtc)}  {commit.Author}\n    {commit.Subject}");
+            await _dialogs.ShowTextAsync(Localizer.Format("Commits.ListTitle", commits.Commits.Count, commits.Branch), string.Join("\n", lines));
             return;
         }
 

@@ -33,6 +33,7 @@ public static class PatchEndpoints
     public static IEndpointRouteBuilder MapPatchEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost(ApiRoutes.PATCH_SESSIONS, OpenSessionAsync);
+        app.MapPost(ApiRoutes.COMMIT_SESSIONS, OpenCommitSessionAsync);
         app.MapPut(ApiRoutes.PATCH_SESSION_CONTENT, ReceiveContentAsync);
         app.MapPost(ApiRoutes.PATCH_SESSION_COMMIT, CommitAsync);
         app.MapGet(ApiRoutes.STATE, GetStateAsync);
@@ -65,7 +66,37 @@ public static class PatchEndpoints
     /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The session with the hashes of the content the receiver still lacks.</returns>
-    private static async Task<IResult> OpenSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+    private static Task<IResult> OpenSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+        => OpenAsync(http, node, patches, serializer, loggers, localizer, commits: false, cancellationToken);
+
+    /// <summary>
+    /// Handles <c>POST /patch/sessions/commits</c> from the Workstation: opens (or resumes) the session of a delivery of
+    /// commits with the gzip-compressed signed envelope.
+    /// </summary>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="serializer">The envelope serializer.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The session with the hash of the bundle when the receiver still lacks it.</returns>
+    private static Task<IResult> OpenCommitSessionAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+        => OpenAsync(http, node, patches, serializer, loggers, localizer, commits: true, cancellationToken);
+
+    /// <summary>
+    /// Opens (or resumes) a session of either kind with the gzip-compressed signed envelope.
+    /// </summary>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="serializer">The envelope serializer.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="commits">Whether the route is the one of a delivery of commits.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The session, or the rejection.</returns>
+    private static async Task<IResult> OpenAsync(HttpContext http, NodeConfig node, IPatchService patches, PatchEnvelopeSerializer serializer, ILoggerFactory loggers, ILocalizer localizer, bool commits, CancellationToken cancellationToken)
     {
         if (!RoleCapabilities.For(node.Role).ReceivesPatches)
         {
@@ -87,7 +118,9 @@ public static class PatchEndpoints
         var context = ContextOf(http);
         try
         {
-            return Results.Ok(await patches.OpenSessionAsync(envelope, context, cancellationToken));
+            return Results.Ok(commits
+                ? await patches.OpenCommitSessionAsync(envelope, context, cancellationToken)
+                : await patches.OpenSessionAsync(envelope, context, cancellationToken));
         }
         catch (PatchRejectedException ex)
         {

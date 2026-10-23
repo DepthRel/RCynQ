@@ -23,6 +23,7 @@ public static class CliServiceCollectionExtensions
         services.TryAddTransient<TransportCommandService>();
         services.TryAddTransient<PatchCommandService>();
         services.TryAddTransient<GitCommandService>();
+        services.TryAddTransient<CommitCommandService>();
         services.TryAddTransient<DiagnosticsCommandService>();
         services.TryAddTransient<ExportImportService>();
         return services;

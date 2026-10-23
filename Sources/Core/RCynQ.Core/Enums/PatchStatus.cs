@@ -43,5 +43,12 @@ public enum PatchStatus
     /// Processing the patch failed.
     /// </summary>
     [Description("Processing failed.")]
-    Failed = 6
+    Failed = 6,
+
+    /// <summary>
+    /// The delivery arrived in full but waits until the working tree of the receiver allows applying it; the user applies
+    /// or declines it.
+    /// </summary>
+    [Description("Received; waits until the working tree of the receiver allows applying it.")]
+    Waiting = 7
 }

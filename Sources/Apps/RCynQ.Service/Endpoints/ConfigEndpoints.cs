@@ -7,6 +7,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Localization;
 using RCynQ.Service.Hosting;
+using RCynQ.Sync.Commits;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Access;
 using RCynQ.Sync.Configuration.Probing;
@@ -25,11 +26,14 @@ public static class ConfigEndpoints
     /// <returns>The same route builder.</returns>
     public static IEndpointRouteBuilder MapConfigEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet(ApiRoutes.CONFIG, (NodeConfig node, IActiveRepository repository, SyncBridgeOptions options, ServiceRuntimeInfo runtime) =>
+        app.MapGet(ApiRoutes.CONFIG, (NodeConfig node, IActiveRepository repository, SyncBridgeOptions options, ServiceRuntimeInfo runtime, CommitAcceptance acceptance) =>
         {
             // The paths are those of the repository the node works with now.
             var current = node.WithRepository(repository.Current);
-            return Results.Ok(new NodeConfigurationDto(node.Id, node.Name, node.Role, current.RepoPath, current.WorkdirPath, options.ListenPort, RoleCapabilities.For(node.Role), runtime.ConfigFilePath));
+            var capabilities = RoleCapabilities.For(node.Role);
+            return Results.Ok(new NodeConfigurationDto(
+                node.Id, node.Name, node.Role, current.RepoPath, current.WorkdirPath, options.ListenPort, capabilities, runtime.ConfigFilePath,
+                capabilities.ReceivesCommits && acceptance.IsEnabled));
         });
         app.MapGet(ApiRoutes.CONFIG_EXPORT_PROBE, async (INodeEnvironmentProbe probe, CancellationToken cancellationToken) =>
             Results.Ok(await probe.ProbeAsync(cancellationToken)));

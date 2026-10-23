@@ -16,12 +16,12 @@ Eine Kette ist `Workstation → Relay(s) → Origin`. Ohne Relay verbinden sich 
 
 ## Regel: das Repository auf Origin wird nur gelesen
 
-- RCynQ schreibt nichts in ein Git-Repository auf Origin: kein Remote, keine Einstellung, keine Referenz, keinen Commit, keine Index-Aktualisierung (Git läuft mit `GIT_OPTIONAL_LOCKS=0`).
-- Arbeitsdateien auf Origin ändern sich nur, wenn ein vom Benutzer gesendeter Patch angewendet wird.
-- Alles, was Origin speichert (die Liste der Repositories, die Synchronisationsbasis, den Verlauf, Sicherungen), liegt in `syncbridge.json` und im Datenordner des Knotens.
+- RCynQ pusht nie und legt in einem Git-Repository auf Origin keinen eigenen Commit, kein Remote, keine Einstellung und keine Referenz an; den Index aktualisiert es nicht (Git läuft mit `GIT_OPTIONAL_LOCKS=0`).
+- Der Arbeitsbaum und der ausgecheckte Branch auf Origin ändern sich nur durch das, was der Benutzer gesendet hat: die Dateien eines Patches oder, wenn Origin Commits annimmt, die eigenen Commits des Benutzers, auf die der Branch vorgespult wird. Das Reflog des Branches behält dieses Vorspulen, sodass einfaches Git es rückgängig macht.
+- Alles, was Origin speichert (die Liste der Repositories, die Synchronisationsbasis, den Verlauf, Sicherungen, Commits, die auf das Anwenden warten), liegt in `syncbridge.json` und im Datenordner des Knotens.
 - Git-Verwaltung (das Repository in einem leeren Ordner anlegen, das Remote `rcynq`, `refs/remotes/rcynq/*`, Fast-Forward bei Pull) findet nur in der Arbeitskopie auf der Workstation statt.
 
-Ein End-to-End-Test vergleicht jede Datei unter `.git` vor und nach dem Registrieren, Wechseln, Bereitstellen und Untersuchen eines Repositorys.
+End-to-End-Tests vergleichen jede Datei unter `.git` vor und nach dem Registrieren, Wechseln, Bereitstellen und Untersuchen eines Repositorys sowie vor und nach einer Lieferung von Commits, die abgelehnt wird oder warten muss.
 
 ## Kanäle
 
@@ -30,6 +30,8 @@ Beide Kanäle verwenden dieselbe Verbindung und dieselbe Berechtigung.
 **Git-Kanal (Origin → Workstation).** Die Workstation nennt ein Repository und die Commits, die sie bereits hat. Origin antwortet mit einem inkrementellen Git-Bundle. Die Workstation holt es nach `refs/remotes/rcynq/*` und macht einen Fast-Forward. Es wird nie etwas gepusht. Danach listet Origin alle seine Branches auf, und `refs/remotes/rcynq/*` wird an diese Liste angeglichen: Ein Bundle trägt nur Branches mit neuen Commits, daher kommen ein Branch, der an einem Commit angelegt wurde, den die Workstation schon hat, ein zurückgesetzter und ein gelöschter Branch auf diesem Weg an. Ein Pull lässt den aktuellen Branch `rcynq/<Branch>` folgen, damit Git ihn mit Origin vergleicht und nicht mit einem Remote, das dieser Computer nicht erreicht.
 
 **Patch-Kanal (beide Richtungen).** Ein Patch ist der Unterschied zwischen dem Arbeitsverzeichnis und der *Synchronisationsbasis* — dem, was der andere Knoten bekanntlich hat. Die Synchronisationsbasis wird automatisch aus dem Git-Commit gebildet, den beide Knoten teilen, plus den bereits ausgetauschten Dateien. Zustellung: ein signiertes Manifest, dann jede Datei nach ihrem SHA-256, dann ein Commit, der alles oder nichts anwendet. Ein Konflikt wird gelöst, indem man die lokale Datei behält, die eingehende übernimmt (mit Sicherung) oder einen Drei-Wege-Merge mit Git ausführt.
+
+**Lieferung von Commits (Workstation → Origin).** Auf der Workstation vorbereitete Commits (Cherry-Picks, Merges) kommen unverändert auf Origin an: dieselben Hashes, Autoren und dieselbe Reihenfolge. Die Workstation sendet einen Block ihrer nicht gesendeten Commits, der mit dem ältesten beginnt, als Git-Bundle mit einem signierten Umschlag; die Patch-Sitzung trägt ihn. Origin nimmt ihn nur an, wenn der Benutzer **Commits von der Workstation annehmen** eingeschaltet hat, nur für den ausgecheckten Branch und nur, wenn dessen `HEAD` der Commit ist, auf dem der Block aufbaut; sonst lehnt es sofort ab. Die Objekte werden in eine Quarantäne neben dem Repository entpackt und mit der signierten Liste verglichen (die Kette der ersten Eltern, jeder Pfad, den ein Commit berührt); erst dann werden die Packs nach `.git` verschoben und der Branch vorgespult. Scheitert das Vorspulen, werden die Packs wieder herausgenommen. Solange der Arbeitsbaum von Origin Änderungen hat, warten die Commits: Der Benutzer wendet sie dort an oder lehnt sie ab, und Patches mit Dateien werden so lange abgelehnt. Nach dem Anwenden bringt ein Fetch die Workstation auf den Stand von Origin. Solange ein Branch direkt auf dem Commit von Origin aufbaut, sind seine Commits keine zu sendenden Änderungen: Der Patch-Kanal bietet nur an, was nicht committet ist, weiterhin gegen den Stand, den Origin hat. Eine Workstation nimmt nicht gesendete Commits (Soft, Mixed, Hard) nur zurück, wenn ihr Arbeitsbaum keine Änderungen hat.
 
 ## Wie ein Knoten Verbindungen annimmt
 
@@ -74,6 +76,7 @@ Der einladende Knoten prüft das Ticket, verbraucht es in einem Schritt, importi
 | Pfadausbruch | Pfade in einem Patch sind kanonisch und müssen im Arbeitsverzeichnis bleiben |
 | Falsches Repository | Ein Patch für ein Repository, mit dem der Empfänger nicht arbeitet, wird abgelehnt |
 | Offenlegung von Origin | Ein Nachbar erfährt nur Repository-Namen, nie Pfade; ein Bundle wird nur für einen registrierten Namen bereitgestellt |
+| Commits | Aus, bis der Benutzer sie auf Origin erlaubt; Branch, Basis, jeder Commit und der Hash des Bundles sind signiert; Objekte bleiben bis zur Prüfung in der Quarantäne; nur ein Vorspulen des ausgecheckten Branches |
 | Beitritt | Einmal-Ticket mit Ablauf (gespeichert wird der Hash); Einmal-SSH-Schlüssel nur für den Beitrittsbefehl, mit `expiry-time`; Hostschlüssel und Zertifikat aus der Einladung festgelegt |
 
 ## Repositories

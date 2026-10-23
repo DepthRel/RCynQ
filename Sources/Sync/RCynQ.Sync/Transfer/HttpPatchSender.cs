@@ -47,6 +47,11 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     public const string LINK_TOKEN_HEADER = ApiHeaders.LINK_TOKEN;
 
     /// <summary>
+    /// The name the bundle of a delivery of commits is handed to the content source under.
+    /// </summary>
+    public const string BUNDLE_UPLOAD_NAME = "commits.bundle";
+
+    /// <summary>
     /// JSON options for responses.
     /// </summary>
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
@@ -209,6 +214,18 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     private Dictionary<string, FileChange> UploadsOf(PatchEnvelope envelope)
     {
         var uploads = new Dictionary<string, FileChange>(StringComparer.Ordinal);
+        if (envelope.Commits is { } commits)
+        {
+            if (commits.BundleSizeBytes > _options.MaxFileBytes)
+            {
+                throw new SyncBridgeException(_localizer.Format("Commits.BundleTooLarge", commits.BundleSizeBytes / (1024 * 1024), _options.MaxFileBytes / (1024 * 1024)));
+            }
+
+            // The bundle is the one piece of content of a delivery of commits; the entry only carries its hash and size.
+            uploads[commits.BundleSha256] = new FileChange(ChangeKind.Added, BUNDLE_UPLOAD_NAME, commits.BundleSha256, commits.BundleSizeBytes, false);
+            return uploads;
+        }
+
         foreach (var change in envelope.Manifest.Where(change => change.Kind != ChangeKind.Deleted && change.Sha256 is not null))
         {
             if (change.SizeBytes > _options.MaxFileBytes)
@@ -233,7 +250,8 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
     /// <exception cref="SyncBridgeException">The peer refused the manifest or answered with an invalid body.</exception>
     private async Task<PatchSession> OpenSessionAsync(Peer peer, PatchEnvelope envelope, byte[] manifestBody, CancellationToken cancellationToken)
     {
-        using var request = peer.Request(HttpMethod.Post, ApiRoutes.PATCH_SESSIONS, _node.Id.Value);
+        // A delivery of commits has a route of its own, so a peer that does not know commits refuses it before anything else.
+        using var request = peer.Request(HttpMethod.Post, envelope.IsCommitDelivery ? ApiRoutes.COMMIT_SESSIONS : ApiRoutes.PATCH_SESSIONS, _node.Id.Value);
         request.Content = new ByteArrayContent(manifestBody);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Content.Headers.ContentEncoding.Add(GzipCodec.CONTENT_ENCODING);
@@ -245,7 +263,9 @@ public sealed class HttpPatchSender : IPatchSender, IDisposable
             // never with the rejection body a current peer sends.
             if (response.StatusCode == HttpStatusCode.NotFound && !IsRejectionBody(text))
             {
-                throw new SyncBridgeException(_localizer.Format("Send.OlderPeer", envelope.Id));
+                throw new SyncBridgeException(envelope.IsCommitDelivery
+                    ? _localizer.Get("Commits.OlderOrigin")
+                    : _localizer.Format("Send.OlderPeer", envelope.Id));
             }
 
             if (!response.IsSuccessStatusCode)

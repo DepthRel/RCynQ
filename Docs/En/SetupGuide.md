@@ -213,6 +213,21 @@ Command line: `rcynq import <file> --as route|replace|hop [--link <link>]`. With
 
 In `syncbridge.json` the spare addresses of a link are listed in `Routes` (`Host`, optional `Name`, `SshPort`, `SshUser`, `Priority`); the priority of the address of the link itself is `RoutePriority`.
 
+## 12. Commits prepared on the Workstation
+
+When a branch is prepared on the Workstation (cherry-picks, merges for a release), its commits can reach the Origin as they are: the same hashes, authors and order, in the local branch of the Origin and ready for you to push from there. RCynQ itself never pushes.
+
+1. On the Origin: **Settings → Commits from the Workstation → Accept commits from the Workstation**. It is off by default; while it is off, the Origin refuses commits.
+2. On the Workstation the branch must exist on the Origin and be built right on its last commit: do a **Pull** first.
+3. **Synchronization → Commits to send** lists the commits the Origin does not have, newest first. Check the newest one to send; every older one is checked with it.
+4. Press **Send commits**. The Origin fast-forwards the same branch, and the list empties.
+
+If the working tree of the Origin has changes, the commits wait there: deal with the changes (stash or discard them) and press **Apply** on the Origin, or **Decline**. Until then the Origin refuses patches of files. Commits built on another commit, or for another branch than the one checked out on the Origin, are refused at once.
+
+**Roll back commits** undoes the newest unsent commits as `git reset` does: Soft keeps their changes staged, Mixed keeps them in the working tree, Hard discards them. It works only while the working tree has no changes.
+
+Command line: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, on the Origin `rcynq commits apply <id>` and `rcynq commits decline <id>`. In `syncbridge.json` the switch is `AcceptCommits`.
+
 ## Updating from an earlier version
 
 Earlier versions called the roles Source, Mediator and Dest. They are now Workstation, Relay and Origin.

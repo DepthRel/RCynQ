@@ -53,7 +53,36 @@ public static class PayloadCanonicalizer
             Append(builder, envelope.Repository);
         }
 
+        // Named only when present, like the repository: a patch of files signs as it always did, and a receiver that does
+        // not know commits cannot take a delivery of commits for a patch of files, since its signature would not match.
+        if (envelope.Commits is { } commits)
+        {
+            AppendCommits(builder, commits);
+        }
+
         return Encoding.UTF8.GetBytes(builder.ToString());
+    }
+
+    /// <summary>
+    /// Appends every fact of a delivery of commits.
+    /// </summary>
+    /// <param name="builder">The builder.</param>
+    /// <param name="commits">The delivery.</param>
+    private static void AppendCommits(StringBuilder builder, CommitDelivery commits)
+    {
+        Append(builder, "commits");
+        Append(builder, commits.Branch);
+        Append(builder, commits.BaseCommit);
+        Append(builder, commits.BundleSha256);
+        Append(builder, commits.BundleSizeBytes.ToString(CultureInfo.InvariantCulture));
+        Append(builder, commits.Commits.Count.ToString(CultureInfo.InvariantCulture));
+        foreach (var commit in commits.Commits)
+        {
+            Append(builder, commit.Hash);
+            Append(builder, commit.Subject);
+            Append(builder, commit.Author);
+            Append(builder, commit.AuthoredAtUtc.UtcTicks.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
     /// <summary>

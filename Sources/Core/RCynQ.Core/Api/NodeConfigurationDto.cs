@@ -14,6 +14,7 @@ namespace RCynQ.Core.Api;
 /// <param name="ListenPort">The loopback port of the service.</param>
 /// <param name="Capabilities">The capabilities of the role.</param>
 /// <param name="ConfigFilePath">The configuration file the service reads, or <see langword="null"/>.</param>
+/// <param name="AcceptCommits">Whether an Origin takes commits from the Workstation; <see langword="false"/> for other roles.</param>
 public sealed record NodeConfigurationDto(
     NodeId NodeId,
     string Name,
@@ -22,4 +23,5 @@ public sealed record NodeConfigurationDto(
     string? WorkdirPath,
     int ListenPort,
     RoleCapabilities Capabilities,
-    string? ConfigFilePath);
+    string? ConfigFilePath,
+    bool AcceptCommits = false);

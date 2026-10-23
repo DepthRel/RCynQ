@@ -182,7 +182,8 @@ internal static class EntityMapper
             entity.Error,
             entity.Signature)
         {
-            Repository = entity.Repository
+            Repository = entity.Repository,
+            Commits = entity.CommitsJson is null ? null : JsonSerializer.Deserialize<CommitDelivery>(entity.CommitsJson, Json)
         };
 
     /// <summary>
@@ -206,6 +207,7 @@ internal static class EntityMapper
         entity.Error = patch.Error;
         entity.Signature = patch.Signature.Length == 0 ? null : patch.Signature;
         entity.Repository = patch.Repository;
+        entity.CommitsJson = patch.Commits is null ? null : JsonSerializer.Serialize(patch.Commits, Json);
     }
 
     /// <summary>

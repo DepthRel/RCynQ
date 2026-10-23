@@ -5,6 +5,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
 using RCynQ.Localization;
+using RCynQ.Sync.Commits;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Security;
@@ -60,6 +61,9 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
+    /// <summary>Takes deliveries of commits, or <see langword="null"/> when the node refuses them.</summary>
+    private readonly IncomingCommitApplier? _commits;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DefaultPatchReceiver"/> class.
     /// </summary>
@@ -73,6 +77,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     /// <param name="tracker">The state tracker.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The clock.</param>
+    /// <param name="commits">Takes deliveries of commits; <see langword="null"/> refuses them.</param>
     public DefaultPatchReceiver(
         ILocalizer localizer,
         PatchAdmission admission,
@@ -83,7 +88,8 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
         WorkingTreeLock workingTreeLock,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IncomingCommitApplier? commits = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _admission = admission;
@@ -95,18 +101,55 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         _tracker = tracker;
         _lock = workingTreeLock;
         _timeProvider = timeProvider;
+        _commits = commits;
     }
 
     /// <inheritdoc />
-    public async Task<PatchSession> OpenSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
+    public Task<PatchSession> OpenSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => OpenAsync(envelope, context, expectCommits: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PatchSession> OpenCommitSessionAsync(PatchEnvelope envelope, PatchReceiveContext context, CancellationToken cancellationToken = default)
+        => OpenAsync(envelope, context, expectCommits: true, cancellationToken);
+
+    /// <summary>
+    /// Opens (or resumes) a session of either kind.
+    /// </summary>
+    /// <param name="envelope">The envelope.</param>
+    /// <param name="context">The request context.</param>
+    /// <param name="expectCommits">Whether the route the envelope came by is the one of commits.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The session with the content that is still missing.</returns>
+    /// <exception cref="PatchRejectedException">The envelope was refused.</exception>
+    private async Task<PatchSession> OpenAsync(PatchEnvelope envelope, PatchReceiveContext context, bool expectCommits, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(context);
         await _admission.ValidateAsync(envelope, context, cancellationToken);
 
+        // Each kind comes by its own route, so a delivery of commits cannot pass for a patch of files or the other way round.
+        if (envelope.IsCommitDelivery != expectCommits)
+        {
+            throw new PatchRejectedException(PatchRejectionReason.Malformed, _localizer.Get("Receive.WrongSessionKind"));
+        }
+
+        if (expectCommits && _commits is null)
+        {
+            throw new PatchRejectedException(PatchRejectionReason.RoleNotAllowed, _localizer.Get("Commits.NotAccepted"));
+        }
+
         using (await _lock.AcquireAsync(cancellationToken))
         {
             var existing = await _patches.GetAsync(envelope.Id, cancellationToken);
+            if (envelope.Commits is { } commits)
+            {
+                await _commits!.EnsureAdmissibleAsync(commits, cancellationToken);
+            }
+            else if (_commits is not null)
+            {
+                await _commits.EnsureNoWaitingAsync(cancellationToken);
+            }
+
             if (existing is null)
             {
                 await _replay.EnsureFreshAsync(envelope, cancellationToken);
@@ -144,12 +187,12 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         ArgumentNullException.ThrowIfNull(context);
         var session = await _admission.AuthorizeSessionAsync(patchId, context, cancellationToken);
         var hash = sha256.Trim().ToLowerInvariant();
-        var entry = session.Manifest.FirstOrDefault(change => change.Kind != ChangeKind.Deleted && string.Equals(change.Sha256, hash, StringComparison.Ordinal))
+        var size = ExpectedSize(session, hash)
             ?? throw new PatchRejectedException(PatchRejectionReason.Malformed, _localizer.Format("Receive.UnexpectedContent", hash, patchId));
 
         try
         {
-            await _storage.SaveUploadAsync(hash, content, entry.SizeBytes ?? 0, cancellationToken);
+            await _storage.SaveUploadAsync(hash, content, size, cancellationToken);
         }
         catch (Exception ex) when (ex is FormatException or InvalidDataException)
         {
@@ -173,7 +216,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
                 throw new PatchRejectedException(PatchRejectionReason.Replay, _localizer.Format("Replay.Again", patchId));
             }
 
-            var envelope = ToEnvelope(metadata);
+            var envelope = metadata.ToEnvelope();
             var missing = 0;
             foreach (var hash in envelope.ContentHashes)
             {
@@ -193,15 +236,18 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             // request, and stopping here on that signal would leave a half-written tree and a patch that stays "pending"
             // although files of it are already in place. So the commit runs to its end once it has started.
             var uninterrupted = CancellationToken.None;
-            result = await _incoming.ApplyAsync(envelope, uninterrupted);
+            result = envelope.IsCommitDelivery
+                ? await _commits!.ApplyAsync(envelope, retry: false, uninterrupted)
+                : await _incoming.ApplyAsync(envelope, uninterrupted);
 
             // Content of a patch that is done is dropped; a patch that waits for a decision keeps it for the resolution.
-            if (result.Status == PatchStatus.Applied)
+            // Commits that were refused or failed cannot be applied later, so only waiting ones keep their bundle.
+            if (result.Status == PatchStatus.Applied || (envelope.IsCommitDelivery && result.Status != PatchStatus.Waiting))
             {
                 await _storage.DeleteContentAsync(patchId, uninterrupted);
             }
 
-            await _outcomes.RecordAsync(metadata, result, null, uninterrupted);
+            await _outcomes.RecordAsync(metadata, result, CommitHistoryText.Received(envelope, result), uninterrupted);
         }
 
         // Outside the lock: the tracker takes it itself to read the sync base. The patch is already decided and recorded, so a
@@ -219,10 +265,19 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
     }
 
     /// <summary>
-    /// Rebuilds the envelope of a stored patch.
+    /// Finds the size the content of a session with the given hash must have.
     /// </summary>
-    /// <param name="metadata">The stored patch.</param>
-    /// <returns>The envelope.</returns>
-    private static PatchEnvelope ToEnvelope(PatchMetadata metadata)
-        => new(metadata.Id, metadata.SourceNode, metadata.TargetNode, metadata.CreatedAtUtc, metadata.BaseStateHash, metadata.IncomingStateHash, metadata.Manifest, metadata.Signature);
+    /// <param name="session">The stored patch of the session.</param>
+    /// <param name="hash">The hash of the content.</param>
+    /// <returns>The size, or <see langword="null"/> when the session announced no such content.</returns>
+    private static long? ExpectedSize(PatchMetadata session, string hash)
+    {
+        if (session.Commits is { } commits)
+        {
+            return string.Equals(commits.BundleSha256, hash, StringComparison.Ordinal) ? commits.BundleSizeBytes : null;
+        }
+
+        var entry = session.Manifest.FirstOrDefault(change => change.Kind != ChangeKind.Deleted && string.Equals(change.Sha256, hash, StringComparison.Ordinal));
+        return entry is null ? null : entry.SizeBytes ?? 0;
+    }
 }

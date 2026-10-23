@@ -33,4 +33,9 @@ public sealed class PatchEnvelopeDto
     /// Gets or sets the name of the repository the patch belongs to, or <see langword="null"/>.
     /// </summary>
     public string? Repository { get; set; }
+
+    /// <summary>
+    /// Gets or sets the commits the envelope delivers instead of files, or <see langword="null"/> for a patch of files.
+    /// </summary>
+    public CommitDeliveryDto? Commits { get; set; }
 }

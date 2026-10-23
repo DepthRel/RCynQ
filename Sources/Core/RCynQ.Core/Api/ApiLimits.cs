@@ -10,4 +10,7 @@ public static class ApiLimits
 
     /// <summary>The most branches Origin lists in one answer; a Workstation ignores the rest.</summary>
     public const int MAX_GIT_BRANCHES = 10000;
+
+    /// <summary>The most commits one delivery of commits carries and the list of unsent commits shows.</summary>
+    public const int MAX_DELIVERY_COMMITS = 1000;
 }

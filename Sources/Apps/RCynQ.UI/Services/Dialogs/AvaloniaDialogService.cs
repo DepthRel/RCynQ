@@ -33,6 +33,13 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
+    public async Task<CommitRollbackChoice?> ShowRollbackCommitsDialogAsync(RollbackCommitsDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return await ShowAsync(new RollbackCommitsDialog { DataContext = dialog }) ? dialog.Result : null;
+    }
+
+    /// <inheritdoc />
     public Task<bool> ShowExportDialogAsync(ExportDialogViewModel dialog)
     {
         ArgumentNullException.ThrowIfNull(dialog);

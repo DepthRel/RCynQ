@@ -22,6 +22,14 @@ public sealed record SyncBaseStatus(SyncBaseMode Mode, string? Branch, string? C
     public bool IsReady => Mode != SyncBaseMode.None;
 
     /// <summary>
+    /// Gets the commit the changes of the working tree are counted from when it is not <see cref="Commit"/>: <c>HEAD</c> of a
+    /// Workstation whose own commits on top of the commit of the Origin go as commits. <see langword="null"/> counts from
+    /// <see cref="Commit"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? ChangesSince { get; init; }
+
+    /// <summary>
     /// Creates the status of a node without a sync base.
     /// </summary>
     /// <param name="problem">Why there is no sync base.</param>

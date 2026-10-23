@@ -213,6 +213,21 @@ Befehlszeile: `rcynq import <file> --as route|replace|hop [--link <link>]`. Ohne
 
 In `syncbridge.json` stehen die Ersatzadressen einer Verbindung in `Routes` (`Host`, optional `Name`, `SshPort`, `SshUser`, `Priority`); die Priorität der Adresse der Verbindung selbst ist `RoutePriority`.
 
+## 12. Auf der Workstation vorbereitete Commits
+
+Wird ein Branch auf der Workstation vorbereitet (Cherry-Picks, Merges für ein Release), lassen sich seine Commits unverändert auf Origin bringen: dieselben Hashes, Autoren und dieselbe Reihenfolge, im lokalen Branch von Origin und bereit, dass Sie sie von dort pushen. RCynQ selbst pusht nie.
+
+1. Auf Origin: **Einstellungen → Commits von der Workstation → Commits von der Workstation annehmen**. Standardmäßig ist es aus; solange es aus ist, lehnt Origin Commits ab.
+2. Auf der Workstation muss der Branch auf Origin existieren und direkt auf dessen letztem Commit aufbauen: Führen Sie zuerst einen **Pull** aus.
+3. **Synchronisation → Zu sendende Commits** listet die Commits, die Origin nicht hat, die neuesten oben. Markieren Sie den neuesten, der gesendet werden soll; alle älteren werden mitmarkiert.
+4. Klicken Sie auf **Commits senden**. Origin spult denselben Branch vor, und die Liste leert sich.
+
+Hat der Arbeitsbaum von Origin Änderungen, warten die Commits dort: Kümmern Sie sich um die Änderungen (stashen oder verwerfen) und klicken Sie auf Origin auf **Anwenden** oder **Ablehnen**. Bis dahin lehnt Origin Patches mit Dateien ab. Commits, die auf einem anderen Commit aufbauen oder für einen anderen Branch sind als den auf Origin ausgecheckten, werden sofort abgelehnt.
+
+**Commits zurücknehmen** macht die neuesten nicht gesendeten Commits rückgängig, wie `git reset`: Soft behält ihre Änderungen im Index, Mixed im Arbeitsbaum, Hard verwirft sie. Das geht nur, wenn der Arbeitsbaum keine Änderungen hat.
+
+Befehlszeile: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, auf Origin `rcynq commits apply <id>` und `rcynq commits decline <id>`. In `syncbridge.json` heißt der Schalter `AcceptCommits`.
+
 ## Aktualisieren von einer früheren Version
 
 Frühere Versionen nannten die Rollen Source, Mediator und Dest. Jetzt heißen sie Workstation, Relay und Origin.

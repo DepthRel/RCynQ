@@ -9,6 +9,7 @@ using RCynQ.Core.State;
 using RCynQ.Git.Repository;
 using RCynQ.Localization;
 using RCynQ.Ssh.Routing;
+using RCynQ.Sync.Commits;
 using RCynQ.Sync.Locking;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.State;
@@ -49,11 +50,6 @@ public sealed class GitChannelService
     public const string REMOTE_NAME = "rcynq";
 
     /// <summary>
-    /// How many files a refused Pull names before it only counts the rest.
-    /// </summary>
-    private const int MAX_LISTED_FILES = 20;
-
-    /// <summary>
     /// The placeholder URL stored for the <c>rcynq</c> remote, so ordinary Git tooling recognizes fetched branches as belonging
     /// to a remote (see <see cref="IGitRepositoryService.EnsureRemoteAsync"/>). RCynQ never fetches through it.
     /// </summary>
@@ -92,6 +88,9 @@ public sealed class GitChannelService
     /// <summary>Renames the remote-tracking namespace of an earlier version, or <see langword="null"/>.</summary>
     private readonly LegacyRemoteMigration? _legacyRemote;
 
+    /// <summary>Closes deliveries of commits a Fetch shows the fate of, or <see langword="null"/>.</summary>
+    private readonly OutgoingCommitTracker? _outgoingCommits;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitChannelService"/> class.
     /// </summary>
@@ -106,6 +105,7 @@ public sealed class GitChannelService
     /// <param name="pathUtility">The path utility.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="legacyRemote">Renames the remote-tracking namespace of an earlier version; <see langword="null"/> leaves it alone.</param>
+    /// <param name="outgoingCommits">Closes deliveries of commits a Fetch shows the fate of; <see langword="null"/> leaves them alone.</param>
     public GitChannelService(
         ILocalizer localizer,
         NodeConfig node,
@@ -117,8 +117,10 @@ public sealed class GitChannelService
         SyncPaths paths,
         IPathUtility pathUtility,
         WorkingTreeLock workingTreeLock,
-        LegacyRemoteMigration? legacyRemote = null)
+        LegacyRemoteMigration? legacyRemote = null,
+        OutgoingCommitTracker? outgoingCommits = null)
     {
+        _outgoingCommits = outgoingCommits;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _links = links;
@@ -169,6 +171,11 @@ public sealed class GitChannelService
             var (workdir, chain, _) = await ResolveAsync(cancellationToken);
             await MigrateLegacyRemoteAsync(workdir, cancellationToken);
             var output = await FetchBundleAsync(workdir, chain, cancellationToken);
+            if (_outgoingCommits is not null)
+            {
+                await _outgoingCommits.CloseDeliveredAsync(workdir, cancellationToken);
+            }
+
             return new GitOperationResult(true, output, await _git.GetBranchInfoAsync(workdir, REMOTE_NAME, cancellationToken));
         }
         catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
@@ -343,12 +350,7 @@ public sealed class GitChannelService
     /// </summary>
     /// <param name="paths">The files.</param>
     /// <returns>The text.</returns>
-    private string DescribeFiles(IReadOnlyCollection<string> paths)
-    {
-        var shown = paths.Take(MAX_LISTED_FILES).Select(path => "  " + path);
-        var text = string.Join('\n', shown);
-        return paths.Count > MAX_LISTED_FILES ? $"{text}\n  {_localizer.Format("Git.PullMoreFiles", paths.Count - MAX_LISTED_FILES)}" : text;
-    }
+    private string DescribeFiles(IReadOnlyCollection<string> paths) => FileListText.Describe(_localizer, paths);
 
     /// <summary>
     /// Asks Origin for a bundle with what is new in the repository this node works with and fetches it from the file.

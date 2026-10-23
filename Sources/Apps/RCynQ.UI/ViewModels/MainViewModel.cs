@@ -268,6 +268,7 @@ public sealed partial class MainViewModel : ObservableObject
             SetNodeTitle(() => $"RCynQ — {config.Name} ({config.Role})");
             Branches.Configure(config.Capabilities);
             Overview.Configure(config);
+            Settings.Configure(config);
             Repositories?.Configure(config.Role);
             SetConnectionText(() => start.Message);
             StartupError = null;

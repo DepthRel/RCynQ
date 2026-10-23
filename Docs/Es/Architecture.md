@@ -16,12 +16,12 @@ Una cadena es `Workstation → Relay(s) → Origin`. Sin Relay, los dos extremos
 
 ## Regla: el repositorio del Origin solo se lee
 
-- RCynQ no escribe nada en un repositorio Git de un Origin: ni remote, ni ajustes, ni referencias, ni commits, ni actualización del índice (Git se ejecuta con `GIT_OPTIONAL_LOCKS=0`).
-- Los archivos de trabajo del Origin solo cambian cuando se aplica un parche que envió el usuario.
-- Todo lo que guarda el Origin (la lista de repositorios, la base de sincronización, el historial, las copias de seguridad) está en `syncbridge.json` y en la carpeta de datos del nodo.
+- RCynQ nunca hace push ni crea en un repositorio Git de un Origin commits, remotes, ajustes o referencias propios, ni actualiza su índice (Git se ejecuta con `GIT_OPTIONAL_LOCKS=0`).
+- El árbol de trabajo y la rama activa del Origin solo cambian por lo que envió el usuario: los archivos de un parche o, si el Origin acepta commits, los propios commits del usuario, hasta los que la rama avanza (fast-forward). El reflog de la rama guarda ese avance, así que Git lo deshace sin más.
+- Todo lo que guarda el Origin (la lista de repositorios, la base de sincronización, el historial, las copias de seguridad, los commits que esperan a aplicarse) está en `syncbridge.json` y en la carpeta de datos del nodo.
 - El mantenimiento de Git (crear el repositorio en una carpeta vacía, el remote `rcynq`, `refs/remotes/rcynq/*`, el avance rápido en Pull) ocurre solo en la copia de trabajo de la Workstation.
 
-Una prueba de extremo a extremo compara cada archivo bajo `.git` antes y después de registrar, cambiar, servir e inspeccionar un repositorio.
+Unas pruebas de extremo a extremo comparan cada archivo bajo `.git` antes y después de registrar, cambiar, servir e inspeccionar un repositorio, y antes y después de una entrega de commits que se rechaza o tiene que esperar.
 
 ## Canales
 
@@ -30,6 +30,8 @@ Ambos canales usan la misma conexión y la misma autorización.
 **Canal Git (Origin → Workstation).** La Workstation indica un repositorio y los commits que ya tiene. El Origin responde con un paquete Git incremental. La Workstation lo descarga en `refs/remotes/rcynq/*` y avanza rápidamente. Nunca se hace push de nada. Después, el Origin enumera todas sus ramas y `refs/remotes/rcynq/*` se ajusta a esa lista: un paquete solo lleva ramas con commits nuevos, así que una rama creada en un commit que la Workstation ya tiene, una rama movida hacia atrás y una rama eliminada llegan por esta vía. Un Pull hace que la rama actual siga a `rcynq/<rama>`, para que Git la compare con el Origin y no con un remote que este equipo no alcanza.
 
 **Canal de parches (en ambos sentidos).** Un parche es la diferencia entre el árbol de trabajo y la *base de sincronización*, es decir, lo que se sabe que tiene el otro nodo. La base de sincronización se construye automáticamente a partir del commit de Git que comparten ambos nodos, más los archivos ya intercambiados. Entrega: un manifiesto firmado, después cada archivo por su SHA-256 y después un commit que lo aplica todo o nada. Un conflicto se resuelve conservando el archivo local, tomando el entrante (con copia de seguridad) o con una fusión de Git a tres bandas.
+
+**Entrega de commits (Workstation → Origin).** Los commits preparados en la Workstation (cherry-picks, fusiones) llegan al Origin tal cual: los mismos hashes, autores y orden. La Workstation envía un bloque de sus commits sin enviar que empieza por el más antiguo, como un paquete Git con un sobre firmado; lo lleva la sesión del parche. El Origin lo acepta solo si el usuario activó **Aceptar commits de la Workstation**, solo para la rama activa y solo si su `HEAD` es el commit sobre el que se construyó el bloque; si no, lo rechaza en el acto. Los objetos se desempaquetan en una cuarentena junto al repositorio y se comparan con la lista firmada (la cadena de primeros padres, cada ruta que toca un commit); solo entonces se mueven los packs a `.git` y la rama avanza. Si el avance falla, los packs se vuelven a sacar. Mientras el árbol de trabajo del Origin tenga cambios, los commits esperan: el usuario los aplica o rechaza allí, y entretanto se rechazan los parches de archivos. Después de aplicarlos, un Fetch pone la Workstation al día con el Origin. Mientras una rama parte justo del commit del Origin, sus commits no son cambios por enviar: el canal de parches ofrece solo lo que no está confirmado, siempre frente a la versión que tiene el Origin. Una Workstation deshace commits sin enviar (Soft, Mixed, Hard) solo si su árbol de trabajo no tiene cambios.
 
 ## Cómo acepta conexiones un nodo
 
@@ -74,6 +76,7 @@ El nodo que invita comprueba el ticket, lo consume en un solo paso, importa la t
 | Salida de rutas | Las rutas de un parche son canónicas y deben quedar dentro del árbol de trabajo |
 | Repositorio equivocado | Se rechaza un parche para un repositorio con el que el receptor no trabaja |
 | Exposición del Origin | Un vecino solo conoce nombres de repositorios, nunca rutas; un paquete solo se sirve para un nombre registrado |
+| Commits | Desactivado hasta que el usuario los permita en el Origin; la rama, la base, cada commit y el hash del paquete van firmados; los objetos quedan en cuarentena hasta comprobarse; solo un avance (fast-forward) de la rama activa |
 | Unión | Ticket de un solo uso con caducidad (se guarda el hash); clave SSH de un solo uso limitada al comando de unión, con `expiry-time`; clave de host y certificado fijados desde la invitación |
 
 ## Repositorios

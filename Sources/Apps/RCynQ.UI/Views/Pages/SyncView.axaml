@@ -4,6 +4,7 @@
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Controls"
+             xmlns:commits="using:RCynQ.UI.ViewModels.Commits"
              x:Class="RCynQ.UI.Views.Pages.SyncView"
              x:DataType="pages:SyncViewModel">
   <ScrollViewer x:Name="PageScroll">
@@ -43,6 +44,20 @@
                      Text="{Binding SyncBaseProblem}" />
           <Button Grid.Column="2" Classes="outline" Margin="12,0,0,0" Content="{loc:Loc Sync.CreateBaseline}"
                   IsVisible="{Binding CanCreateManualBaseline}" Command="{Binding CreateBaselineCommand}" />
+        </Grid>
+      </Border>
+
+      <!-- Commits from the Workstation that wait on this Origin until its working tree is clean -->
+      <Border Classes="banner warning" IsVisible="{Binding HasWaitingCommits}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding WaitingCommitsText}" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+            <Button Classes="outline" Content="{loc:Loc Commits.Decline}" IsEnabled="{Binding !IsBusy}"
+                    Command="{Binding DeclineWaitingCommitsCommand}" CommandParameter="{Binding WaitingCommits}" />
+            <Button Classes="accent" Content="{loc:Loc Commits.Apply}" IsEnabled="{Binding !IsBusy}"
+                    Command="{Binding ApplyWaitingCommitsCommand}" CommandParameter="{Binding WaitingCommits}" />
+          </StackPanel>
         </Grid>
       </Border>
 
@@ -207,6 +222,68 @@
         </Border>
       </StackPanel>
 
+      <!-- Commits to send (Workstation): a block from the oldest unsent commit; newest on top, as git log shows them -->
+      <StackPanel IsVisible="{Binding Commits.IsVisible}">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Commits.Title}" />
+            <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Commits.CountText}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+            <Button Classes="danger muted" Command="{Binding RollBackCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.RollBackTip}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:IconView Classes="small" IconKey="Icon.Reload" />
+                <TextBlock Text="{loc:Loc Commits.RollBack}" />
+              </StackPanel>
+            </Button>
+            <Button Classes="accent" Command="{Binding SendCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.SendTip}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:IconView Classes="small" IconKey="Icon.Send" />
+                <TextBlock Text="{loc:Loc Commits.Send}" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+        <Border Classes="banner warning" Margin="0,0,0,10" IsVisible="{Binding Commits.HasProblem}">
+          <TextBlock TextWrapping="Wrap" Text="{Binding Commits.Problem}" />
+        </Border>
+        <Border Classes="card" IsVisible="{Binding Commits.Items.Count}">
+          <StackPanel>
+            <Border Classes="header-row">
+              <Grid ColumnDefinitions="30,140,100,180,*">
+                <TextBlock Grid.Column="1" Text="{loc:Loc Sync.Time}" />
+                <TextBlock Grid.Column="2" Text="{loc:Loc Commits.Hash}" />
+                <TextBlock Grid.Column="3" Text="{loc:Loc Commits.Author}" />
+                <TextBlock Grid.Column="4" Text="{loc:Loc Commits.Subject}" />
+              </Grid>
+            </Border>
+            <ScrollViewer MaxHeight="260">
+              <ItemsControl Classes="rows" ItemsSource="{Binding Commits.Items}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="commits:UnsentCommitItemViewModel">
+                    <Border Classes="row" Classes.selected="{Binding IsChecked}" Padding="16,6">
+                      <Grid ColumnDefinitions="30,140,100,180,*">
+                        <CheckBox IsChecked="{Binding IsChecked}" MinHeight="0" MinWidth="0" Padding="0" Margin="0,-7" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" VerticalAlignment="Center" Text="{Binding TimeText}" />
+                        <TextBlock Grid.Column="2" Classes="mono secondary" FontSize="12.5" VerticalAlignment="Center" Text="{Binding ShortHash}" ToolTip.Tip="{Binding Hash}" />
+                        <TextBlock Grid.Column="3" Classes="secondary" FontSize="12.5" VerticalAlignment="Center" Text="{Binding Author}"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Author}" />
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8">
+                          <TextBlock Classes="muted" FontSize="12" VerticalAlignment="Center" IsVisible="{Binding IsWaiting}"
+                                     Text="{loc:Loc Commits.Waiting}" ToolTip.Tip="{loc:Loc Commits.WaitingTip}" />
+                          <TextBlock FontSize="12.5" VerticalAlignment="Center" Text="{Binding Subject}" TextTrimming="CharacterEllipsis"
+                                     ToolTip.Tip="{Binding Subject}" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <!-- Patch history: the newest rows, or every loaded row with older pages loaded below on demand -->
       <StackPanel>
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
@@ -222,10 +299,10 @@
         <Border Classes="card">
           <StackPanel>
             <Border Classes="header-row">
-              <Grid ColumnDefinitions="160,110,70,*,Auto">
+              <Grid ColumnDefinitions="160,110,120,*,Auto">
                 <TextBlock Text="{loc:Loc Sync.Time}" />
                 <TextBlock Grid.Column="1" Text="{loc:Loc Sync.Direction}" />
-                <TextBlock Grid.Column="2" Text="{loc:Loc Sync.Files}" />
+                <TextBlock Grid.Column="2" Text="{loc:Loc Sync.Contents}" />
                 <TextBlock Grid.Column="3" Text="{loc:Loc Common.Status}" />
               </Grid>
             </Border>
@@ -234,10 +311,10 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:PatchHistoryItemViewModel">
                   <Border Classes="row" Padding="16,7">
-                    <Grid ColumnDefinitions="160,110,70,*,Auto">
+                    <Grid ColumnDefinitions="160,110,120,*,Auto">
                       <TextBlock Classes="mono secondary" FontSize="12.5" Text="{Binding TimeText}" />
                       <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding DirectionText}" />
-                      <TextBlock Grid.Column="2" Classes="mono secondary" Text="{Binding FileCount}" />
+                      <TextBlock Grid.Column="2" Classes="secondary" Text="{Binding ContentText}" />
                       <TextBlock Grid.Column="3" Classes="status"
                                  Classes.online="{Binding IsSuccess}"
                                  Classes.offline="{Binding IsProblem}"
@@ -247,7 +324,10 @@
                         <Button Classes="outline" Padding="10,4" MinHeight="28" Content="{loc:Loc Sync.Resolve}" IsVisible="{Binding CanResolve}"
                                 Command="{Binding $parent[ItemsControl].((pages:SyncViewModel)DataContext).ResolveCommand}"
                                 CommandParameter="{Binding}" />
-                        <Button Classes="icon" Padding="6" ToolTip.Tip="{loc:Loc Sync.ShowDiff}"
+                        <Button Classes="outline" Padding="10,4" MinHeight="28" Content="{loc:Loc Commits.Apply}" IsVisible="{Binding CanApplyCommits}"
+                                Command="{Binding $parent[ItemsControl].((pages:SyncViewModel)DataContext).ApplyWaitingCommitsCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Classes="icon" Padding="6" ToolTip.Tip="{Binding DiffTip}"
                                 Command="{Binding $parent[ItemsControl].((pages:SyncViewModel)DataContext).ViewDiffCommand}"
                                 CommandParameter="{Binding}">
                           <controls:IconView Classes="small" IconKey="Icon.Diff" />

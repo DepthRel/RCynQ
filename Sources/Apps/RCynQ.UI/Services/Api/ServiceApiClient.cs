@@ -275,6 +275,33 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public Task<RepositoryListDto> ActivateRepositoryAsync(string name, CancellationToken cancellationToken = default)
         => PostAsync<RepositoryListDto>(ApiRoutes.RepositoryActivatePath(name), null, cancellationToken);
 
+    /// <inheritdoc />
+    public Task<UnsentCommitsResponse> GetUnsentCommitsAsync(CancellationToken cancellationToken = default)
+        => GetAsync<UnsentCommitsResponse>(ApiRoutes.COMMITS, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<SendPatchResult> SendCommitsAsync(string? upTo, CancellationToken cancellationToken = default)
+        => PostAsync<SendPatchResult>(ApiRoutes.COMMITS_SEND, new SendCommitsRequest(upTo), cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public Task<GitOperationResult> ResetCommitsAsync(ResetCommitsRequest request, CancellationToken cancellationToken = default)
+        => PostAsync<GitOperationResult>(ApiRoutes.COMMITS_RESET, request, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public Task<PatchApplyResult> ApplyWaitingCommitsAsync(Guid patchId, CancellationToken cancellationToken = default)
+        => PostAsync<PatchApplyResult>(ApiRoutes.ApplyPatchPath(patchId), null, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public Task<PatchApplyResult> DeclineWaitingCommitsAsync(Guid patchId, CancellationToken cancellationToken = default)
+        => PostAsync<PatchApplyResult>(ApiRoutes.DeclinePatchPath(patchId), null, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task SetAcceptCommitsAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync(ApiRoutes.CONFIG_ACCEPT_COMMITS, new AcceptCommitsRequest(enabled), _json, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     /// <summary>
     /// Disposes the HTTP client.
     /// </summary>

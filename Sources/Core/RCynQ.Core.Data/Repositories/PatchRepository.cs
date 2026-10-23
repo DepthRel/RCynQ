@@ -96,6 +96,17 @@ public sealed class PatchRepository : IPatchRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<PatchMetadata>> GetByStatusAsync(PatchDirection direction, PatchStatus status, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await db.PatchEnvelopes.AsNoTracking()
+            .Where(patch => patch.Direction == (int)direction && patch.Status == (int)status)
+            .OrderByDescending(patch => patch.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        return entities.Select(EntityMapper.ToDomain).ToArray();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Guid>> DeleteOlderThanAsync(DateTimeOffset createdBeforeUtc, IReadOnlyCollection<PatchStatus> keepStatuses, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(keepStatuses);

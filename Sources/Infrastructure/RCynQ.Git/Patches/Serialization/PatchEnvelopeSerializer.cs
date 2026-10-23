@@ -68,8 +68,46 @@ public sealed class PatchEnvelopeSerializer
                 BaseSha256 = change.BaseSha256
             }).ToList(),
             Signature = envelope.IsSigned ? Convert.ToBase64String(envelope.Signature) : null,
-            Repository = envelope.Repository
+            Repository = envelope.Repository,
+            Commits = envelope.Commits is { } commits ? ToDto(commits) : null
         };
+    }
+
+    /// <summary>
+    /// Converts the commits of an envelope to their transfer object.
+    /// </summary>
+    /// <param name="commits">The commits.</param>
+    /// <returns>The transfer object.</returns>
+    private static CommitDeliveryDto ToDto(CommitDelivery commits) => new()
+    {
+        Branch = commits.Branch,
+        BaseCommit = commits.BaseCommit,
+        Commits = commits.Commits.Select(commit => new CommitInfoDto
+        {
+            Hash = commit.Hash,
+            Subject = commit.Subject,
+            Author = commit.Author,
+            AuthoredAt = commit.AuthoredAtUtc
+        }).ToList(),
+        BundleSha256 = commits.BundleSha256,
+        BundleSizeBytes = commits.BundleSizeBytes
+    };
+
+    /// <summary>
+    /// Converts the transfer object of the commits of an envelope back, validating every name and text.
+    /// </summary>
+    /// <param name="dto">The transfer object.</param>
+    /// <returns>The commits.</returns>
+    /// <exception cref="FormatException">An entry of the list is missing.</exception>
+    /// <exception cref="ArgumentException">A name, a text or the bundle facts are not valid.</exception>
+    private CommitDelivery FromDto(CommitDeliveryDto dto)
+    {
+        var commits = (dto.Commits ?? new List<CommitInfoDto>())
+            .Select(commit => commit is null
+                ? throw new FormatException(_localizer.Get("Envelope.NullEntry"))
+                : new CommitInfo(commit.Hash, commit.Subject, commit.Author, commit.AuthoredAt))
+            .ToArray();
+        return new CommitDelivery(dto.Branch, dto.BaseCommit, commits, dto.BundleSha256, dto.BundleSizeBytes);
     }
 
     /// <summary>
@@ -132,7 +170,8 @@ public sealed class PatchEnvelopeSerializer
                 dto.IncomingStateHash,
                 manifest,
                 string.IsNullOrEmpty(dto.Signature) ? null : Convert.FromBase64String(dto.Signature),
-                string.IsNullOrEmpty(dto.Repository) ? null : dto.Repository);
+                string.IsNullOrEmpty(dto.Repository) ? null : dto.Repository,
+                dto.Commits is null ? null : FromDto(dto.Commits));
         }
         catch (ArgumentException ex)
         {

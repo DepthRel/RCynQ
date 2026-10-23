@@ -97,6 +97,12 @@ public sealed class SyncBridgeOptions
     public bool RespectGitIgnore { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether an Origin takes commits a Workstation sends and fast-forwards its checked out
+    /// branch to them. Off by default: only then does RCynQ write into the repository of an Origin beyond the files of a patch.
+    /// </summary>
+    public bool AcceptCommits { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum accepted age of a received patch, in minutes.
     /// </summary>
     public int PatchMaxAgeMinutes { get; set; } = 24 * 60;

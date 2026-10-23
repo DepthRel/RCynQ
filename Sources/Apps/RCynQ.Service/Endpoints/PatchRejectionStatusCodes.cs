@@ -26,6 +26,9 @@ public static class PatchRejectionStatusCodes
         PatchRejectionReason.RoleNotAllowed => StatusCodes.Status404NotFound,
         PatchRejectionReason.RepositoryMismatch => StatusCodes.Status409Conflict,
         PatchRejectionReason.UnknownRepository => StatusCodes.Status409Conflict,
+        PatchRejectionReason.CommitsNotAccepted => StatusCodes.Status403Forbidden,
+        PatchRejectionReason.VersionMismatch => StatusCodes.Status409Conflict,
+        PatchRejectionReason.CommitsWaiting => StatusCodes.Status409Conflict,
         _ => StatusCodes.Status400BadRequest
     };
 }

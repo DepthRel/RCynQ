@@ -259,4 +259,39 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The repositories of the node afterwards.</returns>
     Task<RepositoryListDto> ActivateRepositoryAsync(string name, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets the commits of the current branch the Origin does not have yet (Workstation).</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The commits, oldest first, or why there are none to send.</returns>
+    Task<UnsentCommitsResponse> GetUnsentCommitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Sends unsent commits to the Origin (Workstation).</summary>
+    /// <param name="upTo">The last commit to send, or <see langword="null"/> for every unsent commit.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The send result.</returns>
+    Task<SendPatchResult> SendCommitsAsync(string? upTo, CancellationToken cancellationToken = default);
+
+    /// <summary>Rolls back unsent commits (Workstation).</summary>
+    /// <param name="request">The commit to roll back to, the mode and the commit the user saw checked out.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The outcome; a refusal is reported in it.</returns>
+    Task<GitOperationResult> ResetCommitsAsync(ResetCommitsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Applies a delivery of commits that waits (Origin).</summary>
+    /// <param name="patchId">The delivery.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>Applied, or still waiting with the reason.</returns>
+    Task<PatchApplyResult> ApplyWaitingCommitsAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>Declines a delivery of commits that waits (Origin).</summary>
+    /// <param name="patchId">The delivery.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The result.</returns>
+    Task<PatchApplyResult> DeclineWaitingCommitsAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>Switches whether this Origin takes commits from the Workstation.</summary>
+    /// <param name="enabled">Whether commits are taken.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>A task that completes when the setting is saved.</returns>
+    Task SetAcceptCommitsAsync(bool enabled, CancellationToken cancellationToken = default);
 }

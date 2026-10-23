@@ -178,6 +178,23 @@ public static class ConfigurationFileEditor
     /// wrote, and the service refuses a file with the same setting twice. The spelling found in the file is kept.
     /// </remarks>
     public static void SetProperty(JsonObject node, string name, string? value)
+        => SetValue(node, name, value is null ? null : JsonValue.Create(value));
+
+    /// <summary>
+    /// Sets a switch of a configuration object, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="node">The configuration object.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The new value.</param>
+    public static void SetProperty(JsonObject node, string name, bool value) => SetValue(node, name, JsonValue.Create(value));
+
+    /// <summary>
+    /// Sets or removes a property of a configuration object, keeping the spelling of its name found in the file.
+    /// </summary>
+    /// <param name="node">The configuration object.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The new value, or <see langword="null"/> to remove the property.</param>
+    private static void SetValue(JsonObject node, string name, JsonNode? value)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

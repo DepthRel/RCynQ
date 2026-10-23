@@ -16,12 +16,12 @@ A chain is `Workstation → Relay(s) → Origin`. With no Relay the two ends con
 
 ## Rule: the repository on the Origin is only read
 
-- RCynQ writes nothing into a Git repository on an Origin: no remote, no setting, no ref, no commit, no index refresh (Git runs with `GIT_OPTIONAL_LOCKS=0`).
-- Working files on the Origin change only when a patch the user sent is applied.
-- Everything the Origin stores (the list of repositories, the sync base, history, backups) lives in `syncbridge.json` and in the data folder of the node.
+- RCynQ never pushes and never creates a commit, a remote, a setting or a ref of its own in a Git repository on an Origin, and does not refresh its index (Git runs with `GIT_OPTIONAL_LOCKS=0`).
+- The working tree and the checked out branch on the Origin change only by what the user sent: the files of a patch, or, when the Origin accepts commits, the user's own commits, to which the branch is fast-forwarded. The reflog of the branch keeps that move, so plain Git undoes it.
+- Everything the Origin stores (the list of repositories, the sync base, history, backups, commits waiting to be applied) lives in `syncbridge.json` and in the data folder of the node.
 - Git housekeeping (creating the repository in an empty folder, the `rcynq` remote, `refs/remotes/rcynq/*`, fast-forward on Pull) happens only in the working copy on the Workstation.
 
-An end-to-end test compares every file under `.git` before and after registering, switching, serving and inspecting a repository.
+End-to-end tests compare every file under `.git` before and after registering, switching, serving and inspecting a repository, and before and after a delivery of commits that is refused or has to wait.
 
 ## Channels
 
@@ -30,6 +30,8 @@ Both channels use the same connection and the same authorization.
 **Git channel (Origin → Workstation).** The Workstation names a repository and the commits it already has. The Origin answers with an incremental Git bundle. The Workstation fetches it into `refs/remotes/rcynq/*` and fast-forwards. Nothing is ever pushed. Then the Origin lists all its branches, and `refs/remotes/rcynq/*` is brought in line with that list: a bundle carries only branches with new commits, so a branch created at a commit the Workstation has, a branch moved back and a deleted branch arrive this way. A Pull makes the current branch follow `rcynq/<branch>`, so Git compares it with the Origin and not with a remote this computer cannot reach.
 
 **Patch channel (both directions).** A patch is the difference between the working tree and the *sync base* — what the other node is known to have. The sync base is built automatically from the Git commit both nodes share, plus the files already exchanged. Delivery: a signed manifest, then each file by its SHA-256, then a commit that applies everything or nothing. A conflict is resolved by keeping the local file, taking the incoming one (with a backup) or a three-way Git merge.
+
+**Delivery of commits (Workstation → Origin).** Commits prepared on the Workstation (cherry-picks, merges) reach the Origin as they are: the same hashes, authors and order. The Workstation sends a block of its unsent commits that starts with the oldest one, as a Git bundle with a signed envelope; the patch session carries it. The Origin takes it only when the user switched **Accept commits from the Workstation** on, only for the branch it has checked out and only when its `HEAD` is the commit the block is built on; otherwise it refuses at once. The objects are unpacked into a quarantine beside the repository and checked against the signed list (the first-parent chain, every path a commit touches); only then are the packs moved into `.git` and the branch fast-forwarded. When the fast-forward fails, the packs are taken out again. While the working tree of the Origin has changes, the commits wait: the user applies or declines them there, and patches of files are refused meanwhile. After the Origin applied them, a Fetch makes the Workstation even with it. While a branch is right on top of the commit of the Origin, its commits are not changes to send: the patch channel offers only what is not committed, still against the version the Origin has. A Workstation rolls back unsent commits (Soft, Mixed, Hard) only while its working tree has no changes.
 
 ## How a node accepts connections
 
@@ -74,6 +76,7 @@ The inviting node checks the ticket, uses it up in one step, imports the card an
 | Path traversal | Paths in a patch are canonical and must stay inside the working tree |
 | Wrong repository | A patch for a repository the receiver does not work with is refused |
 | Exposure of the Origin | A neighbour learns repository names only, never paths; a bundle is served only for a registered name |
+| Commits | Off until the user allows them on the Origin; branch, base, every commit and the hash of the bundle are signed; objects stay in a quarantine until checked; only a fast-forward of the checked out branch |
 | Joining | Single-use, expiring ticket (hash stored); one-time SSH key restricted to the enrollment command with `expiry-time`; host key and certificate pinned from the invitation |
 
 ## Repositories

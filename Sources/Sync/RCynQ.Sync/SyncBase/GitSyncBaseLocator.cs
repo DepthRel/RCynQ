@@ -18,6 +18,10 @@ namespace RCynQ.Sync.SyncBase;
 /// Origin that the working tree is built on. Not the tracking ref itself: a Fetch moves the tracking ref without touching the working
 /// tree, and comparing the tree against a newer commit of Origin would offer to send the reverse of Origin's new commits.
 /// </para>
+/// <para>
+/// When the branch has commits right on top of the commit of Origin, those are delivered as commits: the changes of the working
+/// tree are then counted from <c>HEAD</c> (<see cref="GitSyncBaseTarget.ChangesSince"/>), while the base stays what Origin has.
+/// </para>
 /// </remarks>
 public sealed class GitSyncBaseLocator : IGitSyncBaseLocator
 {
@@ -94,8 +98,13 @@ public sealed class GitSyncBaseLocator : IGitSyncBaseLocator
         }
 
         var common = await _git.GetMergeBaseAsync(workdir, head, originCommit, cancellationToken);
-        return common is null
-            ? new GitSyncBaseTarget(true, branch, null, _localizer.Format("SyncBase.Workstation.Unrelated", branch))
-            : new GitSyncBaseTarget(true, branch, common, null);
+        if (common is null)
+        {
+            return new GitSyncBaseTarget(true, branch, null, _localizer.Format("SyncBase.Workstation.Unrelated", branch));
+        }
+
+        // Commits right on top of the commit of the Origin are delivered as commits, so what is changed counts from HEAD;
+        // the commits of a branch that diverged cannot go that way and stay among the files to send.
+        return new GitSyncBaseTarget(true, branch, common, null, common == originCommit && head != common ? head : null);
     }
 }

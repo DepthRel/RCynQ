@@ -118,9 +118,10 @@ public sealed class DataRetentionService
         long freed = 0;
 
         // Patches: the finished ones by the age asked for, the unfinished ones only once they cannot finish any more.
+        // Commits that wait to be applied end only by the hand of the user.
         var removed = new List<Guid>();
-        removed.AddRange(await _patches.DeleteOlderThanAsync(cutoff, new[] { PatchStatus.ConflictPending, PatchStatus.Pending }, cancellationToken));
-        removed.AddRange(await _patches.DeleteOlderThanAsync(transferCutoff, new[] { PatchStatus.ConflictPending }, cancellationToken));
+        removed.AddRange(await _patches.DeleteOlderThanAsync(cutoff, new[] { PatchStatus.ConflictPending, PatchStatus.Pending, PatchStatus.Waiting }, cancellationToken));
+        removed.AddRange(await _patches.DeleteOlderThanAsync(transferCutoff, new[] { PatchStatus.ConflictPending, PatchStatus.Waiting }, cancellationToken));
         foreach (var id in removed)
         {
             freed += await _storage.DeletePatchAsync(id, cancellationToken);

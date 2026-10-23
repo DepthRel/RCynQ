@@ -73,5 +73,23 @@ public enum PatchRejectionReason
     /// The request names a repository the answering node has not registered.
     /// </summary>
     [Description("The node has no repository of that name.")]
-    UnknownRepository = 11
+    UnknownRepository = 11,
+
+    /// <summary>
+    /// The receiving Origin does not accept commits from the Workstation.
+    /// </summary>
+    [Description("The node does not accept commits.")]
+    CommitsNotAccepted = 12,
+
+    /// <summary>
+    /// The commits are not built on the commit the receiving node has on top of the same checked out branch.
+    /// </summary>
+    [Description("The branch or its last commit differs from the one the commits are built on.")]
+    VersionMismatch = 13,
+
+    /// <summary>
+    /// Commits of an earlier delivery are waiting to be applied on the receiving node.
+    /// </summary>
+    [Description("Commits of an earlier delivery are waiting to be applied.")]
+    CommitsWaiting = 14
 }

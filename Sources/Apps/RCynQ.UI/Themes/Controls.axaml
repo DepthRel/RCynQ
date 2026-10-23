@@ -237,6 +237,11 @@
     <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
     <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
   </Style>
+  <!-- A danger action that should not draw the eye: a quieter red until the pointer is over it -->
+  <Style Selector="Button.danger.muted">
+    <Setter Property="BorderBrush" Value="{StaticResource DangerMutedBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource DangerMutedBrush}" />
+  </Style>
   <Style Selector="Button.icon">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />

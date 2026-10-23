@@ -19,6 +19,7 @@ public static class ApiEndpointRouteBuilderExtensions
             .MapHealthEndpoints()
             .MapServiceEndpoints()
             .MapPatchEndpoints()
+            .MapCommitEndpoints()
             .MapLinkEndpoints()
             .MapGitEndpoints()
             .MapDiagnosticsEndpoints()

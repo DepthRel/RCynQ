@@ -213,6 +213,21 @@ Linha de comandos: `rcynq import <file> --as route|replace|hop [--link <link>]`.
 
 No `syncbridge.json`, os endereços de reserva de uma ligação estão em `Routes` (`Host`, `Name` opcional, `SshPort`, `SshUser`, `Priority`); a prioridade do endereço da própria ligação é `RoutePriority`.
 
+## 12. Commits preparados na Workstation
+
+Quando um ramo é preparado na Workstation (cherry-picks, fusões para uma versão), os seus commits podem chegar ao Origin tal como estão: os mesmos hashes, autores e ordem, no ramo local do Origin e prontos para fazer push a partir daí. O próprio RCynQ nunca faz push.
+
+1. No Origin: **Definições → Commits da Workstation → Aceitar commits da Workstation**. Está desligado por omissão; enquanto estiver desligado, o Origin recusa commits.
+2. Na Workstation, o ramo tem de existir no Origin e partir diretamente do seu último commit: faça primeiro um **Pull**.
+3. **Sincronização → Commits por enviar** lista os commits que o Origin não tem, os mais recentes em cima. Marque o mais recente a enviar; todos os mais antigos ficam marcados com ele.
+4. Prima **Enviar commits**. O Origin avança o mesmo ramo e a lista fica vazia.
+
+Se a árvore de trabalho do Origin tiver alterações, os commits esperam lá: trate das alterações (guarde-as com stash ou descarte-as) e prima **Aplicar** no Origin, ou **Recusar**. Até lá, o Origin recusa patches de ficheiros. Commits feitos sobre outro commit, ou para outro ramo que não o ativo no Origin, são recusados de imediato.
+
+**Anular commits** anula os commits por enviar mais recentes, como `git reset`: Soft mantém as alterações no índice, Mixed na árvore de trabalho, Hard descarta-as. Só funciona quando a árvore de trabalho não tem alterações.
+
+Linha de comandos: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, no Origin `rcynq commits apply <id>` e `rcynq commits decline <id>`. No `syncbridge.json`, o interruptor chama-se `AcceptCommits`.
+
 ## Atualizar a partir de uma versão anterior
 
 As versões anteriores chamavam aos papéis Source, Mediator e Dest. Agora são Workstation, Relay e Origin.

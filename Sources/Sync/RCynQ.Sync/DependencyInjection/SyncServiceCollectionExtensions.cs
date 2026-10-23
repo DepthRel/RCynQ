@@ -87,6 +87,15 @@ public static class SyncServiceCollectionExtensions
             new SocketsHttpHandler { UseProxy = false }));
         services.TryAddSingleton<PatchAdmission>();
         services.TryAddSingleton<IncomingPatchApplier>();
+
+        // Delivery of commits: Workstation sends and rolls back, Origin takes them when the user allowed it.
+        services.TryAddSingleton<Commits.CommitAcceptance>();
+        services.TryAddSingleton<Commits.IncomingCommitApplier>();
+        services.TryAddSingleton<Commits.UnsentCommitsReader>();
+        services.TryAddSingleton<Commits.OutgoingCommitTracker>();
+        services.TryAddSingleton<Commits.CommitSendOperation>();
+        services.TryAddSingleton<Commits.CommitResetOperation>();
+        services.TryAddSingleton<Commits.ICommitService, Commits.CommitService>();
         services.TryAddSingleton<IPatchReceiver, DefaultPatchReceiver>();
         services.TryAddSingleton<PatchSendOperation>();
         services.TryAddSingleton<PatchResolveOperation>();

@@ -168,7 +168,7 @@ public sealed class SyncBaseManager
                 await ExportAsync(target, metadata, baseExists, cancellationToken);
             }
 
-            return new SyncBaseStatus(SyncBaseMode.Git, target.Branch, target.Commit, null, false);
+            return new SyncBaseStatus(SyncBaseMode.Git, target.Branch, target.Commit, null, false) { ChangesSince = target.ChangesSince };
         }
 
         // No commit to build from. A manual snapshot (also one of an older version, which has no metadata) keeps working;
@@ -244,8 +244,9 @@ public sealed class SyncBaseManager
         if (syncBase is { Mode: SyncBaseMode.Git, Commit: { } commit })
         {
             // Only the current state of the Git working tree decides: a file Git no longer sees as changed (for example one that came
-            // from the peer and was then discarded here) is not a change, whatever the sync base still remembers about it.
-            candidates = new HashSet<string>(await _git.GetChangedSinceAsync(_paths.Workdir, commit, cancellationToken), PathComparer);
+            // from the peer and was then discarded here) is not a change, whatever the sync base still remembers about it. Commits
+            // that go as commits are not changes of the working tree either.
+            candidates = new HashSet<string>(await _git.GetChangedSinceAsync(_paths.Workdir, syncBase.ChangesSince ?? commit, cancellationToken), PathComparer);
         }
 
         var pending = new List<Core.Patches.FileChange>();
@@ -303,7 +304,7 @@ public sealed class SyncBaseManager
 
         if (syncBase is { IsReady: true, Mode: SyncBaseMode.Git, Commit: { } commit })
         {
-            foreach (var (path, kind) in await _git.GetChangedFilesSinceAsync(_paths.Workdir, commit, cancellationToken))
+            foreach (var (path, kind) in await _git.GetChangedFilesSinceAsync(_paths.Workdir, syncBase.ChangesSince ?? commit, cancellationToken))
             {
                 // What a dead process left of a half-prepared patch is untracked for Git, but it is not a file of the user.
                 if (path.Split('/').Any(Git.Paths.PathUtility.IsApplyStagingName))

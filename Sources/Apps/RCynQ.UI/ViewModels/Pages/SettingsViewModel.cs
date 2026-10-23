@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Input;
+using RCynQ.Core.Api;
 using RCynQ.Localization;
 using RCynQ.UI.Services.About;
 using RCynQ.UI.Services.Api;
@@ -65,15 +66,58 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     /// </summary>
     public string StoredInText => SettingsPath is null ? string.Empty : Localizer.Format("Settings.StoredIn", SettingsPath);
 
+    /// <summary>
+    /// Gets a value indicating whether the node is an Origin, the node that may take commits from the Workstation.
+    /// </summary>
+    public bool CanAcceptCommits { get; private set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this Origin takes commits from the Workstation; saved by <see cref="SaveAcceptCommitsCommand"/>.
+    /// </summary>
+    public bool AcceptCommits { get; set; }
+
     /// <inheritdoc />
     protected override Task<bool> LoadAsync() => Task.FromResult(true);
+
+    /// <summary>
+    /// Shows the settings of the node the service runs, from the configuration the application loaded at the start.
+    /// </summary>
+    /// <param name="config">The configuration of the node.</param>
+    public void Configure(NodeConfigurationDto config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        CanAcceptCommits = config.Capabilities.ReceivesCommits;
+        AcceptCommits = config.AcceptCommits;
+        OnPropertyChanged(nameof(CanAcceptCommits));
+        OnPropertyChanged(nameof(AcceptCommits));
+    }
+
+    /// <summary>
+    /// Saves whether this Origin takes commits from the Workstation, as the user just switched it; switches it back when
+    /// the service could not save it.
+    /// </summary>
+    /// <returns>A task representing the command.</returns>
+    [RelayCommand]
+    private async Task SaveAcceptCommitsAsync()
+    {
+        var enabled = AcceptCommits;
+        if (await RunSafeAsync(() => _api.SetAcceptCommitsAsync(enabled)))
+        {
+            InfoMessage = Localizer.Get(enabled ? "Settings.Commits.On" : "Settings.Commits.Off");
+            NotifyDataChanged();
+            return;
+        }
+
+        AcceptCommits = !enabled;
+        OnPropertyChanged(nameof(AcceptCommits));
+    }
 
     /// <summary>
     /// Describes what a cleanup removed.
     /// </summary>
     /// <param name="report">The report of the service.</param>
     /// <returns>The text shown to the user.</returns>
-    public string Describe(Core.Api.DataCleanupReport report)
+    public string Describe(DataCleanupReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
         return report.RemovedAnything
