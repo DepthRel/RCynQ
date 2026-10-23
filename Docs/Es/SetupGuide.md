@@ -104,6 +104,8 @@ Tras la primera configuración el asistente **Conectar un nodo** se abre solo; d
 
 Sin Relay elige **Directamente**: el Origin invita y la Workstation se une con su invitación. Cada etapa de la unión se muestra con su resultado; luego sigue con el paso 9.
 
+Si el Relay tiene que permitir un nodo con derechos de administrador, confirma la solicitud en el Relay: la unión lo espera hasta tres minutos y después continúa sola.
+
 Una invitación es un secreto: quien la tenga puede unirse una vez hasta que caduque (1 hora, 24 horas o 7 días). Pásala en privado. Lleva el token de enlace, así que no hay que copiar nada a mano. Línea de comandos: `rcynq invite --role Workstation`, `rcynq join <invitación>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
 
 Los pasos 4–8 de abajo son la misma configuración con archivos, para cuando no se puede usar una invitación.

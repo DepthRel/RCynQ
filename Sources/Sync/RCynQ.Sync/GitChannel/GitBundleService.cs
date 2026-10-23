@@ -1,5 +1,6 @@
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Storage;
+using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
@@ -90,16 +91,7 @@ public sealed class GitBundleService
         ArgumentNullException.ThrowIfNull(have);
         ArgumentNullException.ThrowIfNull(context);
         await AuthorizeAsync(context, cancellationToken);
-
-        var entry = string.IsNullOrWhiteSpace(repositoryName)
-            ? _repositories.Current
-            : _repositories.Entries.FirstOrDefault(candidate => candidate.IsNamed(repositoryName.Trim()))
-                ?? throw new PatchRejectedException(PatchRejectionReason.UnknownRepository, _localizer.Format("Repository.UnknownHere", repositoryName.Trim(), _node.Name));
-        var repository = entry?.Path;
-        if (repository is null || !await _git.IsWorkTreeAsync(repository, cancellationToken))
-        {
-            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", repository ?? string.Empty));
-        }
+        var repository = await ResolveRepositoryAsync(repositoryName, cancellationToken);
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -127,6 +119,55 @@ public sealed class GitBundleService
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Lists every branch of the repository for a peer, so it also learns of the branches a bundle does not carry: a branch
+    /// created at a commit the peer has, a branch moved back, a branch that was deleted.
+    /// </summary>
+    /// <param name="context">The transport-level request facts.</param>
+    /// <param name="repositoryName">The name of the repository asked for; <see langword="null"/> for the one the node works with.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The checked out branch and at most <see cref="ApiLimits.MAX_GIT_BRANCHES"/> branches.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="PatchRejectedException">The request is not allowed.</exception>
+    /// <exception cref="SyncBridgeException">The node has no repository to serve.</exception>
+    public async Task<GitBranchListResponse> ListBranchesAsync(PatchReceiveContext context, string? repositoryName = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        await AuthorizeAsync(context, cancellationToken);
+        var repository = await ResolveRepositoryAsync(repositoryName, cancellationToken);
+
+        var branches = await _git.ListBranchesAsync(repository, cancellationToken);
+        return new GitBranchListResponse(
+            await _git.GetCurrentBranchAsync(repository, cancellationToken),
+            branches.Take(ApiLimits.MAX_GIT_BRANCHES).ToArray());
+    }
+
+    /// <summary>
+    /// Finds the working tree of the repository a peer asks for.
+    /// </summary>
+    /// <param name="repositoryName">
+    /// The name of the repository: any repository the node registered, not only the one it works with now, since serving
+    /// it only reads. <see langword="null"/> names the repository the node works with.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The working tree.</returns>
+    /// <exception cref="PatchRejectedException">The node has no repository of that name.</exception>
+    /// <exception cref="SyncBridgeException">The repository is not a Git working tree.</exception>
+    private async Task<string> ResolveRepositoryAsync(string? repositoryName, CancellationToken cancellationToken)
+    {
+        var entry = string.IsNullOrWhiteSpace(repositoryName)
+            ? _repositories.Current
+            : _repositories.Entries.FirstOrDefault(candidate => candidate.IsNamed(repositoryName.Trim()))
+                ?? throw new PatchRejectedException(PatchRejectionReason.UnknownRepository, _localizer.Format("Repository.UnknownHere", repositoryName.Trim(), _node.Name));
+        var repository = entry?.Path;
+        if (repository is null || !await _git.IsWorkTreeAsync(repository, cancellationToken))
+        {
+            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", repository ?? string.Empty));
+        }
+
+        return repository;
     }
 
     /// <summary>

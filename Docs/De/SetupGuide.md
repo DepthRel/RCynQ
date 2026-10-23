@@ -104,6 +104,8 @@ Nach der ersten Einrichtung öffnet sich der Assistent **Knoten verbinden** von 
 
 Ohne Relay wählen Sie **Direkt**: Origin lädt ein, die Workstation tritt mit dieser Einladung bei. Jede Stufe des Beitritts wird mit ihrem Ergebnis gezeigt; danach geht es mit Schritt 9 weiter.
 
+Muss das Relay einen Knoten mit Administratorrechten zulassen, bestätigen Sie die Abfrage auf dem Relay: Der Beitritt wartet bis zu drei Minuten darauf und läuft dann von selbst weiter.
+
 Eine Einladung ist ein Geheimnis: wer sie hat, kann einmal beitreten, bis sie abläuft (1 Stunde, 24 Stunden oder 7 Tage). Geben Sie sie vertraulich weiter. Sie enthält das Verbindungstoken, nichts muss von Hand kopiert werden. Befehlszeile: `rcynq invite --role Workstation`, `rcynq join <Einladung>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
 
 Die Schritte 4–8 unten sind dieselbe Einrichtung mit Dateien, falls keine Einladung verwendet werden kann.

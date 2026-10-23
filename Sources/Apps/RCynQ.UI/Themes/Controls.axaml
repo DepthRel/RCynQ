@@ -281,6 +281,14 @@
     <Setter Property="Background" Value="{StaticResource DividerBrush}" />
   </Style>
 
+  <!-- The bar of page actions along the bottom edge: it stays in place while the page above it scrolls -->
+  <Style Selector="Border.action-bar">
+    <Setter Property="Background" Value="{StaticResource NavBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="28,10" />
+  </Style>
+
   <!-- Rows of the folder tree: the whole row opens or closes the folder -->
   <Style Selector="Button.tree-row">
     <Setter Property="Background" Value="Transparent" />

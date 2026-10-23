@@ -7,4 +7,7 @@ public static class ApiLimits
 {
     /// <summary>The most patches one request for the patch list returns.</summary>
     public const int MAX_PATCHES_PAGE = 500;
+
+    /// <summary>The most branches Origin lists in one answer; a Workstation ignores the rest.</summary>
+    public const int MAX_GIT_BRANCHES = 10000;
 }

@@ -47,6 +47,7 @@ public sealed class ApiTokenMiddleware
             (path.Equals(ApiRoutes.PEER_PING, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(context.Request.Method)) ||
             (path.Equals(ApiRoutes.PEER_REPOSITORIES, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(context.Request.Method)) ||
             (path.Equals(ApiRoutes.GIT_BUNDLE, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method)) ||
+            (path.Equals(ApiRoutes.GIT_BRANCHES, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method)) ||
             (path.Equals(ApiRoutes.PEER_ENROLL, StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method)) ||
             (path.StartsWithSegments(ApiRoutes.PATCH_SESSION_PREFIX, StringComparison.OrdinalIgnoreCase) &&
                 (HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method)));

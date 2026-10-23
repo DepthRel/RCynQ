@@ -50,7 +50,34 @@ public static class GitEndpoints
                 : Results.NotFound(new ErrorResponse(localizer.Format("Api.NoPull", node.Role))));
 
         app.MapPost(ApiRoutes.GIT_BUNDLE, BundleAsync);
+        app.MapPost(ApiRoutes.GIT_BRANCHES, BranchesAsync);
         return app;
+    }
+
+    /// <summary>
+    /// Handles <c>POST /git/branches</c> from a Workstation: lists every branch of the repository with its commit.
+    /// </summary>
+    /// <param name="http">The HTTP context.</param>
+    /// <param name="request">The repository asked for.</param>
+    /// <param name="bundles">The bundle service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The branches, or the rejection.</returns>
+    private static async Task<IResult> BranchesAsync(HttpContext http, GitBranchListRequest request, GitBundleService bundles, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NODE_ID].FirstOrDefault(), http.Request.Headers[ApiHeaders.LINK_TOKEN].FirstOrDefault());
+        try
+        {
+            return Results.Ok(await bundles.ListBranchesAsync(context, request.Repository, cancellationToken));
+        }
+        catch (PatchRejectedException ex)
+        {
+            return Results.Json(new PatchRejectionResponse(ex.Reason, localizer.Describe(ex)), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
+        }
+        catch (SyncBridgeException ex)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
     }
 
     /// <summary>

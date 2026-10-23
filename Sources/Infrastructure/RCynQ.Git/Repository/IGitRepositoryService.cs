@@ -1,3 +1,4 @@
+using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
@@ -112,6 +113,45 @@ public interface IGitRepositoryService
     /// <returns>The git output.</returns>
     /// <exception cref="GitExecutionException">git reported an error, for example missing prerequisite commits.</exception>
     Task<string> FetchBundleAsync(string directory, string bundlePath, string remoteName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the local branches of a repository with the commits they point at; only reads.
+    /// </summary>
+    /// <param name="directory">The repository.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The branches ordered by name (ordinal); empty for a repository without branches.</returns>
+    /// <exception cref="GitExecutionException">git reported an error.</exception>
+    Task<IReadOnlyList<GitBranchTip>> ListBranchesAsync(string directory, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Makes the remote-tracking branches of a namespace exactly the branches another repository has: a branch it has gets
+    /// its commit, and a remote-tracking branch it no longer has is removed.
+    /// </summary>
+    /// <param name="directory">The working tree.</param>
+    /// <param name="remoteName">The remote-tracking namespace.</param>
+    /// <param name="branches">The branches of the other repository; untrusted.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The remote-tracking branches that were created, moved and removed.</returns>
+    /// <remarks>
+    /// A branch whose commit this repository does not have, or whose name is not safe, is left as it is: the bundle that
+    /// brings its commits updates it. Only <c>refs/remotes/&lt;remoteName&gt;/*</c> changes.
+    /// </remarks>
+    /// <exception cref="GitExecutionException">git reported an error.</exception>
+    Task<GitRemoteBranchChanges> MirrorRemoteBranchesAsync(string directory, string remoteName, IReadOnlyList<GitBranchTip> branches, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Makes a local branch follow the remote-tracking branch of the same name, so Git compares it with that branch.
+    /// </summary>
+    /// <param name="directory">The working tree.</param>
+    /// <param name="remoteName">The remote-tracking namespace.</param>
+    /// <param name="branch">The local branch.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// The upstream the branch followed before, for example <c>origin/main</c>, or an empty text when it followed none;
+    /// <see langword="null"/> when it already followed the remote-tracking branch and nothing changed.
+    /// </returns>
+    /// <exception cref="GitExecutionException">git reported an error.</exception>
+    Task<string?> TrackRemoteBranchAsync(string directory, string remoteName, string branch, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates an empty repository in a directory.

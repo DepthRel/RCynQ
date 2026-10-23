@@ -63,6 +63,15 @@
               </ToolTip.Tip>
               <controls:IconView Classes="small" IconKey="Icon.Search" />
             </Button>
+            <Button Classes="outline tool" Classes.toggled="{Binding IsSelectionMode}" Command="{Binding ToggleSelectionModeCommand}">
+              <ToolTip.Tip>
+                <StackPanel Classes="tip">
+                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.SelectFiles}" />
+                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.SelectFilesTip}" />
+                </StackPanel>
+              </ToolTip.Tip>
+              <controls:IconView Classes="small" IconKey="Icon.SquareCheck" />
+            </Button>
             <StackPanel Orientation="Horizontal">
               <Button Classes="outline tool segment-start" Classes.toggled="{Binding !IsTreeView}" Command="{Binding ShowFlatCommand}">
                 <ToolTip.Tip>
@@ -84,15 +93,6 @@
               </Button>
             </StackPanel>
             <Border Classes="toolbar-divider" />
-            <Button Classes="outline tool" Classes.toggled="{Binding IsSelectionMode}" Command="{Binding ToggleSelectionModeCommand}">
-              <ToolTip.Tip>
-                <StackPanel Classes="tip">
-                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.SelectFiles}" />
-                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.SelectFilesTip}" />
-                </StackPanel>
-              </ToolTip.Tip>
-              <controls:IconView Classes="small" IconKey="Icon.SquareCheck" />
-            </Button>
             <Button Classes="outline tool" IsEnabled="{Binding !IsBusy}" Command="{Binding ScanCommand}">
               <ToolTip.Tip>
                 <StackPanel Classes="tip">
@@ -100,7 +100,7 @@
                   <TextBlock Classes="tip-text" Text="{loc:Loc Sync.ScanTip}" />
                 </StackPanel>
               </ToolTip.Tip>
-              <controls:IconView Classes="small" IconKey="Icon.Scan" />
+              <controls:IconView Classes="small" IconKey="Icon.Reload" />
             </Button>
             <Button Classes="outline tool" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding CanRebuildBaseline}" Command="{Binding CreateBaselineCommand}">
               <ToolTip.Tip>

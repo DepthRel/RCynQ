@@ -27,7 +27,7 @@ Ein End-to-End-Test vergleicht jede Datei unter `.git` vor und nach dem Registri
 
 Beide Kanäle verwenden dieselbe Verbindung und dieselbe Berechtigung.
 
-**Git-Kanal (Origin → Workstation).** Die Workstation nennt ein Repository und die Commits, die sie bereits hat. Origin antwortet mit einem inkrementellen Git-Bundle. Die Workstation holt es nach `refs/remotes/rcynq/*` und macht einen Fast-Forward. Es wird nie etwas gepusht.
+**Git-Kanal (Origin → Workstation).** Die Workstation nennt ein Repository und die Commits, die sie bereits hat. Origin antwortet mit einem inkrementellen Git-Bundle. Die Workstation holt es nach `refs/remotes/rcynq/*` und macht einen Fast-Forward. Es wird nie etwas gepusht. Danach listet Origin alle seine Branches auf, und `refs/remotes/rcynq/*` wird an diese Liste angeglichen: Ein Bundle trägt nur Branches mit neuen Commits, daher kommen ein Branch, der an einem Commit angelegt wurde, den die Workstation schon hat, ein zurückgesetzter und ein gelöschter Branch auf diesem Weg an. Ein Pull lässt den aktuellen Branch `rcynq/<Branch>` folgen, damit Git ihn mit Origin vergleicht und nicht mit einem Remote, das dieser Computer nicht erreicht.
 
 **Patch-Kanal (beide Richtungen).** Ein Patch ist der Unterschied zwischen dem Arbeitsverzeichnis und der *Synchronisationsbasis* — dem, was der andere Knoten bekanntlich hat. Die Synchronisationsbasis wird automatisch aus dem Git-Commit gebildet, den beide Knoten teilen, plus den bereits ausgetauschten Dateien. Zustellung: ein signiertes Manifest, dann jede Datei nach ihrem SHA-256, dann ein Commit, der alles oder nichts anwendet. Ein Konflikt wird gelöst, indem man die lokale Datei behält, die eingehende übernimmt (mit Sicherung) oder einen Drei-Wege-Merge mit Git ausführt.
 

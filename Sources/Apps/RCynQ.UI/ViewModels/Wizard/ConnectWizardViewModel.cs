@@ -391,6 +391,7 @@ public sealed partial class ConnectWizardViewModel : DialogViewModelBase
     {
         ChainActive = false;
         CompletedLinks = LinkCount;
+        FailedLink = -1;
         DoneMessage = _localizer.Format("Wizard.Joined", node);
         Step = WizardStep.Done;
     }
@@ -423,7 +424,10 @@ public sealed partial class ConnectWizardViewModel : DialogViewModelBase
             var joinedRelay = _inviter is { } inviter
                 ? inviter == NodeRole.Relay
                 : result.Steps.Count > 0 && ThroughRelay && !result.Steps.Any(step => step.Step == JoinStep.Relay);
+            // A stage may have failed on the way and been made good later (a Relay that already knew this node refuses
+            // its used ticket): the joining succeeded, so every link it went through is shown as working.
             CompletedLinks = joinedRelay ? 1 : LinkCount;
+            FailedLink = -1;
             CanInviteNext = joinedRelay;
             DoneMessage = result.Message;
             Step = WizardStep.Done;

@@ -27,7 +27,7 @@ Una prueba de extremo a extremo compara cada archivo bajo `.git` antes y despué
 
 Ambos canales usan la misma conexión y la misma autorización.
 
-**Canal Git (Origin → Workstation).** La Workstation indica un repositorio y los commits que ya tiene. El Origin responde con un paquete Git incremental. La Workstation lo descarga en `refs/remotes/rcynq/*` y avanza rápidamente. Nunca se hace push de nada.
+**Canal Git (Origin → Workstation).** La Workstation indica un repositorio y los commits que ya tiene. El Origin responde con un paquete Git incremental. La Workstation lo descarga en `refs/remotes/rcynq/*` y avanza rápidamente. Nunca se hace push de nada. Después, el Origin enumera todas sus ramas y `refs/remotes/rcynq/*` se ajusta a esa lista: un paquete solo lleva ramas con commits nuevos, así que una rama creada en un commit que la Workstation ya tiene, una rama movida hacia atrás y una rama eliminada llegan por esta vía. Un Pull hace que la rama actual siga a `rcynq/<rama>`, para que Git la compare con el Origin y no con un remote que este equipo no alcanza.
 
 **Canal de parches (en ambos sentidos).** Un parche es la diferencia entre el árbol de trabajo y la *base de sincronización*, es decir, lo que se sabe que tiene el otro nodo. La base de sincronización se construye automáticamente a partir del commit de Git que comparten ambos nodos, más los archivos ya intercambiados. Entrega: un manifiesto firmado, después cada archivo por su SHA-256 y después un commit que lo aplica todo o nada. Un conflicto se resuelve conservando el archivo local, tomando el entrante (con copia de seguridad) o con una fusión de Git a tres bandas.
 

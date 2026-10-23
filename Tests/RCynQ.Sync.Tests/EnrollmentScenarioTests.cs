@@ -47,6 +47,12 @@ public sealed class EnrollmentScenarioTests : IDisposable
     private readonly Dictionary<NodeId, TestNode> _nodes = new();
 
     /// <summary>
+    /// Stands for the network between the nodes: gets the node an enrollment goes to and the delivery itself, and may
+    /// change the answer or fail instead; <see langword="null"/> delivers every enrollment as it is.
+    /// </summary>
+    private Func<NodeId, Func<Task<EnrollmentResponse>>, Task<EnrollmentResponse>>? _network;
+
+    /// <summary>
     /// Verifies the whole setup through a Relay: the Relay invites the Origin, the Origin invites the Workstation with
     /// the ticket the Relay gave it, and in the end every node knows its neighbours, the Workstation has the link token
     /// of the Origin, and the invitations cannot be used again.
@@ -88,6 +94,102 @@ public sealed class EnrollmentScenarioTests : IDisposable
         var again = await Node("workstation-2", NodeRole.Workstation, "10.30.0.8").Join.JoinAsync(forWorkstation.Text, _root + "/w2.json");
         again.Joined.Should().BeFalse();
         again.Steps[^1].Message.Should().Be(TestTexts.English.Get("Enrollment.TicketRefused"));
+    }
+
+    /// <summary>
+    /// Verifies that joining through a Relay that took the node but has not let it through yet waits for the Relay and
+    /// then joins in one go, instead of asking the person to use the invitation once more.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Joining_Waits_For_A_Relay_That_Still_Has_To_Allow_The_Node()
+    {
+        var (origin, workstation, invitation) = await OriginInvitesWorkstationAsync();
+        var blocked = 2;
+        _network = async (target, deliver) =>
+        {
+            if (target.Value == "relay-1")
+            {
+                return await deliver() with { AccessPending = true };
+            }
+
+            if (blocked-- > 0)
+            {
+                throw new SyncBridgeException("Permission denied (publickey).");
+            }
+
+            return await deliver();
+        };
+
+        var joined = await workstation.Join.JoinAsync(invitation, workstation.ConfigPath);
+
+        joined.Joined.Should().BeTrue(string.Join(" | ", joined.Steps.Select(step => step.Message)));
+        blocked.Should().Be(-1, "the inviting node was tried until the Relay let the node through");
+        joined.Steps.Should().OnlyContain(step => step.Succeeded);
+        joined.Steps.Single(step => step.Step == JoinStep.Relay).Message.Should().Be(TestTexts.English.Format("Join.RelayWaiting", "relay-1"));
+        origin.KnownPeers.Should().Contain("workstation-1");
+    }
+
+    /// <summary>
+    /// Verifies that joining stops waiting for a Relay that never lets the node through, and says what to do.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Joining_Gives_Up_On_A_Relay_That_Never_Allows_The_Node()
+    {
+        var (origin, workstation, invitation) = await OriginInvitesWorkstationAsync();
+        _network = async (target, deliver) =>
+        {
+            if (target.Value == "relay-1")
+            {
+                return await deliver() with { AccessPending = true };
+            }
+
+            _clock.Advance(TimeSpan.FromMinutes(1));
+            throw new SyncBridgeException("Permission denied (publickey).");
+        };
+
+        var joined = await workstation.Join.JoinAsync(invitation, workstation.ConfigPath);
+
+        joined.Joined.Should().BeFalse();
+        joined.Steps[^1].Should().Match<JoinStepResult>(step => step.Step == JoinStep.Inviter && !step.Succeeded);
+        joined.Steps[^1].Message.Should().StartWith(TestTexts.English.Format("Join.RelayPending", "relay-1")).And.Contain("Permission denied");
+        origin.KnownPeers.Should().NotContain("workstation-1");
+    }
+
+    /// <summary>
+    /// Verifies that a Relay which refuses its used ticket because it knows the node already does not show as a failed
+    /// stage once the joining went through it.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task A_Relay_That_Knows_The_Node_Already_Is_Not_A_Failed_Stage()
+    {
+        var (_, workstation, invitation) = await OriginInvitesWorkstationAsync();
+        _network = async (target, deliver) => target.Value == "relay-1"
+            ? new EnrollmentResponse(false, TestTexts.English.Get("Enrollment.TicketRefused"))
+            : await deliver();
+
+        var joined = await workstation.Join.JoinAsync(invitation, workstation.ConfigPath);
+
+        joined.Joined.Should().BeTrue();
+        joined.Steps.Should().OnlyContain(step => step.Succeeded);
+        joined.Steps.Single(step => step.Step == JoinStep.Relay).Message.Should().Be(TestTexts.English.Format("Join.RelayKnown", "relay-1"));
+    }
+
+    /// <summary>
+    /// Sets up a Relay and an Origin that joined it, and lets the Origin invite a Workstation.
+    /// </summary>
+    /// <returns>The Origin, the Workstation and the invitation for it.</returns>
+    private async Task<(TestNode Origin, TestNode Workstation, string Invitation)> OriginInvitesWorkstationAsync()
+    {
+        var relay = Node("relay-1", NodeRole.Relay, "203.0.113.4");
+        var origin = Node("origin-1", NodeRole.Origin, "10.20.0.5", "origin-token-0123456789");
+        var workstation = Node("workstation-1", NodeRole.Workstation, "10.30.0.7");
+        var forOrigin = await relay.Invitations.CreateAsync(new CreateInvitationRequest(NodeRole.Origin, 24), relay.ConfigPath);
+        (await origin.Join.JoinAsync(forOrigin.Text, origin.ConfigPath)).Joined.Should().BeTrue();
+        var forWorkstation = await origin.Invitations.CreateAsync(new CreateInvitationRequest(NodeRole.Workstation, 24), origin.ConfigPath);
+        return (origin, workstation, forWorkstation.Text);
     }
 
     /// <summary>
@@ -200,14 +302,14 @@ public sealed class EnrollmentScenarioTests : IDisposable
     /// </summary>
     private sealed class InProcessChannel : IEnrollmentChannel
     {
-        /// <summary>The nodes by identifier.</summary>
-        private readonly Dictionary<NodeId, TestNode> _nodes;
+        /// <summary>The test, which owns the nodes and the way the network behaves.</summary>
+        private readonly EnrollmentScenarioTests _test;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InProcessChannel"/> class.
         /// </summary>
-        /// <param name="nodes">The nodes by identifier.</param>
-        public InProcessChannel(Dictionary<NodeId, TestNode> nodes) => _nodes = nodes;
+        /// <param name="test">The test, which owns the nodes and the way the network behaves.</param>
+        public InProcessChannel(EnrollmentScenarioTests test) => _test = test;
 
         /// <inheritdoc />
         public Task<EnrollmentResponse> SendAsync(IReadOnlyList<ChainLinkConfig> chain, InvitationTicket ticket, EnrollmentRequest request, CancellationToken cancellationToken = default)
@@ -215,7 +317,8 @@ public sealed class EnrollmentScenarioTests : IDisposable
             var target = ChainRoute.Resolve(chain).Endpoint.Peer;
             target.EndpointMode.Should().Be(EndpointMode.SshTunnel);
             ticket.EnrollmentKey.Should().StartWith("-----BEGIN OPENSSH PRIVATE KEY-----", "a node with an SSH server is reached with the one-time key");
-            return _nodes[target.Id].Enrollment.EnrollAsync(request, cancellationToken);
+            Task<EnrollmentResponse> Deliver() => _test._nodes[target.Id].Enrollment.EnrollAsync(request, cancellationToken);
+            return _test._network is { } network ? network(target.Id, Deliver) : Deliver();
         }
     }
 
@@ -276,7 +379,7 @@ public sealed class EnrollmentScenarioTests : IDisposable
 
             Invitations = new InvitationService(texts, Node, issuer, tickets, _store, cards, tokens, relayTickets, access, test._clock);
             Enrollment = new EnrollmentService(texts, Node, tickets, transfer, issuer, access, test._clock);
-            Join = new JoinService(texts, Node, transfer, _store, cards, new InProcessChannel(test._nodes), relayTickets, tokens, access, test._clock);
+            Join = new JoinService(texts, Node, transfer, _store, cards, new InProcessChannel(test), relayTickets, tokens, access, test._clock, TimeSpan.FromMilliseconds(1));
         }
 
         /// <summary>Gets the node.</summary>

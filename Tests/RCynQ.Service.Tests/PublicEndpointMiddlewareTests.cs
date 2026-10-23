@@ -32,6 +32,8 @@ public sealed class PublicEndpointMiddlewareTests
     [InlineData("POST", "/patch", false)]
     [InlineData("POST", "/git/bundle", true)]
     [InlineData("GET", "/git/bundle", false)]
+    [InlineData("POST", "/git/branches", true)]
+    [InlineData("GET", "/git/branches", false)]
     [InlineData("POST", "/git/fetch", false)]
     [InlineData("POST", "/git/pull", false)]
     [InlineData("GET", "/health", true)]

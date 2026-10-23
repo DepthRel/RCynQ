@@ -747,10 +747,13 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     {
         var links = await _api.GetLinksAsync();
         var routes = await _api.GetLinkRoutesAsync() ?? Array.Empty<LinkRoutesDto>();
+
+        // The rows are built anew; a row the user unfolded stays unfolded.
+        var expanded = Nodes.Where(node => node.IsExpanded).Select(node => node.LinkId).ToHashSet();
         Nodes.Clear();
         foreach (var link in links)
         {
-            var node = new ChainNodeItemViewModel(Localizer, link);
+            var node = new ChainNodeItemViewModel(Localizer, link) { IsExpanded = expanded.Contains(link.Id) };
             node.ApplyRoutes(routes.FirstOrDefault(candidate => candidate.LinkId == link.Id));
             Nodes.Add(node);
         }

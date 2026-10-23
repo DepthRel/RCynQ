@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.State;
 using RCynQ.Localization;
@@ -26,6 +27,11 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isAutoRoute = true;
 
+    /// <summary>Whether the ways to the node are shown; a row starts folded to its one line.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreRoutesShown))]
+    private bool _isExpanded;
+
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
@@ -42,7 +48,11 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
         Name = link.PeerNodeId.Value.ToUpperInvariant();
         Role = link.PeerRole.ToString();
         _address = link.Host;
-        Routes.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRoutes));
+        Routes.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasRoutes));
+            OnPropertyChanged(nameof(AreRoutesShown));
+        };
     }
 
     /// <summary>Gets the link identifier.</summary>
@@ -59,6 +69,9 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the node is reachable in more than one way.</summary>
     public bool HasRoutes => Routes.Count > 0;
+
+    /// <summary>Gets a value indicating whether the ways to the node are listed under its line.</summary>
+    public bool AreRoutesShown => IsExpanded && HasRoutes;
 
     /// <summary>Gets the status label.</summary>
     public string StatusText => DisplayText.Link(_localizer, Status);
@@ -87,6 +100,12 @@ public sealed partial class ChainNodeItemViewModel : ObservableObject
             Routes.Add(route);
         }
     }
+
+    /// <summary>
+    /// Unfolds the row to list the ways to the node, or folds it back to one line.
+    /// </summary>
+    [RelayCommand]
+    private void Toggle() => IsExpanded = !IsExpanded;
 
     /// <summary>
     /// Applies a link state.

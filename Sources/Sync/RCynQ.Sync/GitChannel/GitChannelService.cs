@@ -33,7 +33,12 @@ namespace RCynQ.Sync.GitChannel;
 /// <para>
 /// Branches land in <c>refs/remotes/rcynq/*</c>; nothing is ever pushed. A <c>rcynq</c> remote is kept configured (with a placeholder URL
 /// RCynQ never uses) purely so external Git tooling recognizes those refs as belonging to a remote; see
-/// <see cref="IGitRepositoryService.EnsureRemoteAsync"/>.
+/// <see cref="IGitRepositoryService.EnsureRemoteAsync"/>. After the bundle Origin also lists all its branches, and
+/// <c>refs/remotes/rcynq/*</c> is brought in line with that list, since a bundle carries only branches with new commits.
+/// </para>
+/// <para>
+/// A Pull makes the current branch follow <c>rcynq/&lt;branch&gt;</c>, so Git compares it with Origin rather than with a
+/// remote it followed before and that this computer cannot reach.
 /// </para>
 /// </remarks>
 public sealed class GitChannelService
@@ -258,6 +263,7 @@ public sealed class GitChannelService
             lines.Add(await _git.PullFastForwardAsync(workdir, REMOTE_NAME, cancellationToken));
         }
 
+        lines.Add(await TrackOriginAsync(workdir, info.Branch, cancellationToken));
         var after = await _syncBase.EnsureAsync(cancellationToken);
         if (after.Mode == SyncBaseMode.Git && after.Commit is not null)
         {
@@ -358,33 +364,109 @@ public sealed class GitChannelService
         var have = hadCommits ? await _git.GetKnownCommitsAsync(workdir, REMOTE_NAME, cancellationToken) : Array.Empty<string>();
         var repository = _paths.Repository is { IsBound: true } bound ? bound.Name : null;
         var download = await _bundles.DownloadAsync(chain, have, _appData.Create().TempDirectory, repository, cancellationToken);
-        if (download is null)
+        if (download is null && !hadCommits)
         {
-            // Nothing new, but the remote must exist regardless of whether this call brought any commits, so external Git
-            // tooling can already recognize the branches an earlier pull fetched.
-            if (hadCommits)
-            {
-                await _git.EnsureRemoteAsync(workdir, REMOTE_NAME, REMOTE_PLACEHOLDER_URL, cancellationToken);
-            }
-
             return _localizer.Get("Git.BundleUpToDate");
         }
 
+        string output;
+        if (download is null)
+        {
+            output = _localizer.Get("Git.BundleUpToDate");
+        }
+        else
+        {
+            try
+            {
+                if (!await _git.IsWorkTreeAsync(workdir, cancellationToken))
+                {
+                    await _git.InitializeAsync(workdir, download.Head ?? "main", cancellationToken);
+                }
+
+                output = await _git.FetchBundleAsync(workdir, download.Path, REMOTE_NAME, cancellationToken);
+            }
+            finally
+            {
+                DeleteQuietly(download.Path);
+            }
+        }
+
+        // The remote must exist whether or not this call brought any commits, so external Git tooling recognizes the branches.
+        await _git.EnsureRemoteAsync(workdir, REMOTE_NAME, REMOTE_PLACEHOLDER_URL, cancellationToken);
+
+        // A bundle carries only branches with new commits: the list of Origin brings the rest in line.
+        var branches = await MirrorBranchesAsync(workdir, chain, repository, cancellationToken);
+        if (branches.Length > 0)
+        {
+            output = download is null ? branches : $"{output}\n{branches}";
+        }
+
+        return hadCommits ? output : await AdoptAsync(workdir, download!.Head, output, cancellationToken);
+    }
+
+    /// <summary>
+    /// Makes <c>refs/remotes/rcynq/*</c> the branches Origin has, also those a bundle does not carry: a branch created at
+    /// a commit this node has, a branch moved back, a branch deleted on Origin.
+    /// </summary>
+    /// <param name="workdir">The working tree.</param>
+    /// <param name="chain">The chain to Origin.</param>
+    /// <param name="repository">The name of the repository, or <see langword="null"/> for the one Origin works with.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A description of what changed; empty when nothing did or Origin is too old to list its branches.</returns>
+    private async Task<string> MirrorBranchesAsync(string workdir, IReadOnlyList<ChainLinkConfig> chain, string? repository, CancellationToken cancellationToken)
+    {
+        var list = await _bundles.ListBranchesAsync(chain, repository, cancellationToken);
+        if (list?.Branches is null)
+        {
+            return string.Empty;
+        }
+
+        var changes = await _git.MirrorRemoteBranchesAsync(workdir, REMOTE_NAME, list.Branches, cancellationToken);
+        var lines = new List<string>();
+        if (changes.Added.Count > 0)
+        {
+            lines.Add(_localizer.Format("Git.BranchesAdded", string.Join(", ", changes.Added)));
+        }
+
+        if (changes.Moved.Count > 0)
+        {
+            lines.Add(_localizer.Format("Git.BranchesMoved", string.Join(", ", changes.Moved)));
+        }
+
+        if (changes.Removed.Count > 0)
+        {
+            lines.Add(_localizer.Format("Git.BranchesRemoved", string.Join(", ", changes.Removed)));
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Makes the current branch follow its branch of Origin, so Git and the IDE compare it with Origin and not with the
+    /// remote it followed before (whose copy on this computer may be long out of date).
+    /// </summary>
+    /// <param name="workdir">The working tree.</param>
+    /// <param name="branch">The current branch.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A description of the change; empty when the branch already followed Origin or its name cannot be passed to Git.</returns>
+    private async Task<string> TrackOriginAsync(string workdir, string branch, CancellationToken cancellationToken)
+    {
+        string? previous;
         try
         {
-            if (!await _git.IsWorkTreeAsync(workdir, cancellationToken))
-            {
-                await _git.InitializeAsync(workdir, download.Head ?? "main", cancellationToken);
-            }
-
-            var output = await _git.FetchBundleAsync(workdir, download.Path, REMOTE_NAME, cancellationToken);
-            await _git.EnsureRemoteAsync(workdir, REMOTE_NAME, REMOTE_PLACEHOLDER_URL, cancellationToken);
-            return hadCommits ? output : await AdoptAsync(workdir, download.Head, output, cancellationToken);
+            previous = await _git.TrackRemoteBranchAsync(workdir, REMOTE_NAME, branch, cancellationToken);
         }
-        finally
+        catch (ArgumentException)
         {
-            DeleteQuietly(download.Path);
+            return string.Empty;
         }
+
+        return previous switch
+        {
+            null => string.Empty,
+            "" => _localizer.Format("Git.PullTracking", branch, REMOTE_NAME),
+            _ => _localizer.Format("Git.PullTrackingReplaced", branch, REMOTE_NAME, previous)
+        };
     }
 
     /// <summary>
@@ -407,6 +489,7 @@ public sealed class GitChannelService
         using (await _lock.AcquireAsync(cancellationToken))
         {
             await _git.AdoptRemoteBranchAsync(workdir, REMOTE_NAME, branch, keepFiles, cancellationToken);
+            await TrackOriginAsync(workdir, branch, cancellationToken);
         }
 
         return $"{output}\n{_localizer.Format(keepFiles ? "Git.BundleAdoptedKeepingFiles" : "Git.BundleAdopted", branch)}".Trim();

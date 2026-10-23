@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
@@ -306,6 +307,135 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
             cancellationToken: cancellationToken);
         EnsureSuccess(result, "git fetch");
         return (result.StandardError + result.StandardOutput).Trim();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<GitBranchTip>> ListBranchesAsync(string directory, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+
+        // for-each-ref only reads: the repository of an Origin stays untouched.
+        var result = await _git.RunAsync(
+            new[] { "for-each-ref", "--format=%(objectname) %(refname:strip=2)", "refs/heads" },
+            directory,
+            cancellationToken: cancellationToken);
+        EnsureSuccess(result, "git for-each-ref");
+
+        return ParseRefList(result.StandardOutput)
+            .Select(entry => new GitBranchTip(entry.Name, entry.Commit))
+            .OrderBy(branch => branch.Name, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task<GitRemoteBranchChanges> MirrorRemoteBranchesAsync(string directory, string remoteName, IReadOnlyList<GitBranchTip> branches, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateRemoteName(remoteName);
+        ArgumentNullException.ThrowIfNull(branches);
+
+        var prefix = $"refs/remotes/{remoteName}/";
+        var current = await _git.RunAsync(new[] { "for-each-ref", "--format=%(objectname) %(refname)", prefix }, directory, cancellationToken: cancellationToken);
+        EnsureSuccess(current, "git for-each-ref");
+        var tracked = ParseRefList(current.StandardOutput)
+            .Where(entry => entry.Name.StartsWith(prefix, StringComparison.Ordinal) && entry.Name != prefix + "HEAD")
+            .ToDictionary(entry => entry.Name[prefix.Length..], entry => entry.Commit, StringComparer.Ordinal);
+
+        // Every name the other repository has, also the ones not safe to pass on: those are never removed here either.
+        var listed = branches.Where(branch => branch?.Name is not null).Select(branch => branch.Name).ToHashSet(StringComparer.Ordinal);
+        var added = new List<string>();
+        var moved = new List<string>();
+        foreach (var branch in branches)
+        {
+            if (branch?.Name is not { } name ||
+                branch.Commit is not { } target ||
+                !IsSafeBranchName(name) ||
+                !CommitName().IsMatch(target) ||
+                (tracked.TryGetValue(name, out var commit) && commit == target))
+            {
+                continue;
+            }
+
+            // A commit the bundle did not bring yet stays for the next fetch; Git itself refuses a malformed ref name.
+            var exists = await _git.RunAsync(new[] { "cat-file", "-e", target + "^{commit}" }, directory, cancellationToken: cancellationToken);
+            if (exists.ExitCode != 0)
+            {
+                continue;
+            }
+
+            var update = await _git.RunAsync(new[] { "update-ref", "-m", "rcynq: branches of Origin", prefix + name, target }, directory, cancellationToken: cancellationToken);
+            if (update.ExitCode == 0)
+            {
+                (tracked.ContainsKey(name) ? moved : added).Add(name);
+            }
+        }
+
+        var removed = new List<string>();
+        foreach (var name in tracked.Keys.Where(name => !listed.Contains(name)).OrderBy(name => name, StringComparer.Ordinal))
+        {
+            var delete = await _git.RunAsync(new[] { "update-ref", "--no-deref", "-d", prefix + name }, directory, cancellationToken: cancellationToken);
+            EnsureSuccess(delete, "git update-ref -d");
+            removed.Add(name);
+        }
+
+        return new GitRemoteBranchChanges(added, moved, removed);
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> TrackRemoteBranchAsync(string directory, string remoteName, string branch, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        ValidateRemoteName(remoteName);
+        ValidateBranchName(branch);
+
+        var mergeRef = "refs/heads/" + branch;
+        var remote = await ReadConfigAsync(directory, $"branch.{branch}.remote", cancellationToken);
+        var merge = await ReadConfigAsync(directory, $"branch.{branch}.merge", cancellationToken);
+        if (remote == remoteName && merge == mergeRef)
+        {
+            return null;
+        }
+
+        EnsureSuccess(await _git.RunAsync(new[] { "config", $"branch.{branch}.remote", remoteName }, directory, cancellationToken: cancellationToken), "git config");
+        EnsureSuccess(await _git.RunAsync(new[] { "config", $"branch.{branch}.merge", mergeRef }, directory, cancellationToken: cancellationToken), "git config");
+
+        if (remote is null)
+        {
+            return string.Empty;
+        }
+
+        const string HEADS = "refs/heads/";
+        return merge is not null && merge.StartsWith(HEADS, StringComparison.Ordinal) ? $"{remote}/{merge[HEADS.Length..]}" : remote;
+    }
+
+    /// <summary>
+    /// Reads one value of the configuration of a repository.
+    /// </summary>
+    /// <param name="directory">The repository.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The value, or <see langword="null"/> when it is not set.</returns>
+    private async Task<string?> ReadConfigAsync(string directory, string key, CancellationToken cancellationToken)
+    {
+        var result = await _git.RunAsync(new[] { "config", "--get", key }, directory, cancellationToken: cancellationToken);
+        return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
+    }
+
+    /// <summary>
+    /// Reads the lines "&lt;commit&gt; &lt;name&gt;" that <c>git for-each-ref</c> writes, skipping anything else.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The names with their commits.</returns>
+    private static IEnumerable<(string Name, string Commit)> ParseRefList(string output)
+    {
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var space = line.IndexOf(' ', StringComparison.Ordinal);
+            if (space > 0 && CommitName().IsMatch(line[..space]) && line.Length > space + 1)
+            {
+                yield return (line[(space + 1)..], line[..space]);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -704,11 +834,19 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     /// <exception cref="ArgumentException">The name is empty, starts with a dash or contains unusual characters.</exception>
     private static void ValidateBranchName(string branch)
     {
-        if (branch is null || !SafeBranchName().IsMatch(branch) || branch.Contains("..", StringComparison.Ordinal))
+        if (!IsSafeBranchName(branch))
         {
             throw new ArgumentException($"Branch name '{branch}' may contain only letters, digits, '.', '_', '/' and '-'.", nameof(branch));
         }
     }
+
+    /// <summary>
+    /// Checks whether a branch name is safe to pass to Git.
+    /// </summary>
+    /// <param name="branch">The branch name.</param>
+    /// <returns><see langword="true"/> for letters, digits, '.', '_', '/' and '-' without "..".</returns>
+    private static bool IsSafeBranchName(string? branch)
+        => branch is not null && SafeBranchName().IsMatch(branch) && !branch.Contains("..", StringComparison.Ordinal);
 
     /// <summary>
     /// The largest number of commits a peer may name as known.

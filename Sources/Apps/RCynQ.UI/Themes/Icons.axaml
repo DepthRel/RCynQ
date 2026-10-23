@@ -33,7 +33,7 @@
   <StreamGeometry x:Key="Icon.List">M9 6H20 M9 12H20 M9 18H20 M4.5 6H4.51 M4.5 12H4.51 M4.5 18H4.51</StreamGeometry>
   <StreamGeometry x:Key="Icon.Tree">M3 3.5H10V8.5H3Z M6.5 8.5V18.5H13 M6.5 11.5H13 M13 9H21V14H13Z M13 16H21V21H13Z</StreamGeometry>
   <StreamGeometry x:Key="Icon.SquareCheck">M4 6A2 2 0 0 1 6 4H18A2 2 0 0 1 20 6V18A2 2 0 0 1 18 20H6A2 2 0 0 1 4 18Z M8.5 12L11 14.5L15.5 9.5</StreamGeometry>
-  <StreamGeometry x:Key="Icon.Scan">M4 8V6A2 2 0 0 1 6 4H8 M16 4H18A2 2 0 0 1 20 6V8 M20 16V18A2 2 0 0 1 18 20H16 M8 20H6A2 2 0 0 1 4 18V16 M7 12H17</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Reload">M19.93 13.04A8 8 0 1 1 10.01 4.25C13.91 3.25 17.94 5.26 19.43 9 M20 4V9H15</StreamGeometry>
   <StreamGeometry x:Key="Icon.Database">M5 6A7 3 0 1 0 19 6A7 3 0 1 0 5 6 M5 6V12A7 3 0 0 0 19 12V6 M5 12V18A7 3 0 0 0 19 18V12</StreamGeometry>
 
 </ResourceDictionary>

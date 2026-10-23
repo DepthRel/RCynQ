@@ -104,6 +104,8 @@ Depois da primeira configuração, o assistente **Ligar um nó** abre-se sozinho
 
 Sem Relay escolha **Diretamente**: o Origin convida e a Workstation junta-se com o convite dele. Cada etapa da adesão é mostrada com o seu resultado; depois continue no passo 9.
 
+Se o Relay tiver de permitir um nó com direitos de administrador, confirme o pedido no Relay: a adesão aguarda até três minutos e depois continua sozinha.
+
 Um convite é um segredo: quem o tiver pode juntar-se uma vez até expirar (1 hora, 24 horas ou 7 dias). Passe-o em privado. Leva o token de ligação, por isso nada tem de ser copiado à mão. Linha de comandos: `rcynq invite --role Workstation`, `rcynq join <convite>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
 
 Os passos 4–8 abaixo são a mesma configuração com ficheiros, para quando não for possível usar um convite.

@@ -122,6 +122,57 @@ public sealed class GitBundleClient : IDisposable
     }
 
     /// <summary>
+    /// Asks Origin for every branch of the repository with the commit it points at.
+    /// </summary>
+    /// <param name="chain">The chain to Origin.</param>
+    /// <param name="repository">The name of the repository to ask for, or <see langword="null"/> for the one the peer works with.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The branches; <see langword="null"/> when Origin runs an older version that cannot list them.</returns>
+    /// <exception cref="SyncBridgeException">Origin refused the request, answered nonsense or could not be reached.</exception>
+    public async Task<GitBranchListResponse?> ListBranchesAsync(IReadOnlyList<ChainLinkConfig> chain, string? repository = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(chain);
+        var route = ChainRoute.Resolve(chain);
+        var token = await _tokens.GetTokenAsync(cancellationToken);
+        if (string.IsNullOrEmpty(token))
+        {
+            throw new SyncBridgeException(_localizer.Get("Send.NoToken"));
+        }
+
+        try
+        {
+            await using var link = await _links.OpenAsync(route, cancellationToken);
+            using var request = link.CreateRequest(HttpMethod.Post, ApiRoutes.GIT_BRANCHES, _node.Id.Value, token);
+            request.Content = JsonContent.Create(new GitBranchListRequest(repository), options: _jsonOptions);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(ResponseStartTimeout);
+            using var response = await link.Client.SendAsync(request, timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                var text = await response.Content.ReadAsStringAsync(timeout.Token);
+
+                // An older Origin has no such route: its public port answers 404, its local API 401, neither with a reason.
+                if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized &&
+                    !text.Contains("\"reason\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
+                throw await RefusalAsync(response, cancellationToken);
+            }
+
+            return await response.Content.ReadFromJsonAsync<GitBranchListResponse>(_jsonOptions, timeout.Token)
+                ?? throw new SyncBridgeException(_localizer.Format("Git.BundleRefused", (int)response.StatusCode, string.Empty).Trim());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            var destination = route.UsesTls ? $"{route.Endpoint.Peer.Id} ({route.RemoteHost}:{route.RemotePort})" : $"{route.Target}";
+            throw new SyncBridgeException(_localizer.Format("Git.BundleNotDelivered", destination, _localizer.Describe(ex)), ex);
+        }
+    }
+
+    /// <summary>
     /// Disposes the connections.
     /// </summary>
     public void Dispose() => _links.Dispose();

@@ -4,6 +4,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
 using RCynQ.Core.Exceptions;
+using RCynQ.Core.Ids;
 using RCynQ.Localization;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Access;
@@ -18,6 +19,18 @@ namespace RCynQ.Sync.Enrollment;
 /// </summary>
 public sealed class JoinService
 {
+    /// <summary>
+    /// How long joining waits for a Relay that took this node but still has to let it through (with administrator rights,
+    /// confirmed by a person at the Relay).
+    /// </summary>
+    public static readonly TimeSpan RelayAccessWait = TimeSpan.FromMinutes(3);
+
+    /// <summary>The default pause between two tries to reach the inviting node through such a Relay.</summary>
+    private static readonly TimeSpan _defaultRelayRetryDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>The pause between two tries to reach the inviting node through a Relay that has not let this node through yet.</summary>
+    private readonly TimeSpan _relayRetryDelay;
+
     /// <summary>The local node.</summary>
     private readonly NodeConfig _node;
 
@@ -61,6 +74,10 @@ public sealed class JoinService
     /// <param name="tokens">The link token.</param>
     /// <param name="access">The writer of <c>authorized_keys</c>.</param>
     /// <param name="time">The clock.</param>
+    /// <param name="relayRetryDelay">
+    /// The pause between two tries to reach the inviting node through a Relay that has not let this node through yet;
+    /// <see langword="null"/> for five seconds.
+    /// </param>
     public JoinService(
         ILocalizer localizer,
         NodeConfig node,
@@ -71,8 +88,10 @@ public sealed class JoinService
         RelayTicketStore relayTickets,
         LinkTokenProvider tokens,
         PeerAccessService access,
-        TimeProvider time)
+        TimeProvider time,
+        TimeSpan? relayRetryDelay = null)
     {
+        _relayRetryDelay = relayRetryDelay ?? _defaultRelayRetryDelay;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _transfer = transfer ?? throw new ArgumentNullException(nameof(transfer));
@@ -145,26 +164,47 @@ public sealed class JoinService
         var request = new EnrollmentRequest(Guid.Empty, string.Empty, card, _localizer.Current.Code);
         var links = await _links.GetAllAsync(cancellationToken);
 
+        NodeId? relayOnTheWay = null;
+        NodeId? pendingRelay = null;
         if (invitation.RelayTicket is { } relayTicket && invitation.Path.Count == 1)
         {
             await run.BeginAsync(JoinStep.Relay);
             var relay = invitation.Path[0].NodeId;
+            relayOnTheWay = relay;
             var (answer, error) = await EnrollAsync(links.Where(link => link.Peer.Id == relay).ToArray(), relayTicket, request, cancellationToken);
 
-            // The way to the inviting node leads through this Relay, which does not let this node through yet.
             if (answer is { Accepted: true, AccessPending: true })
             {
-                return await run.FailAsync(JoinStep.Relay, _localizer.Format("Join.RelayPending", relay.Value));
+                // The way to the inviting node leads through this Relay, which lets this node through once a person
+                // confirms it there: the next stage waits for that instead of giving up at once.
+                pendingRelay = relay;
+                await run.EndAsync(JoinStep.Relay, true, _localizer.Format("Join.RelayWaiting", relay.Value));
             }
-
-            // A refusal does not stop the joining: on a second run with the same invitation the ticket of the Relay is
-            // used up although the Relay knows this node already. If it does not, the next stage says so.
-            await run.EndAsync(JoinStep.Relay, answer?.Accepted == true, answer?.Message ?? error!);
+            else
+            {
+                // A refusal does not stop the joining: on a second run with the same invitation the ticket of the Relay is
+                // used up although the Relay knows this node already. If it does not, the next stage says so.
+                await run.EndAsync(JoinStep.Relay, answer?.Accepted == true, answer?.Message ?? error!);
+            }
         }
 
         await run.BeginAsync(JoinStep.Inviter);
         var onTheWay = invitation.Path.Select(other => other.NodeId).Append(inviter.NodeId).ToHashSet();
-        var (response, failure) = await EnrollAsync(links.Where(link => onTheWay.Contains(link.Peer.Id)).ToArray(), invitation.Ticket, request, cancellationToken);
+        var chain = links.Where(link => onTheWay.Contains(link.Peer.Id)).ToArray();
+        var (response, failure) = await EnrollAsync(chain, invitation.Ticket, request, cancellationToken);
+        var waitUntil = _time.GetUtcNow() + RelayAccessWait;
+        while (pendingRelay is not null && response is null && _time.GetUtcNow() < waitUntil)
+        {
+            // Nothing reached the inviting node, so its ticket is still unused and the same enrollment can go again.
+            await Task.Delay(_relayRetryDelay, _time, cancellationToken);
+            (response, failure) = await EnrollAsync(chain, invitation.Ticket, request, cancellationToken);
+        }
+
+        if (response is null && pendingRelay is { } stillPending)
+        {
+            return await run.FailAsync(JoinStep.Inviter, $"{_localizer.Format("Join.RelayPending", stillPending.Value)} {failure}");
+        }
+
         if (response is null || !response.Accepted)
         {
             return await run.FailAsync(JoinStep.Inviter, response?.Message ?? failure!);
@@ -198,6 +238,12 @@ public sealed class JoinService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             return await run.FailAsync(JoinStep.Access, _localizer.Describe(ex));
+        }
+
+        if (relayOnTheWay is { } passed)
+        {
+            // The inviting node was reached through the Relay, so a Relay that refused its ticket knew this node already.
+            run.Settle(JoinStep.Relay, _localizer.Format("Join.RelayKnown", passed.Value));
         }
 
         return run.Done(_localizer.Format("Join.Done", inviter.Role, inviter.NodeId.Value));
@@ -306,6 +352,20 @@ public sealed class JoinService
         {
             await EndAsync(step, false, message);
             return new JoinResult(false, _localizer.Format("Join.Failed", message), _steps);
+        }
+
+        /// <summary>
+        /// Records that a stage which failed was made good by the stages after it: the joining went through it after all.
+        /// </summary>
+        /// <param name="step">The stage.</param>
+        /// <param name="message">What its result says now.</param>
+        public void Settle(JoinStep step, string message)
+        {
+            var index = _steps.FindIndex(result => result.Step == step && !result.Succeeded);
+            if (index >= 0)
+            {
+                _steps[index] = new JoinStepResult(step, true, message);
+            }
         }
 
         /// <summary>

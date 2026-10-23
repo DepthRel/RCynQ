@@ -194,6 +194,71 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Verifies that a Fetch brings the branches no bundle carries: a branch created on Origin at a commit the Workstation
+    /// has, and a branch moved back. A branch deleted on Origin disappears from <c>refs/remotes/rcynq/*</c>.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Fetch_Brings_Branches_Without_New_Commits_And_Drops_Deleted_Ones()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        await RunGitAsync(_originRepo, "branch", "old", "main");
+        var first = (await RunGitAsync(_originRepo, "rev-parse", "main")).Trim();
+        Write(_originRepo, "readme.txt", "second\n");
+        await CommitAsync("second commit");
+        await RunGitAsync(_originRepo, "branch", "moving", "main");
+        var channel = CreateChannel();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+
+        await RunGitAsync(_originRepo, "branch", "feature/new", "main");
+        await RunGitAsync(_originRepo, "branch", "--force", "moving", first);
+        await RunGitAsync(_originRepo, "branch", "--delete", "old");
+        var fetch = await channel.FetchAsync();
+
+        fetch.Succeeded.Should().BeTrue(fetch.Output);
+        fetch.Output.Should().Contain("feature/new").And.Contain("moving").And.Contain("old");
+        (await RunGitAsync(_workstationWork, "rev-parse", "refs/remotes/rcynq/feature/new")).Trim().Should().Be((await RunGitAsync(_originRepo, "rev-parse", "main")).Trim());
+        (await RunGitAsync(_workstationWork, "rev-parse", "refs/remotes/rcynq/moving")).Trim().Should().Be(first);
+        (await _git.RunAsync(new[] { "rev-parse", "--verify", "--quiet", "refs/remotes/rcynq/old" }, _workstationWork)).ExitCode.Should().NotBe(0);
+        (await _git.RunAsync(new[] { "checkout", "-q", "feature/new" }, _workstationWork)).ExitCode.Should().Be(0, "Git creates the local branch from rcynq/feature/new");
+    }
+
+    /// <summary>
+    /// Verifies that a Pull makes the current branch follow its branch of Origin, so Git does not count the pulled commits
+    /// as outgoing against a remote the branch followed before.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Pull_Makes_The_Branch_Follow_Origin_Instead_Of_Another_Remote()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        var channel = CreateChannel();
+        (await channel.PullAsync()).Succeeded.Should().BeTrue();
+        var stale = (await RunGitAsync(_workstationWork, "rev-parse", "HEAD")).Trim();
+        await RunGitAsync(_workstationWork, "update-ref", "refs/remotes/company/main", stale);
+        await RunGitAsync(_workstationWork, "config", "branch.main.remote", "company");
+        Write(_originRepo, "readme.txt", "second\n");
+        await CommitAsync("origin moves on");
+
+        var pull = await channel.PullAsync();
+
+        pull.Succeeded.Should().BeTrue(pull.Output);
+        pull.Output.Should().Contain(TestTexts.English.Format("Git.PullTrackingReplaced", "main", "rcynq", "company/main"));
+        (await RunGitAsync(_workstationWork, "config", "--get", "branch.main.remote")).Trim().Should().Be("rcynq");
+        (await RunGitAsync(_workstationWork, "config", "--get", "branch.main.merge")).Trim().Should().Be("refs/heads/main");
+        (await RunGitAsync(_workstationWork, "rev-list", "--count", "@{upstream}..HEAD")).Trim().Should().Be("0", "nothing pulled from Origin is outgoing");
+        (await channel.PullAsync()).Output.Should().NotContain("rcynq/main instead", "a branch that follows Origin already is left alone");
+    }
+
+    /// <summary>
     /// Verifies that a folder that already has the files but no repository keeps them: the differences to Origin show up as local changes.
     /// </summary>
     /// <returns>A task representing the test.</returns>

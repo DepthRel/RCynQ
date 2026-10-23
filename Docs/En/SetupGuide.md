@@ -104,6 +104,8 @@ After the first setup the **Connect a node** wizard opens by itself; later it is
 
 Without a Relay choose **Directly**: the Origin invites, the Workstation joins with its invitation. Each stage of joining is shown with its outcome; then go on with step 9.
 
+When the Relay has to allow a node with administrator rights, confirm the prompt on the Relay: joining waits for it for up to three minutes and then goes on by itself.
+
 An invitation is a secret: whoever has it may join once until it expires (1 hour, 24 hours or 7 days). Pass it privately. It carries the link token, so nothing has to be copied by hand. Command line: `rcynq invite --role Workstation`, `rcynq join <invitation>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
 
 Steps 4–8 below are the same setup with files, for when an invitation cannot be used.

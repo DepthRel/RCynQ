@@ -260,6 +260,38 @@ public sealed class ConnectWizardTests
     }
 
     /// <summary>
+    /// Verifies that a joining that succeeds leaves no link red, also when the Relay stage reported a refusal on the way
+    /// (a Relay that knew the node already refuses its used ticket).
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Successful_Joining_Leaves_No_Link_Red()
+    {
+        var answer = new TaskCompletionSource<JoinResult>();
+        _api.JoinAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(answer.Task);
+        var wizard = Wizard(NodeRole.Origin);
+        wizard.ChooseJoinCommand.Execute(null);
+        wizard.Join.Invitation = "rcynq-invite:abc";
+
+        var joining = wizard.Join.JoinCommand.ExecuteAsync(null);
+        wizard.ApplyJoinProgress(new JoinProgressEvent(JoinStep.Invitation, JoinStepState.Succeeded, "ok", NodeRole.Workstation));
+        wizard.ApplyJoinProgress(new JoinProgressEvent(JoinStep.Relay, JoinStepState.Failed, "ticket used", NodeRole.Workstation));
+        wizard.FailedLink.Should().Be(0);
+        wizard.ApplyJoinProgress(new JoinProgressEvent(JoinStep.Inviter, JoinStepState.Succeeded, "in", NodeRole.Workstation));
+        answer.SetResult(new JoinResult(true, "joined", new[]
+        {
+            new JoinStepResult(JoinStep.Invitation, true, "ok"),
+            new JoinStepResult(JoinStep.Relay, true, "known"),
+            new JoinStepResult(JoinStep.Inviter, true, "in")
+        }));
+        await joining;
+
+        wizard.Step.Should().Be(WizardStep.Done);
+        wizard.FailedLink.Should().Be(-1);
+        wizard.CompletedLinks.Should().Be(wizard.LinkCount);
+    }
+
+    /// <summary>
     /// Verifies that a joining of the invitation of the Relay itself finishes the first link and that reports outside a
     /// joining are ignored.
     /// </summary>

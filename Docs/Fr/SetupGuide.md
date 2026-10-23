@@ -104,6 +104,8 @@ Après la première configuration, l'assistant **Connecter un nœud** s'ouvre de
 
 Sans Relay, choisissez **Directement** : l'Origin invite, la Workstation rejoint avec son invitation. Chaque étape de l'adhésion s'affiche avec son résultat ; poursuivez ensuite avec l'étape 9.
 
+Si le Relay doit autoriser un nœud avec les droits d'administrateur, confirmez la demande sur le Relay : l'adhésion l'attend jusqu'à trois minutes, puis continue d'elle-même.
+
 Une invitation est un secret : quiconque la possède peut rejoindre une fois jusqu'à son expiration (1 heure, 24 heures ou 7 jours). Transmettez-la en privé. Elle contient le jeton de liaison, rien n'est à copier à la main. Ligne de commande : `rcynq invite --role Workstation`, `rcynq join <invitation>`, `rcynq invitation list`, `rcynq invitation revoke <id>`.
 
 Les étapes 4 à 8 ci-dessous sont la même configuration avec des fichiers, quand une invitation ne peut pas servir.

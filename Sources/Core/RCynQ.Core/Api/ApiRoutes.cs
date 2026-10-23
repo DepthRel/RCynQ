@@ -99,6 +99,9 @@ public static class ApiRoutes
     /// <summary>Serves an incremental git bundle to the peer that asks for the branches of this repository (Origin, no SSH server needed).</summary>
     public const string GIT_BUNDLE = "/git/bundle";
 
+    /// <summary>Lists every branch of the repository to the peer that fetches it (Origin), also the branches that bring no new commits.</summary>
+    public const string GIT_BRANCHES = "/git/branches";
+
     /// <summary>Fetch and fast-forward the current branch.</summary>
     public const string GIT_PULL = "/git/pull";
 

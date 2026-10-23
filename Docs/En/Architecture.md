@@ -27,7 +27,7 @@ An end-to-end test compares every file under `.git` before and after registering
 
 Both channels use the same connection and the same authorization.
 
-**Git channel (Origin → Workstation).** The Workstation names a repository and the commits it already has. The Origin answers with an incremental Git bundle. The Workstation fetches it into `refs/remotes/rcynq/*` and fast-forwards. Nothing is ever pushed.
+**Git channel (Origin → Workstation).** The Workstation names a repository and the commits it already has. The Origin answers with an incremental Git bundle. The Workstation fetches it into `refs/remotes/rcynq/*` and fast-forwards. Nothing is ever pushed. Then the Origin lists all its branches, and `refs/remotes/rcynq/*` is brought in line with that list: a bundle carries only branches with new commits, so a branch created at a commit the Workstation has, a branch moved back and a deleted branch arrive this way. A Pull makes the current branch follow `rcynq/<branch>`, so Git compares it with the Origin and not with a remote this computer cannot reach.
 
 **Patch channel (both directions).** A patch is the difference between the working tree and the *sync base* — what the other node is known to have. The sync base is built automatically from the Git commit both nodes share, plus the files already exchanged. Delivery: a signed manifest, then each file by its SHA-256, then a commit that applies everything or nothing. A conflict is resolved by keeping the local file, taking the incoming one (with a backup) or a three-way Git merge.
 

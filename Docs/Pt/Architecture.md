@@ -27,7 +27,7 @@ Um teste de ponta a ponta compara cada ficheiro em `.git` antes e depois de regi
 
 Ambos os canais usam a mesma ligação e a mesma autorização.
 
-**Canal Git (Origin → Workstation).** A Workstation indica um repositório e os commits que já tem. O Origin responde com um pacote Git incremental. A Workstation obtém-no para `refs/remotes/rcynq/*` e faz avanço rápido. Nunca se faz push de nada.
+**Canal Git (Origin → Workstation).** A Workstation indica um repositório e os commits que já tem. O Origin responde com um pacote Git incremental. A Workstation obtém-no para `refs/remotes/rcynq/*` e faz avanço rápido. Nunca se faz push de nada. Depois, o Origin lista todos os seus ramos e `refs/remotes/rcynq/*` é alinhado com essa lista: um pacote só leva ramos com commits novos, por isso um ramo criado num commit que a Workstation já tem, um ramo recuado e um ramo eliminado chegam por esta via. Um Pull faz o ramo atual seguir `rcynq/<ramo>`, para que o Git o compare com o Origin e não com um remote que este computador não alcança.
 
 **Canal de patches (nos dois sentidos).** Um patch é a diferença entre a árvore de trabalho e a *base de sincronização* — o que se sabe que o outro nó tem. A base de sincronização é construída automaticamente a partir do commit do Git que ambos os nós partilham, mais os ficheiros já trocados. Entrega: um manifesto assinado, depois cada ficheiro pelo seu SHA-256, depois um commit que aplica tudo ou nada. Um conflito é resolvido mantendo o ficheiro local, aceitando o recebido (com cópia de segurança) ou com uma fusão do Git a três vias.
 

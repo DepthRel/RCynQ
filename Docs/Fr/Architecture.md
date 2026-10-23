@@ -27,7 +27,7 @@ Un test de bout en bout compare chaque fichier sous `.git` avant et après l'enr
 
 Les deux canaux utilisent la même connexion et la même autorisation.
 
-**Canal Git (Origin → Workstation).** La Workstation nomme un dépôt et les commits qu'elle possède déjà. L'Origin répond avec un paquet Git incrémental. La Workstation le récupère dans `refs/remotes/rcynq/*` et fait une avance rapide. Rien n'est jamais poussé.
+**Canal Git (Origin → Workstation).** La Workstation nomme un dépôt et les commits qu'elle possède déjà. L'Origin répond avec un paquet Git incrémental. La Workstation le récupère dans `refs/remotes/rcynq/*` et fait une avance rapide. Rien n'est jamais poussé. Ensuite, l'Origin liste toutes ses branches et `refs/remotes/rcynq/*` est aligné sur cette liste : un paquet ne porte que les branches qui ont de nouveaux commits, donc une branche créée sur un commit que la Workstation possède déjà, une branche ramenée en arrière et une branche supprimée arrivent par ce biais. Un Pull fait suivre `rcynq/<branche>` à la branche courante, pour que Git la compare avec l'Origin et non avec un remote que cet ordinateur ne peut pas joindre.
 
 **Canal des patchs (dans les deux sens).** Un patch est la différence entre l'arbre de travail et la *base de synchronisation* — ce que l'autre nœud est censé avoir. La base de synchronisation est construite automatiquement à partir du commit Git commun aux deux nœuds, plus les fichiers déjà échangés. Livraison : un manifeste signé, puis chaque fichier selon son SHA-256, puis un commit qui applique tout ou rien. Un conflit se résout en gardant le fichier local, en prenant le fichier entrant (avec sauvegarde) ou par une fusion Git à trois voies.
 
