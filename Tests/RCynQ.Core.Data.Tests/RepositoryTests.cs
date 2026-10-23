@@ -193,6 +193,33 @@ public sealed class RepositoryTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that the patches are read page by page, newest first, and that the pages neither repeat nor lose a record,
+    /// even for patches created at the same moment.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchRepository_Reads_Pages_Newest_First()
+    {
+        var repository = new PatchRepository(_database.ContextFactory);
+        var now = DateTimeOffset.UtcNow;
+        var patches = Enumerable.Range(0, 7).Select(index => CreatePatch(now.AddMinutes(-(index / 2)))).ToArray();
+        foreach (var patch in patches)
+        {
+            await repository.UpsertAsync(patch);
+        }
+
+        var first = await repository.GetPageAsync(0, 3);
+        var second = await repository.GetPageAsync(3, 3);
+        var third = await repository.GetPageAsync(6, 3);
+
+        var all = (await repository.GetAllAsync()).Select(patch => patch.Id).ToArray();
+        first.Concat(second).Concat(third).Select(patch => patch.Id).Should().OnlyHaveUniqueItems().And.BeEquivalentTo(all);
+        first.Concat(second).Concat(third).Select(patch => patch.CreatedAtUtc).Should().BeInDescendingOrder();
+        third.Should().ContainSingle();
+        (await repository.GetPageAsync(7, 3)).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Verifies snapshot and history repositories.
     /// </summary>
     /// <returns>A task representing the test.</returns>

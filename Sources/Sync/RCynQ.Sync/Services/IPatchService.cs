@@ -93,6 +93,15 @@ public interface IPatchService
     Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets one page of the patches of the repository the node works with, newest first.
+    /// </summary>
+    /// <param name="skip">The number of the newest patches to skip.</param>
+    /// <param name="count">The maximum number of patches.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The patches.</returns>
+    Task<IReadOnlyList<PatchMetadata>> GetPageAsync(int skip, int count, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets one patch.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>

@@ -161,6 +161,15 @@
           </Button>
         </Grid>
       </Border>
+      <Border Classes="banner success" Margin="28,14,28,0" IsVisible="{Binding CurrentPage.HasSuccess, FallbackValue=False}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource SuccessBrush}" Margin="0,0,10,0" />
+          <SelectableTextBlock Grid.Column="1" Text="{Binding CurrentPage.SuccessMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="icon" Padding="4" Margin="8,0,0,0" Command="{Binding CurrentPage.DismissMessagesCommand}" ToolTip.Tip="{loc:Loc Common.Hide}">
+            <controls:IconView Classes="small" IconKey="Icon.X" />
+          </Button>
+        </Grid>
+      </Border>
       <Border Classes="banner info" Margin="28,14,28,0" IsVisible="{Binding CurrentPage.HasInfo, FallbackValue=False}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Check" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />

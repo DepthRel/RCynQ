@@ -53,7 +53,7 @@ public sealed class PageRefreshTests : IDisposable
         _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
         _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
         _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkState>());
-        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<PatchMetadata>());
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<PatchMetadata>());
         _api.GetBranchAsync(Arg.Any<CancellationToken>()).Returns(new GitBranchInfo(true, "main", null, 0, 0));
         _api.GetLogsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<LogEntryDto>());
     }

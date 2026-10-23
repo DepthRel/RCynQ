@@ -6,7 +6,7 @@
              xmlns:controls="using:RCynQ.UI.Controls"
              x:Class="RCynQ.UI.Views.Pages.SyncView"
              x:DataType="pages:SyncViewModel">
-  <ScrollViewer>
+  <ScrollViewer x:Name="PageScroll">
     <StackPanel Margin="28,22,28,28" Spacing="18">
 
       <Grid ColumnDefinitions="*,Auto">
@@ -46,25 +46,90 @@
         </Grid>
       </Border>
 
+      <!-- Changes to send -->
       <StackPanel>
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,14">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Sync.Pending}" />
             <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding CountText}" />
           </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-            <Button Classes="outline" Classes.toggled="{Binding IsSelectionMode}" ToolTip.Tip="{loc:Loc Sync.SelectFilesTip}"
-                    Command="{Binding ToggleSelectionModeCommand}">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <controls:IconView Classes="small" IconKey="Icon.Check" />
-                <TextBlock Text="{loc:Loc Sync.SelectFiles}" />
-              </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+            <Button Classes="outline tool" Classes.toggled="{Binding IsSearchOpen}" Command="{Binding ToggleSearchCommand}">
+              <ToolTip.Tip>
+                <StackPanel Classes="tip">
+                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.Search}" />
+                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.SearchTip}" />
+                </StackPanel>
+              </ToolTip.Tip>
+              <controls:IconView Classes="small" IconKey="Icon.Search" />
             </Button>
-            <Button Classes="outline" IsEnabled="{Binding !IsBusy}" Content="{loc:Loc Sync.Scan}" ToolTip.Tip="{loc:Loc Sync.ScanTip}" Command="{Binding ScanCommand}" />
-            <Button Classes="outline" IsEnabled="{Binding !IsBusy}" Content="{Binding RebuildButtonText}" ToolTip.Tip="{loc:Loc Sync.RebuildTip}"
-                    IsVisible="{Binding CanRebuildBaseline}" Command="{Binding CreateBaselineCommand}" />
+            <StackPanel Orientation="Horizontal">
+              <Button Classes="outline tool segment-start" Classes.toggled="{Binding !IsTreeView}" Command="{Binding ShowFlatCommand}">
+                <ToolTip.Tip>
+                  <StackPanel Classes="tip">
+                    <TextBlock Classes="tip-title" Text="{loc:Loc Sync.ViewFlat}" />
+                    <TextBlock Classes="tip-text" Text="{loc:Loc Sync.ViewFlatTip}" />
+                  </StackPanel>
+                </ToolTip.Tip>
+                <controls:IconView Classes="small" IconKey="Icon.List" />
+              </Button>
+              <Button Classes="outline tool segment-end" Classes.toggled="{Binding IsTreeView}" Command="{Binding ShowTreeCommand}">
+                <ToolTip.Tip>
+                  <StackPanel Classes="tip">
+                    <TextBlock Classes="tip-title" Text="{loc:Loc Sync.ViewTree}" />
+                    <TextBlock Classes="tip-text" Text="{loc:Loc Sync.ViewTreeTip}" />
+                  </StackPanel>
+                </ToolTip.Tip>
+                <controls:IconView Classes="small" IconKey="Icon.Tree" />
+              </Button>
+            </StackPanel>
+            <Border Classes="toolbar-divider" />
+            <Button Classes="outline tool" Classes.toggled="{Binding IsSelectionMode}" Command="{Binding ToggleSelectionModeCommand}">
+              <ToolTip.Tip>
+                <StackPanel Classes="tip">
+                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.SelectFiles}" />
+                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.SelectFilesTip}" />
+                </StackPanel>
+              </ToolTip.Tip>
+              <controls:IconView Classes="small" IconKey="Icon.SquareCheck" />
+            </Button>
+            <Button Classes="outline tool" IsEnabled="{Binding !IsBusy}" Command="{Binding ScanCommand}">
+              <ToolTip.Tip>
+                <StackPanel Classes="tip">
+                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.Scan}" />
+                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.ScanTip}" />
+                </StackPanel>
+              </ToolTip.Tip>
+              <controls:IconView Classes="small" IconKey="Icon.Scan" />
+            </Button>
+            <Button Classes="outline tool" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding CanRebuildBaseline}" Command="{Binding CreateBaselineCommand}">
+              <ToolTip.Tip>
+                <StackPanel Classes="tip">
+                  <TextBlock Classes="tip-title" Text="{Binding RebuildButtonText}" />
+                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.RebuildTip}" />
+                </StackPanel>
+              </ToolTip.Tip>
+              <controls:IconView Classes="small" IconKey="Icon.Database" />
+            </Button>
           </StackPanel>
         </Grid>
+
+        <TextBox x:Name="SearchBox" Margin="0,0,0,12" IsVisible="{Binding IsSearchOpen}"
+                 Text="{Binding FilterText}" PlaceholderText="{loc:Loc Sync.SearchPlaceholder}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Escape" Command="{Binding CloseSearchCommand}" />
+          </TextBox.KeyBindings>
+          <TextBox.InnerLeftContent>
+            <controls:IconView Classes="small" IconKey="Icon.Search" Margin="10,0,0,0" Foreground="{StaticResource TextMutedBrush}" />
+          </TextBox.InnerLeftContent>
+          <TextBox.InnerRightContent>
+            <Button Classes="icon" Padding="4" Margin="0,0,6,0" IsVisible="{Binding IsFiltering}" ToolTip.Tip="{loc:Loc Sync.SearchClear}"
+                    Command="{Binding ClearFilterCommand}">
+              <controls:IconView Classes="small" IconKey="Icon.X" />
+            </Button>
+          </TextBox.InnerRightContent>
+        </TextBox>
+
         <Border Classes="card">
           <StackPanel>
             <Border IsVisible="{Binding IsSelectionMode}" Padding="12,8" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
@@ -75,31 +140,66 @@
             </Border>
             <Panel>
               <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoChangedFiles}" Text="{loc:Loc Sync.NoPending}" />
-              <ScrollViewer MaxHeight="240">
-                <ItemsControl Classes="rows" ItemsSource="{Binding ChangedFiles}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="items:ChangedFileItemViewModel">
-                      <Border Classes="row" Classes.selected="{Binding IsSelected}" Padding="16,6">
-                        <Panel>
-                          <Grid ColumnDefinitions="22,*,Auto" IsVisible="{Binding !IsSelectable}">
-                            <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
-                            <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
-                                       Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
-                          </Grid>
-                          <CheckBox IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsSelected}"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="0" Padding="8,0,0,0">
+              <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoMatches}" Text="{Binding NoMatchesText}" TextWrapping="Wrap" />
+              <ScrollViewer MaxHeight="320">
+                <ItemsControl Classes="rows" ItemsSource="{Binding Rows}">
+                  <ItemsControl.DataTemplates>
+
+                    <!-- A folder of the tree: the arrow and the name open or close it, the check mark checks every file below -->
+                    <DataTemplate DataType="items:ChangedFolderItemViewModel">
+                      <Border Classes="row" Padding="16,6">
+                        <DockPanel>
+                          <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+                          <Button DockPanel.Dock="Left" Classes="tree-row" Width="20" Command="{Binding ToggleCommand}">
+                            <Panel HorizontalAlignment="Left">
+                              <controls:IconView Width="14" Height="14" IconKey="Icon.ChevronRight" Foreground="{StaticResource TextMutedBrush}"
+                                                 IsVisible="{Binding !IsExpanded}" />
+                              <controls:IconView Width="14" Height="14" IconKey="Icon.ChevronDown" Foreground="{StaticResource TextMutedBrush}"
+                                                 IsVisible="{Binding IsExpanded}" />
+                            </Panel>
+                          </Button>
+                          <CheckBox DockPanel.Dock="Left" IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsChecked}"
+                                    MinHeight="0" MinWidth="0" Padding="0" Margin="0,-7,8,-7" VerticalAlignment="Center" />
+                          <Button Classes="tree-row" Command="{Binding ToggleCommand}" ToolTip.Tip="{Binding Path}">
                             <Grid ColumnDefinitions="22,*,Auto">
+                              <controls:IconView Classes="small" IconKey="Icon.Folder" HorizontalAlignment="Left" Foreground="{StaticResource BrandBlueBrush}" />
+                              <TextBlock Grid.Column="1" Classes="mono" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="2" Classes="muted mono" FontSize="12" Margin="12,0,0,0" Text="{Binding FileCount}" />
+                            </Grid>
+                          </Button>
+                        </DockPanel>
+                      </Border>
+                    </DataTemplate>
+
+                    <!-- A file: its path in the flat list, its name under its folder in the tree -->
+                    <DataTemplate DataType="items:ChangedFileItemViewModel">
+                      <Border Classes="row" Classes.selected="{Binding IsSelected}" Padding="16,6">
+                        <DockPanel>
+                          <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+                          <Panel>
+                            <Grid ColumnDefinitions="22,*,Auto" IsVisible="{Binding !IsSelectable}">
                               <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
-                              <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                                         ToolTip.Tip="{Binding Path}" />
                               <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
                                          Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
                             </Grid>
-                          </CheckBox>
-                        </Panel>
+                            <CheckBox IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsSelected}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="0" Padding="8,0,0,0" Margin="0,-7">
+                              <Grid ColumnDefinitions="22,*,Auto">
+                                <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
+                                <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding Path}" />
+                                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                                           Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                              </Grid>
+                            </CheckBox>
+                          </Panel>
+                        </DockPanel>
                       </Border>
                     </DataTemplate>
-                  </ItemsControl.ItemTemplate>
+
+                  </ItemsControl.DataTemplates>
                 </ItemsControl>
               </ScrollViewer>
             </Panel>
@@ -107,8 +207,18 @@
         </Border>
       </StackPanel>
 
+      <!-- Patch history: the newest rows, or every loaded row with older pages loaded below on demand -->
       <StackPanel>
-        <TextBlock Classes="section" Text="{loc:Loc Sync.History}" />
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+          <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Sync.History}" />
+          <Button Grid.Column="1" Classes="outline tool" Width="30" Height="30" IsVisible="{Binding CanToggleHistory}"
+                  ToolTip.Tip="{Binding HistoryToggleTip}" Command="{Binding ToggleHistoryCommand}">
+            <Panel>
+              <controls:IconView Classes="small" IconKey="Icon.ChevronDown" IsVisible="{Binding !IsHistoryExpanded}" />
+              <controls:IconView Classes="small" IconKey="Icon.ChevronUp" IsVisible="{Binding IsHistoryExpanded}" />
+            </Panel>
+          </Button>
+        </Grid>
         <Border Classes="card">
           <StackPanel>
             <Border Classes="header-row">
@@ -120,7 +230,7 @@
               </Grid>
             </Border>
             <TextBlock Classes="muted" Margin="16,14" IsVisible="{Binding HasNoHistory}" Text="{loc:Loc Sync.NoHistory}" />
-            <ItemsControl Classes="rows" ItemsSource="{Binding History}">
+            <ItemsControl Classes="rows" ItemsSource="{Binding ShownHistory}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="items:PatchHistoryItemViewModel">
                   <Border Classes="row" Padding="16,7">
@@ -148,6 +258,15 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Border IsVisible="{Binding CanLoadMoreHistory}" Padding="12,8" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0">
+              <Button Classes="outline" HorizontalAlignment="Center" Padding="14,3" MinHeight="28" FontSize="12"
+                      IsEnabled="{Binding !IsLoadingMoreHistory}" Command="{Binding LoadMoreHistoryCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <controls:IconView Classes="small" IconKey="Icon.ChevronDown" />
+                  <TextBlock Text="{loc:Loc Sync.HistoryLoadMore}" />
+                </StackPanel>
+              </Button>
+            </Border>
           </StackPanel>
         </Border>
       </StackPanel>

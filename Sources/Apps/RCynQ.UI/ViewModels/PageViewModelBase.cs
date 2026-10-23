@@ -67,10 +67,20 @@ public abstract partial class PageViewModelBase : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasInfo))]
     private string? _infoMessage;
 
+    /// <summary>The message about an action of the user that succeeded, or <see langword="null"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSuccess))]
+    private string? _successMessage;
+
     /// <summary>
     /// Gets a value indicating whether an error is shown.
     /// </summary>
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+
+    /// <summary>
+    /// Gets a value indicating whether a message about a success is shown.
+    /// </summary>
+    public bool HasSuccess => !string.IsNullOrEmpty(SuccessMessage);
 
     /// <summary>
     /// Gets a value indicating whether an informational message is shown.
@@ -163,19 +173,23 @@ public abstract partial class PageViewModelBase : ObservableObject
     protected void NotifyDataChanged() => DataChanged?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
-    /// Hides the error and informational messages.
+    /// Hides the error, success and informational messages.
     /// </summary>
     [RelayCommand]
     private void DismissMessages()
     {
         ErrorMessage = null;
         InfoMessage = null;
+        SuccessMessage = null;
         _errorFromRefresh = false;
     }
 
     /// <summary>
     /// Runs an action of the user, tracking busy state and converting service failures into <see cref="ErrorMessage"/>.
     /// </summary>
+    /// <remarks>
+    /// The error and success messages of the previous action are hidden first: they do not describe the new one.
+    /// </remarks>
     /// <param name="operation">The operation.</param>
     /// <returns><see langword="true"/> when the operation completed without error.</returns>
     protected async Task<bool> RunSafeAsync(Func<Task> operation)
@@ -183,6 +197,7 @@ public abstract partial class PageViewModelBase : ObservableObject
         ArgumentNullException.ThrowIfNull(operation);
         IsBusy = true;
         ErrorMessage = null;
+        SuccessMessage = null;
         _errorFromRefresh = false;
         try
         {

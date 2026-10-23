@@ -47,6 +47,16 @@ public interface IPatchRepository
     Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets one page of the patches, newest first: the history is read part by part instead of all at once.
+    /// </summary>
+    /// <param name="skip">The number of the newest records to skip.</param>
+    /// <param name="count">The maximum number of records.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>Up to <paramref name="count"/> records that follow the first <paramref name="skip"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="skip"/> or <paramref name="count"/> is negative.</exception>
+    Task<IReadOnlyList<PatchMetadata>> GetPageAsync(int skip, int count, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets all patches, newest first.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>

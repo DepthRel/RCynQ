@@ -33,7 +33,7 @@ public static class ApiRoutes
     /// <summary>The path prefix shared by the patch session routes, which are the only routes open to the peer.</summary>
     public const string PATCH_SESSION_PREFIX = "/patch/sessions";
 
-    /// <summary>Recent patches.</summary>
+    /// <summary>Recent patches, newest first, a page at a time (<c>?skip=&amp;take=</c>).</summary>
     public const string PATCHES = "/patches";
 
     /// <summary>One patch.</summary>

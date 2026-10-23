@@ -219,7 +219,7 @@ public sealed class App : Application
                 new ElevatedCliRunner(Localizer, settings.ConfigPath, cli),
                 new LocalNodeSettings(Localizer, settings.ConfigPath),
                 new ServerSetupService(Localizer, new SystemHostSystemSource(), new SystemElevatedProcessLauncher())),
-            new SyncViewModel(Localizer, api, dialogs),
+            new SyncViewModel(Localizer, api, dialogs, uiSettings),
             new TunnelViewModel(Localizer, api),
             new DiagnosticsViewModel(Localizer, api, dialogs),
             new BranchViewModel(Localizer, api),

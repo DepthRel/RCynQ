@@ -202,7 +202,7 @@ public sealed partial class LanguageRefreshTests
         api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
         api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { relay, origin });
         api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(new[] { TestData.State(relay, LinkStatus.Ready), TestData.State(origin, LinkStatus.Failed) });
-        api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { TestData.ConflictPatch() });
+        api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { TestData.ConflictPatch() });
         api.GetBranchAsync(Arg.Any<CancellationToken>()).Returns(new GitBranchInfo(true, "main", "refs/remotes/rcynq/main", 1, 2));
         api.GetLogsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new LogEntryDto(DateTimeOffset.UtcNow, "Information", "started", null) });

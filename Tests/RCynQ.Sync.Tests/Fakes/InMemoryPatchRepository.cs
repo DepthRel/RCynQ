@@ -29,7 +29,16 @@ public sealed class InMemoryPatchRepository : IPatchRepository
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
-        => Task.FromResult<IReadOnlyList<PatchMetadata>>(Items.Values.OrderByDescending(patch => patch.CreatedAtUtc).Take(count).ToArray());
+        => GetPageAsync(0, count, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<PatchMetadata>> GetPageAsync(int skip, int count, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<PatchMetadata>>(Items.Values
+            .OrderByDescending(patch => patch.CreatedAtUtc)
+            .ThenByDescending(patch => patch.Id)
+            .Skip(skip)
+            .Take(count)
+            .ToArray());
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PatchMetadata>> GetAllAsync(CancellationToken cancellationToken = default) => GetRecentAsync(int.MaxValue, cancellationToken);

@@ -7,6 +7,7 @@ using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
+using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Commands;
@@ -520,6 +521,62 @@ public sealed class PatchServiceTests : IDisposable
         (await service.GetStateAsync()).PendingChanges.Select(change => change.Path).Should().BeEquivalentTo("a.txt", "b.txt");
         (await service.GetSummaryAsync()).PendingChanges.Should().HaveCount(2, "the summary follows the last full look");
     }
+
+    /// <summary>
+    /// Verifies that with several repositories a page counts only the patches of the repository the node works with, so
+    /// the pages follow one another even when the patches of the repositories are mixed.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Pages_Of_Several_Repositories_Count_Only_The_Current_One()
+    {
+        var current = new RepositoryEntry(Guid.NewGuid(), "app", _fixture.WorkstationWork);
+        var other = new RepositoryEntry(Guid.NewGuid(), "docs", _fixture.WorkstationWork);
+        var repository = Substitute.For<IActiveRepository>();
+        repository.Current.Returns(current);
+        repository.Entries.Returns(new[] { current, other });
+        var service = _fixture.CreateWorkstationService(_sender, _chain, repository);
+        var now = DateTimeOffset.UtcNow;
+        var own = new List<PatchMetadata>();
+        for (var index = 0; index < 600; index++)
+        {
+            var patch = CreatePatch(now.AddSeconds(-index), index % 3 == 0 ? "app" : "docs");
+            await _fixture.Patches.UpsertAsync(patch);
+            if (patch.Repository == "app")
+            {
+                own.Add(patch);
+            }
+        }
+
+        var first = await service.GetPageAsync(0, 150);
+        var second = await service.GetPageAsync(150, 150);
+
+        first.Select(patch => patch.Id).Should().Equal(own.Take(150).Select(patch => patch.Id));
+        second.Select(patch => patch.Id).Should().Equal(own.Skip(150).Select(patch => patch.Id), "the rest of the 200 patches of the repository");
+        (await service.GetPageAsync(200, 10)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Creates a stored outgoing patch of a repository.
+    /// </summary>
+    /// <param name="createdAt">The creation time.</param>
+    /// <param name="repository">The name of the repository.</param>
+    /// <returns>The patch.</returns>
+    private static PatchMetadata CreatePatch(DateTimeOffset createdAt, string repository)
+        => new(
+            Guid.NewGuid(),
+            PatchDirection.Outgoing,
+            new NodeId("workstation-1"),
+            new NodeId("origin-1"),
+            createdAt,
+            new string('a', 64),
+            new string('b', 64),
+            PatchStatus.Applied,
+            createdAt,
+            Array.Empty<FileChange>())
+        {
+            Repository = repository
+        };
 
     /// <summary>
     /// Deletes the fixture.

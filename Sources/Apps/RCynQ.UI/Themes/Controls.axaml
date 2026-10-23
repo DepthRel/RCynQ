@@ -124,6 +124,25 @@
     <Setter Property="Background" Value="{StaticResource WarningSubtleBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}" />
   </Style>
+  <Style Selector="Border.banner.success">
+    <Setter Property="Background" Value="{StaticResource SuccessSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}" />
+  </Style>
+
+  <!-- Tool tips with a title: the name of the action in bold, its explanation below -->
+  <Style Selector="StackPanel.tip">
+    <Setter Property="Spacing" Value="4" />
+    <Setter Property="MaxWidth" Value="320" />
+  </Style>
+  <Style Selector="TextBlock.tip-title">
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="TextBlock.tip-text">
+    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
 
   <!-- Inputs -->
   <Style Selector="TextBox, ComboBox, NumericUpDown">
@@ -231,6 +250,51 @@
   </Style>
   <Style Selector="Button:disabled">
     <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
+  <!-- Square tool buttons with an icon only; their name is the title of the tool tip -->
+  <Style Selector="Button.tool">
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <!-- Two tool buttons joined into one switch: the pressed-in half is the active choice -->
+  <Style Selector="Button.tool.segment-start">
+    <Setter Property="CornerRadius" Value="8,0,0,8" />
+  </Style>
+  <Style Selector="Button.tool.segment-end">
+    <Setter Property="CornerRadius" Value="0,8,8,0" />
+    <Setter Property="Margin" Value="-1,0,0,0" />
+  </Style>
+  <!-- The accent border of the active half lies over the shared edge -->
+  <Style Selector="Button.tool.toggled">
+    <Setter Property="ZIndex" Value="1" />
+  </Style>
+  <Style Selector="Border.toolbar-divider">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Margin" Value="4,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Background" Value="{StaticResource DividerBrush}" />
+  </Style>
+
+  <!-- Rows of the folder tree: the whole row opens or closes the folder -->
+  <Style Selector="Button.tree-row">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Button.tree-row:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.tree-row:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
   </Style>
 
   <Style Selector="Button.nav">

@@ -69,6 +69,28 @@ public sealed class ServiceApiTests
     }
 
     /// <summary>
+    /// Verifies that the patch list is read a page at a time: the page asked for is passed on, a page too large is cut
+    /// down to the limit and a negative start counts from the newest patch.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Patch_List_Is_Read_By_Pages()
+    {
+        var patches = Substitute.For<IPatchService>();
+        patches.GetPageAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<PatchMetadata>());
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Origin, services => Replace(services, patches));
+        var client = host.CreateClient();
+
+        (await client.GetAsync($"{ApiRoutes.PATCHES}?skip=40&take=21")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync($"{ApiRoutes.PATCHES}?skip=-5&take=100000")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync(ApiRoutes.PATCHES)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await patches.Received(1).GetPageAsync(40, 21, Arg.Any<CancellationToken>());
+        await patches.Received(1).GetPageAsync(0, ApiLimits.MAX_PATCHES_PAGE, Arg.Any<CancellationToken>());
+        await patches.Received(1).GetPageAsync(0, 50, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Verifies that the local API token file exists right after startup, before any request.
     /// </summary>
     /// <returns>A task representing the test.</returns>

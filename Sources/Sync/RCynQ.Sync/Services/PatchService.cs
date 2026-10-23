@@ -131,22 +131,53 @@ public sealed class PatchService : IPatchService
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
+        => GetPageAsync(0, count, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PatchMetadata>> GetPageAsync(int skip, int count, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(skip);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
         if (_repository is null || _repository.Entries.Count <= 1)
         {
-            return await _patches.GetRecentAsync(count, cancellationToken);
+            return await _patches.GetPageAsync(skip, count, cancellationToken);
         }
 
-        // The patches of the other repositories are left out, so more than asked for is read to fill the list.
-        var recent = await _patches.GetRecentAsync(Math.Min(count * 4, MAX_PATCHES_READ), cancellationToken);
-        return recent.Where(Belongs).Take(count).ToArray();
+        // The patches of the other repositories are left out, so the stored ones are read in chunks until the page is
+        // filled: a page counts only the patches of this repository.
+        var page = new List<PatchMetadata>(count);
+        var matched = 0;
+        for (var offset = 0; page.Count < count; offset += PATCHES_READ_CHUNK)
+        {
+            var chunk = await _patches.GetPageAsync(offset, PATCHES_READ_CHUNK, cancellationToken);
+            foreach (var patch in chunk.Where(Belongs))
+            {
+                if (matched++ >= skip && page.Count < count)
+                {
+                    page.Add(patch);
+                }
+            }
+
+            if (chunk.Count < PATCHES_READ_CHUNK)
+            {
+                break;
+            }
+        }
+
+        return page;
     }
 
     /// <summary>
     /// The most patches read to find those of one repository.
     /// </summary>
     private const int MAX_PATCHES_READ = 2000;
+
+    /// <summary>
+    /// How many stored patches are read at a time to fill a page of one repository.
+    /// </summary>
+    private const int PATCHES_READ_CHUNK = 200;
 
     /// <summary>
     /// Tells whether a patch belongs to the repository the node works with now.

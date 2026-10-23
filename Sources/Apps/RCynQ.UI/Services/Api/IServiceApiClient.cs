@@ -29,11 +29,12 @@ public interface IServiceApiClient
     /// <returns>The status.</returns>
     Task<NodeSyncStatus> GetStateSummaryAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Gets recent patches.</summary>
-    /// <param name="take">The maximum number of patches.</param>
+    /// <summary>Gets one page of the patch history.</summary>
+    /// <param name="skip">The number of the newest patches to skip.</param>
+    /// <param name="take">The maximum number of patches; the service gives at most <see cref="ApiLimits.MAX_PATCHES_PAGE"/>.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The patches, newest first.</returns>
-    Task<IReadOnlyList<PatchMetadata>> GetPatchesAsync(int take, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PatchMetadata>> GetPatchesAsync(int skip, int take, CancellationToken cancellationToken = default);
 
     /// <summary>Gets the unified diff of a patch.</summary>
     /// <param name="patchId">The patch identifier.</param>

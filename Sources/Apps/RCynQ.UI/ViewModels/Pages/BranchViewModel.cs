@@ -94,35 +94,37 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
-    private Task PullAsync() => RunSafeAsync(async () =>
-    {
-        var result = await _api.PullAsync();
-        Output = result.Output;
-        NotifyDataChanged();
-        if (result.Branch is not null)
-        {
-            Apply(result.Branch);
-        }
-
-        if (!result.Succeeded)
-        {
-            ErrorMessage = Localizer.Get("Branch.PullFailed");
-        }
-    });
+    private Task PullAsync() => RunSafeAsync(async () => Show(await _api.PullAsync(), "Branch.PullSucceeded", "Branch.PullFailed"));
 
     /// <summary>
     /// Fetches from Origin without changing the working tree.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
-    private Task FetchAsync() => RunSafeAsync(async () =>
+    private Task FetchAsync() => RunSafeAsync(async () => Show(await _api.FetchAsync(), "Branch.FetchSucceeded", "Branch.FetchFailed"));
+
+    /// <summary>
+    /// Shows the result of a Git operation: its output, the branch after it and a green or red message.
+    /// </summary>
+    /// <param name="result">The result.</param>
+    /// <param name="successKey">The key of the message about a success.</param>
+    /// <param name="failureKey">The key of the message about a failure.</param>
+    private void Show(GitOperationResult result, string successKey, string failureKey)
     {
-        var result = await _api.FetchAsync();
         Output = result.Output;
         NotifyDataChanged();
         if (result.Branch is not null)
         {
             Apply(result.Branch);
         }
-    });
+
+        if (result.Succeeded)
+        {
+            SuccessMessage = Localizer.Get(successKey);
+        }
+        else
+        {
+            ErrorMessage = Localizer.Get(failureKey);
+        }
+    }
 }

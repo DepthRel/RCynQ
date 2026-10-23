@@ -60,12 +60,21 @@ public sealed class PatchRepository : IPatchRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PatchMetadata>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
+        => GetPageAsync(0, count, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PatchMetadata>> GetPageAsync(int skip, int count, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(skip);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        // The identifier breaks ties of equal times, so the pages neither repeat nor lose a record.
         await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await db.PatchEnvelopes.AsNoTracking()
             .OrderByDescending(patch => patch.CreatedAtUtc)
+            .ThenByDescending(patch => patch.Id)
+            .Skip(skip)
             .Take(count)
             .ToListAsync(cancellationToken);
         return entities.Select(EntityMapper.ToDomain).ToArray();

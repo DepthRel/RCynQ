@@ -38,6 +38,7 @@
   <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
   <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
   <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+  <SolidColorBrush x:Key="SuccessSubtleBrush" Color="{StaticResource SuccessColor}" Opacity="0.12" />
   <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
   <SolidColorBrush x:Key="WarningSubtleBrush" Color="{StaticResource WarningColor}" Opacity="0.12" />
   <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />

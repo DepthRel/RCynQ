@@ -36,18 +36,12 @@
           <TextBlock Classes="muted mono" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0" Text="{Binding Version}" />
         </StackPanel>
 
-        <!-- The website (GitHub Pages) and the source code (GitHub), with their addresses under the buttons. -->
+        <!-- The website (GitHub Pages) and the source code (GitHub). -->
         <Grid ColumnDefinitions="*,12,*">
-          <StackPanel Spacing="4">
-            <Button Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Content="{loc:Loc About.Website}" Command="{Binding OpenWebsiteCommand}" />
-            <TextBlock Classes="muted mono" FontSize="11" HorizontalAlignment="Center" Text="{Binding WebsiteAddress}" />
-          </StackPanel>
-          <StackPanel Grid.Column="2" Spacing="4">
-            <Button Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Content="{loc:Loc About.Code}" Command="{Binding OpenSourceCommand}" />
-            <TextBlock Classes="muted mono" FontSize="11" HorizontalAlignment="Center" Text="{Binding SourceAddress}" />
-          </StackPanel>
+          <Button Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  Content="{loc:Loc About.Website}" Command="{Binding OpenWebsiteCommand}" />
+          <Button Grid.Column="2" Classes="outline" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  Content="{loc:Loc About.Code}" Command="{Binding OpenSourceCommand}" />
         </Grid>
 
         <Border Height="1" Background="{StaticResource DividerBrush}" />

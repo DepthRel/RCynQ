@@ -43,16 +43,6 @@ public sealed partial class AboutViewModel : DialogViewModelBase
     public string FeedbackEmail => ProjectSite.FEEDBACK_EMAIL;
 
     /// <summary>
-    /// Gets the address of the project page, shown under its button.
-    /// </summary>
-    public string WebsiteAddress => ProjectSite.BASE_URL;
-
-    /// <summary>
-    /// Gets the address of the source code, shown under its button.
-    /// </summary>
-    public string SourceAddress => ProjectSite.SOURCE_URL;
-
-    /// <summary>
     /// Opens the project page.
     /// </summary>
     /// <returns>A task that completes when the page is handed to the browser.</returns>

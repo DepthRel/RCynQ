@@ -37,7 +37,8 @@ public static class PatchEndpoints
         app.MapPost(ApiRoutes.PATCH_SESSION_COMMIT, CommitAsync);
         app.MapGet(ApiRoutes.STATE, GetStateAsync);
         app.MapGet(ApiRoutes.STATE_SUMMARY, GetStateSummaryAsync);
-        app.MapGet(ApiRoutes.PATCHES, async (IPatchService patches, int? take, CancellationToken ct) => Results.Ok(await patches.GetRecentAsync(Math.Clamp(take ?? 50, 1, 500), ct)));
+        app.MapGet(ApiRoutes.PATCHES, async (IPatchService patches, int? skip, int? take, CancellationToken ct) =>
+            Results.Ok(await patches.GetPageAsync(Math.Max(skip ?? 0, 0), Math.Clamp(take ?? 50, 1, ApiLimits.MAX_PATCHES_PAGE), ct)));
         app.MapGet(ApiRoutes.PATCH_BY_ID, async (Guid id, IPatchService patches, ILocalizer localizer, CancellationToken ct) =>
             await patches.GetAsync(id, ct) is { } patch ? Results.Ok(patch) : NotFound(localizer.Format("Patch.NotFound", id)));
         app.MapGet(ApiRoutes.PATCH_DIFF, GetDiffAsync);

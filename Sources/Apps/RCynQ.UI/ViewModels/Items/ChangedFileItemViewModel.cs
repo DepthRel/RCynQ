@@ -5,9 +5,9 @@ using RCynQ.UI.ViewModels.Formatting;
 namespace RCynQ.UI.ViewModels.Items;
 
 /// <summary>
-/// A row of the list of changed files on the "Синхронизация" tab.
+/// A file row of the list of changed files on the "Синхронизация" tab.
 /// </summary>
-public sealed partial class ChangedFileItemViewModel : ObservableObject
+public sealed partial class ChangedFileItemViewModel : ChangedRowViewModel
 {
     /// <summary>The action called when the row is checked or unchecked.</summary>
     private readonly Action? _selectionChanged;
@@ -15,10 +15,6 @@ public sealed partial class ChangedFileItemViewModel : ObservableObject
     /// <summary>Whether the file is chosen to be sent.</summary>
     [ObservableProperty]
     private bool _isSelected;
-
-    /// <summary>Whether the row shows a check mark, that is the user picks the files to send.</summary>
-    [ObservableProperty]
-    private bool _isSelectable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChangedFileItemViewModel"/> class.
@@ -29,6 +25,7 @@ public sealed partial class ChangedFileItemViewModel : ObservableObject
     {
         File = file ?? throw new ArgumentNullException(nameof(file));
         _selectionChanged = selectionChanged;
+        Label = file.Path;
     }
 
     /// <summary>Gets the changed file.</summary>

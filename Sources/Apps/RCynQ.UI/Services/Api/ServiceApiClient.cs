@@ -70,8 +70,8 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public Task<NodeSyncStatus> GetStateSummaryAsync(CancellationToken cancellationToken = default) => GetAsync<NodeSyncStatus>(ApiRoutes.STATE_SUMMARY, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PatchMetadata>> GetPatchesAsync(int take, CancellationToken cancellationToken = default)
-        => await GetAsync<PatchMetadata[]>($"{ApiRoutes.PATCHES}?take={take}", cancellationToken);
+    public async Task<IReadOnlyList<PatchMetadata>> GetPatchesAsync(int skip, int take, CancellationToken cancellationToken = default)
+        => await GetAsync<PatchMetadata[]>($"{ApiRoutes.PATCHES}?skip={skip}&take={take}", cancellationToken);
 
     /// <inheritdoc />
     public async Task<string> GetPatchDiffAsync(Guid patchId, CancellationToken cancellationToken = default)

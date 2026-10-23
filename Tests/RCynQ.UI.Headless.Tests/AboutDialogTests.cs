@@ -17,7 +17,8 @@ namespace RCynQ.UI.Headless.Tests;
 public sealed class AboutDialogTests
 {
     /// <summary>
-    /// The window shows the brand, the slogan, the addresses and the mail of the project in English and in Russian.
+    /// The window shows the brand, the slogan, the buttons of the links and the mail of the project in English and in
+    /// Russian; the addresses behind the buttons are not written out.
     /// </summary>
     /// <returns>A task that completes when the test is done.</returns>
     [Fact]
@@ -37,13 +38,13 @@ public sealed class AboutDialogTests
                 Assert.Contains("Without a commit.", english);
                 Assert.Contains("Remote Code sYNchronization, Quick", english);
                 Assert.Contains("Report a problem", english);
-                Assert.Contains("Website", english);
+                Assert.Contains("Visit the website", english);
                 Assert.Contains("Code on GitHub", english);
                 Assert.Contains("License text", english);
                 Assert.Contains("Components and their licenses", english);
                 Assert.Contains(ProjectSite.FEEDBACK_EMAIL, english);
-                Assert.Contains(ProjectSite.BASE_URL, english);
-                Assert.Contains(ProjectSite.SOURCE_URL, english);
+                Assert.DoesNotContain(ProjectSite.BASE_URL, english);
+                Assert.DoesNotContain(ProjectSite.SOURCE_URL, english);
                 Assert.Equal("About RCynQ", window.Title);
 
                 localizer.SetLanguage("ru");
@@ -52,6 +53,7 @@ public sealed class AboutDialogTests
                 Assert.Contains("Доставьте код на удалённую машину.", russian);
                 Assert.Contains("Без коммита.", russian);
                 Assert.Contains("Сообщить об ошибке", russian);
+                Assert.Contains("Посетить сайт", russian);
                 Assert.DoesNotContain("Report a problem", russian);
             }
             finally

@@ -250,8 +250,9 @@ public sealed class SyncFixture : IDisposable
     /// </summary>
     /// <param name="sender">The sender.</param>
     /// <param name="chain">The chain repository.</param>
+    /// <param name="repository">Tells which repository the node works with now; <see langword="null"/> for the one it started with.</param>
     /// <returns>The service.</returns>
-    public PatchService CreateWorkstationService(IPatchSender sender, IChainLinkRepository chain)
+    public PatchService CreateWorkstationService(IPatchSender sender, IChainLinkRepository chain, IActiveRepository? repository = null)
     {
         var outcomes = CreateOutcomes();
         var tracker = CreateTracker(WorkstationNode);
@@ -283,7 +284,7 @@ public sealed class SyncFixture : IDisposable
             tracker,
             WorkstationLock,
             WorkstationSyncBase);
-        return new PatchService(WorkstationNode, send, resolve, Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase);
+        return new PatchService(WorkstationNode, send, resolve, Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase, repository);
     }
 
     /// <summary>
