@@ -41,7 +41,8 @@ The packages:
 
 | Package | Installs into | Settings and data |
 |---|---|---|
-| `RCynQ-<version>-setup.exe` | `%LOCALAPPDATA%\Programs\RCynQ`, no administrator rights; the welcome page and the header carry the RCynQ logo (`Assets/generate-installer-art.ps1`) | `config` and `data` inside the installation (the `rcynq.portable` marker) |
+| `RCynQ-<version>-setup.exe`, for the current user (the default) | `%LOCALAPPDATA%\Programs\RCynQ`, no administrator rights; the welcome page and the header carry the RCynQ logo (`Assets/generate-installer-art.ps1`) | `config` and `data` inside the installation (the `rcynq.portable` marker) |
+| `RCynQ-<version>-setup.exe`, for all users | `Program Files`, with administrator rights | `%APPDATA%\RCynQ` and `%LOCALAPPDATA%\RCynQ` of each user (no marker) |
 | `RCynQ-<version>-<runtime>.zip`, `.tar.gz` | wherever it is unpacked | `config` and `data` next to the program |
 | `RCynQ-<version>-<runtime>.deb` | `/opt/rcynq`, with `rcynq` and `rcynq-ui` in `/usr/bin`, the menu entry, the icons and the AppStream data; depends on `git` and `openssh-client` | `~/.config/RCynQ` and `~/.local/share/RCynQ` of each user |
 

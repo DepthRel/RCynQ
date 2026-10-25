@@ -155,8 +155,10 @@ contém o serviço, a CLI, a UI e o migrador da base de dados em `service/`, `cl
 pacote para Windows contém `RCynQ.exe` com o ícone da aplicação: o mesmo anfitrião .NET da UI (o alvo
 `RCynQRootLauncher` de `RCynQ.UI.csproj`), apenas com o caminho relativo `ui\RCynQ.UI.dll`.
 
-Os arquivos e o instalador para Windows são portáteis: a marca `rcynq.portable` na raiz mantém a configuração em
-`config/` e todos os dados em `data/` junto ao programa. O pacote `.deb` instala-se em `/opt/rcynq` sem a marca, por
+Os arquivos e o instalador para Windows para o utilizador atual são portáteis: a marca `rcynq.portable` na raiz mantém
+a configuração em `config/` e todos os dados em `data/` junto ao programa. O instalador para todos os utilizadores põe o
+programa em `Program Files` sem a marca, por isso cada utilizador guarda a configuração em `%APPDATA%\RCynQ` e os dados
+em `%LOCALAPPDATA%\RCynQ`. O pacote `.deb` instala-se em `/opt/rcynq` sem a marca, por
 isso cada utilizador guarda a configuração em `~/.config/RCynQ` e os dados em `~/.local/share/RCynQ`.
 
 Os pacotes para Linux e macOS são compilados em Linux (o WSL também serve): só aí as permissões de execução se mantêm

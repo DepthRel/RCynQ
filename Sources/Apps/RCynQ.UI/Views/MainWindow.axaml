@@ -188,6 +188,13 @@
     <Panel Grid.Row="2" IsVisible="{Binding !IsSetupVisible}">
       <ContentControl Content="{Binding CurrentPage}" />
       <ProgressBar Classes="thin" VerticalAlignment="Top" IsIndeterminate="True" IsVisible="{Binding CurrentPage.IsBusy, FallbackValue=False}" />
+      <!-- While the service starts the page has nothing to show yet: a ring says that the work is going on. -->
+      <Border Background="{StaticResource WindowBackgroundBrush}" IsVisible="{Binding IsStarting}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+          <Arc Classes="spinner" HorizontalAlignment="Center" />
+          <TextBlock Classes="secondary" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Text="{Binding ConnectionText}" />
+        </StackPanel>
+      </Border>
     </Panel>
 
     <!-- Status bar -->

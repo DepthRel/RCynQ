@@ -76,6 +76,10 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSetupVisible;
 
+    /// <summary>Whether the service is being started or restarted, so the page area shows that work is going on.</summary>
+    [ObservableProperty]
+    private bool _isStarting;
+
     /// <summary>The problem that prevents using the service, shown once instead of per-page errors.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStartupError))]
@@ -251,34 +255,42 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         SetConnectionText(() => _localizer.Get("Main.StartingService"));
-        var start = await _controller.EnsureRunningAsync();
-        if (start.IsConfigurationError)
-        {
-            ShowSetup(start.Message);
-            return;
-        }
-
-        IsSetupVisible = false;
-        CheckInstallation();
+        IsStarting = true;
         var role = NodeRole.Workstation;
         try
         {
-            var config = await _api.GetConfigAsync();
-            role = config.Role;
-            SetNodeTitle(() => $"RCynQ — {config.Name} ({config.Role})");
-            Branches.Configure(config.Capabilities);
-            Overview.Configure(config);
-            Settings.Configure(config);
-            Repositories?.Configure(config.Role);
-            SetConnectionText(() => start.Message);
-            StartupError = null;
-            _initialized = true;
+            var start = await _controller.EnsureRunningAsync();
+            if (start.IsConfigurationError)
+            {
+                ShowSetup(start.Message);
+                return;
+            }
+
+            IsSetupVisible = false;
+            CheckInstallation();
+            try
+            {
+                var config = await _api.GetConfigAsync();
+                role = config.Role;
+                SetNodeTitle(() => $"RCynQ — {config.Name} ({config.Role})");
+                Branches.Configure(config.Capabilities);
+                Overview.Configure(config);
+                Settings.Configure(config);
+                Repositories?.Configure(config.Role);
+                SetConnectionText(() => start.Message);
+                StartupError = null;
+                _initialized = true;
+            }
+            catch (Exception ex) when (ex is ServiceApiException or HttpRequestException)
+            {
+                _initialized = false;
+                SetConnectionText(start.IsRunning ? () => _localizer.Format("Main.ServiceUnreachable", _localizer.Describe(ex)) : () => start.Message);
+                StartupError = ConnectionText;
+            }
         }
-        catch (Exception ex) when (ex is ServiceApiException or HttpRequestException)
+        finally
         {
-            _initialized = false;
-            SetConnectionText(start.IsRunning ? () => _localizer.Format("Main.ServiceUnreachable", _localizer.Describe(ex)) : () => start.Message);
-            StartupError = ConnectionText;
+            IsStarting = false;
         }
 
         // The service was started or restarted: whatever the pages show belongs to the service that ran before.
@@ -497,7 +509,17 @@ public sealed partial class MainViewModel : ObservableObject
         if (_controller.IsManaged)
         {
             SetConnectionText(() => _localizer.Get("Main.RestartingService"));
-            var restart = await _controller.RestartAsync();
+            IsStarting = true;
+            ServiceStartResult restart;
+            try
+            {
+                restart = await _controller.RestartAsync();
+            }
+            finally
+            {
+                IsStarting = false;
+            }
+
             if (restart.IsConfigurationError)
             {
                 ShowSetup(restart.Message);

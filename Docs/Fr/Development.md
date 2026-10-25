@@ -156,8 +156,10 @@ contient le service, la CLI, l'UI et le migrateur de base de données dans `serv
 La racine du paquet Windows contient `RCynQ.exe` avec l'icône de l'application : le même hôte .NET que l'UI (la cible
 `RCynQRootLauncher` de `RCynQ.UI.csproj`), seulement avec le chemin relatif `ui\RCynQ.UI.dll`.
 
-Les archives et l'installateur Windows sont portables : la marque `rcynq.portable` à la racine garde la configuration
-dans `config/` et toutes les données dans `data/` à côté du programme. Le paquet `.deb` s'installe dans `/opt/rcynq`
+Les archives et l'installateur Windows pour l'utilisateur actuel sont portables : la marque `rcynq.portable` à la
+racine garde la configuration dans `config/` et toutes les données dans `data/` à côté du programme. L'installateur pour
+tous les utilisateurs place le programme dans `Program Files` sans la marque, si bien que chaque utilisateur garde la
+configuration dans `%APPDATA%\RCynQ` et les données dans `%LOCALAPPDATA%\RCynQ`. Le paquet `.deb` s'installe dans `/opt/rcynq`
 sans la marque, si bien que chaque utilisateur garde la configuration dans `~/.config/RCynQ` et les données dans
 `~/.local/share/RCynQ`.
 

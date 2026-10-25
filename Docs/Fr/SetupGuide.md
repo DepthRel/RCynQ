@@ -31,7 +31,8 @@ Sur chaque ordinateur, au choix :
 
 | Système | Paquet | Où vont les réglages et les données |
 |---|---|---|
-| Windows | `RCynQ-<version>-setup.exe` : installe pour l'utilisateur actuel dans `%LOCALAPPDATA%\Programs\RCynQ`, sans droits d'administrateur | `config` et `data` dans l'installation |
+| Windows | `RCynQ-<version>-setup.exe`, **installer pour moi uniquement** (le choix par défaut) : dans `%LOCALAPPDATA%\Programs\RCynQ`, sans droits d'administrateur | `config` et `data` dans l'installation |
+| Windows | `RCynQ-<version>-setup.exe`, **installer pour tous les utilisateurs** : dans `Program Files`, Windows demande les droits d'administrateur | `%APPDATA%\RCynQ` et `%LOCALAPPDATA%\RCynQ` de chaque utilisateur |
 | Windows | `RCynQ-<version>-win-x64.zip` : décompressez-le dans un dossier accessible en écriture, par exemple `C:\RCynQ`, pas dans `Program Files` | `config` et `data` à côté du programme |
 | Debian, Ubuntu | `RCynQ-<version>-linux-x64.deb` : `sudo apt install ./RCynQ-<version>-linux-x64.deb` ; Git et le client SSH sont installés avec lui | `~/.config/RCynQ` et `~/.local/share/RCynQ` de chaque utilisateur |
 | Linux, macOS | `RCynQ-<version>-<platform>.tar.gz` : décompressez-le dans un dossier accessible en écriture, par exemple `~/rcynq` | `config` et `data` à côté du programme |

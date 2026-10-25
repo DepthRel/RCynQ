@@ -155,8 +155,10 @@ service, the CLI, the UI and the database migrator in `service/`, `cli/`, `ui/` 
 Windows package holds `RCynQ.exe` with the application icon: the same .NET host as the UI (the `RCynQRootLauncher`
 target in `RCynQ.UI.csproj`), only with the relative path `ui\RCynQ.UI.dll`.
 
-The archives and the Windows installer are portable: the `rcynq.portable` marker in the root keeps the configuration
-in `config/` and all data in `data/` next to the program. The `.deb` package installs into `/opt/rcynq` without the
+The archives and the Windows installer for the current user are portable: the `rcynq.portable` marker in the root
+keeps the configuration in `config/` and all data in `data/` next to the program. The installer for all users puts the
+program into `Program Files` without the marker, so every user keeps the configuration in `%APPDATA%\RCynQ` and the
+data in `%LOCALAPPDATA%\RCynQ`. The `.deb` package installs into `/opt/rcynq` without the
 marker, so every user keeps the configuration in `~/.config/RCynQ` and the data in `~/.local/share/RCynQ`.
 
 The Linux and macOS packages are built on Linux (WSL counts): only there do the executable permissions survive in the

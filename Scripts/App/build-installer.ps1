@@ -10,10 +10,12 @@
       3. ISCC compiles Scripts/App/rcynq.iss into artifacts/publish/RCynQ-<version>-setup.exe;
       4. the size and the SHA-256 of the installer are printed.
 
-    The installation is per-user (no administrator rights) into %LOCALAPPDATA%\Programs\RCynQ. It is portable in the
-    sense of the application: the settings (config) and all data (keys, database) stay in the folders config and data
-    inside the installation, so an update never touches them. The installer speaks the language of the operating
-    system (English or Russian).
+    The wizard asks for whom to install. For the current user (the default, no administrator rights) it installs into
+    %LOCALAPPDATA%\Programs\RCynQ and is portable in the sense of the application: the settings (config) and all data
+    (keys, database) stay in the folders config and data inside the installation, so an update never touches them. For
+    all users it installs into Program Files with administrator rights and without the portable marker: every user
+    keeps the settings in %APPDATA%\RCynQ and the data in %LOCALAPPDATA%\RCynQ. The installer speaks the language of
+    the operating system (English, German, Spanish, French, Portuguese or Russian).
 
 .PARAMETER Runtime
     The runtime identifier. Default: win-x64.

@@ -126,6 +126,46 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that the page area shows the start in progress while the service starts after the setup, and stops
+    /// showing it once the configuration has been read.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Service_Start_After_Setup_Is_Shown_As_Starting()
+    {
+        File.Delete(_configPath);
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Relay));
+        var start = new TaskCompletionSource<ServiceStartResult>();
+        _controller.EnsureRunningAsync(Arg.Any<CancellationToken>()).Returns(start.Task);
+        var main = Create();
+        await main.InitializeAsync();
+
+        main.Setup.SelectedRole = NodeRole.Relay;
+        await main.Setup.SaveCommand.ExecuteAsync(null);
+
+        await Eventually.WaitUntilAsync(() => !main.IsSetupVisible && main.IsStarting);
+        start.SetResult(new ServiceStartResult(ServiceStartOutcome.Started, "started"));
+        await Eventually.WaitUntilAsync(() => main.SelectedTab is not null);
+        main.IsStarting.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a configuration rejected at the start does not leave the start shown as in progress.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Rejected_Config_Ends_Starting()
+    {
+        _controller.EnsureRunningAsync(Arg.Any<CancellationToken>()).Returns(new ServiceStartResult(ServiceStartOutcome.Failed, "Invalid configuration: Chain[0] ...", 2));
+        var main = Create();
+
+        await main.InitializeAsync();
+
+        main.IsSetupVisible.Should().BeTrue();
+        main.IsStarting.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that saving a new role restarts the service and adapts the tabs to the new role.
     /// </summary>
     /// <returns>A task representing the test.</returns>

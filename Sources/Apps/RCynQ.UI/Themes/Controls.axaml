@@ -157,6 +157,11 @@
     <Setter Property="Padding" Value="10,7" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
+  <!-- A box of several lines is read from the top, like a page: the text and its placeholder start in the first line. -->
+  <Style Selector="TextBox[AcceptsReturn=True]">
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+  </Style>
   <Style Selector="TextBox.mono">
     <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
   </Style>
@@ -369,6 +374,26 @@
     <Setter Property="Height" Value="2" />
     <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
     <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!-- A spinning ring over an empty area: work is going on that takes a few seconds. -->
+  <Style Selector="Arc.spinner">
+    <Setter Property="Width" Value="40" />
+    <Setter Property="Height" Value="40" />
+    <Setter Property="StartAngle" Value="0" />
+    <Setter Property="SweepAngle" Value="270" />
+    <Setter Property="Stroke" Value="{StaticResource AccentBrush}" />
+    <Setter Property="StrokeThickness" Value="3.5" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Style.Animations>
+      <Animation Duration="0:0:1" IterationCount="Infinite">
+        <KeyFrame Cue="0%">
+          <Setter Property="RotateTransform.Angle" Value="0" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="RotateTransform.Angle" Value="360" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
   </Style>
 
 </Styles>

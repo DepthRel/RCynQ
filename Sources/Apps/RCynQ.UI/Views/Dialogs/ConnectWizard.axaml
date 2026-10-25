@@ -91,17 +91,19 @@
         <Panel IsVisible="{Binding IsInviteStep}">
           <StackPanel Spacing="12" DataContext="{Binding Invite}" x:DataType="wizard:InviteStepViewModel">
             <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc Invite.Hint}" />
-            <Grid ColumnDefinitions="*,12,*" IsEnabled="{Binding CanCreate}">
-              <StackPanel IsVisible="{Binding HasRoleChoice}">
+            <!-- The choices from the left, the action that uses them at the right end of the same line. -->
+            <Grid ColumnDefinitions="Auto,Auto,*" IsEnabled="{Binding CanCreate}">
+              <StackPanel Margin="0,0,12,0" IsVisible="{Binding HasRoleChoice}">
                 <TextBlock Classes="field-label" Text="{loc:Loc Invite.Role}" />
-                <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
+                <ComboBox MinWidth="190" ItemsSource="{Binding Roles}" SelectedItem="{Binding SelectedRole}" />
               </StackPanel>
-              <StackPanel Grid.Column="2">
+              <StackPanel Grid.Column="1">
                 <TextBlock Classes="field-label" Text="{loc:Loc Invite.Lifetime}" />
-                <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding Lifetimes}" SelectedItem="{Binding SelectedLifetime}" />
+                <ComboBox MinWidth="190" ItemsSource="{Binding Lifetimes}" SelectedItem="{Binding SelectedLifetime}" />
               </StackPanel>
+              <Button Grid.Column="2" Classes="accent" Margin="12,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      IsVisible="{Binding CanCreate}" Command="{Binding CreateCommand}" Content="{loc:Loc Invite.Create}" />
             </Grid>
-            <Button Classes="accent" HorizontalAlignment="Left" IsVisible="{Binding CanCreate}" Command="{Binding CreateCommand}" Content="{loc:Loc Invite.Create}" />
             <ProgressBar Classes="thin" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
             <Border Classes="banner error" IsVisible="{Binding HasError}">
               <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
@@ -140,7 +142,7 @@
         <Panel IsVisible="{Binding IsJoinStep}">
           <StackPanel Spacing="12" DataContext="{Binding Join}" x:DataType="wizard:JoinStepViewModel">
             <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc Join.Hint}" />
-            <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="True" TextWrapping="Wrap" Height="100"
+            <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="160"
                      IsEnabled="{Binding !IsJoining}" Text="{Binding Invitation}" PlaceholderText="{loc:Loc Join.Watermark}" />
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Button Classes="accent" IsEnabled="{Binding CanJoin}" Command="{Binding JoinCommand}" Content="{loc:Loc Join.Start}" />

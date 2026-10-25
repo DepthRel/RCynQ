@@ -36,7 +36,7 @@ The repository sits in a closed network. Your computer is somewhere else, and th
 
 | System | Package |
 |---|---|
-| Windows | `RCynQ-<version>-setup.exe` (per user, no administrator rights) or the portable `RCynQ-<version>-win-x64.zip` |
+| Windows | `RCynQ-<version>-setup.exe` (for you only without administrator rights, or for all users) or the portable `RCynQ-<version>-win-x64.zip` |
 | Debian, Ubuntu | `RCynQ-<version>-linux-x64.deb` (`sudo apt install ./RCynQ-<version>-linux-x64.deb`) or the portable `.tar.gz` |
 | macOS | `RCynQ-<version>-osx-arm64.tar.gz` (Apple silicon) or `osx-x64` (Intel) |
 

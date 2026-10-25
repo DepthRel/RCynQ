@@ -31,7 +31,8 @@
 
 | Система | Пакет | Где хранятся настройки и данные |
 |---|---|---|
-| Windows | `RCynQ-<версия>-setup.exe`: ставит программу для текущего пользователя в `%LOCALAPPDATA%\Programs\RCynQ`, без прав администратора | `config` и `data` внутри папки установки |
+| Windows | `RCynQ-<версия>-setup.exe`, **«Установить только для меня»** (по умолчанию): в `%LOCALAPPDATA%\Programs\RCynQ`, без прав администратора | `config` и `data` внутри папки установки |
+| Windows | `RCynQ-<версия>-setup.exe`, **«Установить для всех пользователей»**: в `Program Files`, Windows запросит права администратора | `%APPDATA%\RCynQ` и `%LOCALAPPDATA%\RCynQ` каждого пользователя |
 | Windows | `RCynQ-<версия>-win-x64.zip`: распакуйте в папку, куда можно писать, например `C:\RCynQ`, не в `Program Files` | `config` и `data` рядом с программой |
 | Debian, Ubuntu | `RCynQ-<версия>-linux-x64.deb`: `sudo apt install ./RCynQ-<версия>-linux-x64.deb`; Git и SSH-клиент ставятся вместе с ним | `~/.config/RCynQ` и `~/.local/share/RCynQ` каждого пользователя |
 | Linux, macOS | `RCynQ-<версия>-<платформа>.tar.gz`: распакуйте в папку, куда можно писать, например `~/rcynq` | `config` и `data` рядом с программой |

@@ -1,7 +1,10 @@
-﻿; Inno Setup script of RCynQ: a per-user installation without administrator rights.
-; The installation is portable in the sense of the application (the rcynq.portable marker sits in its root): the
-; settings (config) and all data (keys, database) stay in the folders "config" and "data" inside the installation, so
-; nothing is written elsewhere and an update never touches the personal data of the node.
+﻿; Inno Setup script of RCynQ. The wizard asks whether to install for the current user or for all users:
+; - for the current user (the default, no administrator rights) into %LOCALAPPDATA%\Programs\RCynQ. The installation
+;   is portable in the sense of the application (the rcynq.portable marker sits in its root): the settings (config)
+;   and all data (keys, database) stay in the folders "config" and "data" inside the installation, so nothing is
+;   written elsewhere and an update never touches the personal data of the node;
+; - for all users (Windows asks for administrator rights) into Program Files. A user cannot write there, so the marker
+;   is left out: every user keeps the settings in %APPDATA%\RCynQ and the data in %LOCALAPPDATA%\RCynQ.
 ; Build it with Scripts/App/build-installer.ps1, which passes the version, the source folder, the pictures and the
 ; license pages.
 
@@ -42,11 +45,15 @@ AppSupportURL={#RCynQUrl}
 AppUpdatesURL={#RCynQUrl}
 AppCopyright=GPL-3.0-or-later
 VersionInfoVersion={#RCynQVersion}
-DefaultDirName={localappdata}\Programs\RCynQ
+; {autopf} is %LOCALAPPDATA%\Programs for the current user and Program Files for all users.
+DefaultDirName={autopf}\RCynQ
 DefaultGroupName=RCynQ
 DisableProgramGroupPage=yes
 DisableDirPage=no
+; The current user is the default; "all users" in the dialog restarts the wizard with administrator rights. An update
+; keeps the mode of the installation it replaces.
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2/max
@@ -108,42 +115,50 @@ english.AdditionalTasks=Additional tasks:
 english.LaunchRCynQ=Start RCynQ
 english.DeleteDataPrompt=Also delete the personal data of RCynQ (settings, keys, database) from the folders "config" and "data"?
 english.DeleteDataHint=Choose "No" if you are going to install RCynQ again.
+english.DeleteUserDataPrompt=Also delete your personal data of RCynQ (settings, keys, database)? The data of the other users of this computer stays in their profiles.
 german.DesktopIcon=Verknüpfung auf dem Desktop
 german.AdditionalTasks=Zusätzlich:
 german.LaunchRCynQ=RCynQ starten
 german.DeleteDataPrompt=Auch die persönlichen Daten von RCynQ (Einstellungen, Schlüssel, Datenbank) aus den Ordnern „config“ und „data“ löschen?
 german.DeleteDataHint=Wählen Sie „Nein“, wenn Sie RCynQ erneut installieren wollen.
+german.DeleteUserDataPrompt=Auch Ihre persönlichen Daten von RCynQ (Einstellungen, Schlüssel, Datenbank) löschen? Die Daten der anderen Benutzer dieses Computers bleiben in deren Profilen.
 spanish.DesktopIcon=Acceso directo en el escritorio
 spanish.AdditionalTasks=Adicional:
 spanish.LaunchRCynQ=Iniciar RCynQ
 spanish.DeleteDataPrompt=¿Borrar también los datos personales de RCynQ (ajustes, claves, base de datos) de las carpetas «config» y «data»?
 spanish.DeleteDataHint=Elige «No» si vas a volver a instalar RCynQ.
+spanish.DeleteUserDataPrompt=¿Borrar también tus datos personales de RCynQ (ajustes, claves, base de datos)? Los datos de los demás usuarios de este equipo se quedan en sus perfiles.
 french.DesktopIcon=Raccourci sur le bureau
 french.AdditionalTasks=Options supplémentaires :
 french.LaunchRCynQ=Lancer RCynQ
 french.DeleteDataPrompt=Supprimer aussi les données personnelles de RCynQ (réglages, clés, base de données) des dossiers « config » et « data » ?
 french.DeleteDataHint=Choisissez « Non » si vous comptez réinstaller RCynQ.
+french.DeleteUserDataPrompt=Supprimer aussi vos données personnelles de RCynQ (réglages, clés, base de données) ? Les données des autres utilisateurs de cet ordinateur restent dans leurs profils.
 portuguese.DesktopIcon=Atalho no ambiente de trabalho
 portuguese.AdditionalTasks=Adicional:
 portuguese.LaunchRCynQ=Iniciar o RCynQ
 portuguese.DeleteDataPrompt=Eliminar também os dados pessoais do RCynQ (definições, chaves, base de dados) das pastas «config» e «data»?
 portuguese.DeleteDataHint=Escolha «Não» se vai voltar a instalar o RCynQ.
+portuguese.DeleteUserDataPrompt=Eliminar também os seus dados pessoais do RCynQ (definições, chaves, base de dados)? Os dados dos outros utilizadores deste computador ficam nos respetivos perfis.
 russian.DesktopIcon=Значок на рабочем столе
 russian.AdditionalTasks=Дополнительно:
 russian.LaunchRCynQ=Запустить RCynQ
 russian.DeleteDataPrompt=Удалить и личные данные RCynQ (настройки, ключи, базу данных) из папок «config» и «data»?
 russian.DeleteDataHint=Нажмите «Нет», если собираетесь поставить RCynQ снова.
+russian.DeleteUserDataPrompt=Удалить и ваши личные данные RCynQ (настройки, ключи, базу данных)? Данные других пользователей этого компьютера останутся в их профилях.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:AdditionalTasks}"; Flags: unchecked
 
 [Files]
 ; Everything from the published package except the settings and the data of a node that was tried out from it.
-Source: "{#RCynQSource}\*"; DestDir: "{app}"; Excludes: "config\*,config,data\*,data"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#RCynQSource}\*"; DestDir: "{app}"; Excludes: "config\*,config,data\*,data,\rcynq.portable"; Flags: recursesubdirs createallsubdirs ignoreversion
+; The portable marker only for the current user: in Program Files the settings and the data go to the profile of each user.
+Source: "{#RCynQSource}\rcynq.portable"; DestDir: "{app}"; Check: not IsAdminInstallMode; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\RCynQ"; Filename: "{app}\RCynQ.exe"; IconFilename: "{app}\RCynQ.exe"
-Name: "{userdesktop}\RCynQ"; Filename: "{app}\RCynQ.exe"; IconFilename: "{app}\RCynQ.exe"; Tasks: desktopicon
+Name: "{autodesktop}\RCynQ"; Filename: "{app}\RCynQ.exe"; IconFilename: "{app}\RCynQ.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\RCynQ.exe"; Description: "{cm:LaunchRCynQ}"; Flags: nowait postinstall skipifsilent
@@ -157,18 +172,31 @@ begin
   WizardForm.RunList.Offset := ScaleX(8);
 end;
 
+{ After the program is removed, offers to delete the personal data of the node as well: from the installation for the
+  current user, from the profile of the user who removes it for all users (the profiles of the others are not touched). }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ConfigDir: string;
   DataDir: string;
+  Prompt: string;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    ConfigDir := ExpandConstant('{app}\config');
-    DataDir := ExpandConstant('{app}\data');
+    if IsAdminInstallMode then
+    begin
+      ConfigDir := ExpandConstant('{userappdata}\RCynQ');
+      DataDir := ExpandConstant('{localappdata}\RCynQ');
+      Prompt := ExpandConstant('{cm:DeleteUserDataPrompt}');
+    end
+    else
+    begin
+      ConfigDir := ExpandConstant('{app}\config');
+      DataDir := ExpandConstant('{app}\data');
+      Prompt := ExpandConstant('{cm:DeleteDataPrompt}');
+    end;
     if DirExists(ConfigDir) or DirExists(DataDir) then
     begin
-      if MsgBox(ExpandConstant('{cm:DeleteDataPrompt}')
+      if MsgBox(Prompt
         + #13#10 + #13#10 + ConfigDir + #13#10 + DataDir + #13#10 + #13#10
         + ExpandConstant('{cm:DeleteDataHint}'), mbConfirmation, MB_YESNO) = IDYES then
       begin

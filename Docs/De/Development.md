@@ -157,8 +157,10 @@ Dienst, die CLI, die UI und den Datenbank-Migrator in `service/`, `cli/`, `ui/` 
 Windows-Pakets liegt `RCynQ.exe` mit dem Anwendungssymbol: derselbe .NET-Host wie die UI (das Ziel `RCynQRootLauncher`
 in `RCynQ.UI.csproj`), nur mit dem relativen Pfad `ui\RCynQ.UI.dll`.
 
-Die Archive und der Windows-Installer sind portabel: die Markierung `rcynq.portable` im Stamm hält die Konfiguration in
-`config/` und alle Daten in `data/` neben dem Programm. Das `.deb`-Paket installiert ohne die Markierung nach
+Die Archive und der Windows-Installer für den aktuellen Benutzer sind portabel: die Markierung `rcynq.portable` im
+Stamm hält die Konfiguration in `config/` und alle Daten in `data/` neben dem Programm. Der Installer für alle Benutzer
+legt das Programm ohne die Markierung nach `Program Files`, daher hält jeder Benutzer die Konfiguration in
+`%APPDATA%\RCynQ` und die Daten in `%LOCALAPPDATA%\RCynQ`. Das `.deb`-Paket installiert ohne die Markierung nach
 `/opt/rcynq`, daher hält jeder Benutzer die Konfiguration in `~/.config/RCynQ` und die Daten in
 `~/.local/share/RCynQ`.
 
