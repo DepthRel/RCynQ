@@ -77,9 +77,11 @@ public sealed class MergeToolPreferencesTests
     [Fact]
     public async Task The_Described_Tool_Is_Kept_With_Its_Arguments()
     {
-        _machine.FileExists(@"D:\Tools\My Merge\merge.exe").Returns(true);
+        // In the form of the machine that runs the test: the name of the tool comes from a real path.
+        var executable = Path.Combine(Path.GetTempPath(), "My Merge", "merge.exe");
+        _machine.FileExists(executable).Returns(true);
         var preferences = Preferences();
-        var custom = preferences.CreateCustom(@"D:\Tools\My Merge\merge.exe", "/out:{result} \"{local}\" {incoming}")!;
+        var custom = preferences.CreateCustom(executable, "/out:{result} \"{local}\" {incoming}")!;
         preferences.SetDefault(custom);
 
         var restored = await Preferences().GetDefaultAsync();
@@ -88,7 +90,7 @@ public sealed class MergeToolPreferencesTests
         restored.Name.Should().Be("merge");
         restored.Arguments.Should().Equal("/out:{result}", "{local}", "{incoming}");
 
-        _machine.FileExists(@"D:\Tools\My Merge\merge.exe").Returns(false);
+        _machine.FileExists(executable).Returns(false);
         (await Preferences().GetDefaultAsync()).Should().BeNull();
     }
 

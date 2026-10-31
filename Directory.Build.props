@@ -23,7 +23,7 @@
     <Authors>DepthRel</Authors>
     <Copyright>Copyright © RCynQ contributors. Licensed under GPL-3.0-or-later.</Copyright>
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <!-- The page of the project; the installer shows it as the link of the program in the list of installed apps. -->
     <PackageProjectUrl>https://depthrel.github.io/RCynQ/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DepthRel/RCynQ</RepositoryUrl>

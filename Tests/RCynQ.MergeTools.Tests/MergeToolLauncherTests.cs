@@ -15,8 +15,11 @@ public sealed class MergeToolLauncherTests
     /// <summary>The executable of the tool.</summary>
     private const string EXECUTABLE = @"C:\Tools\merge.exe";
 
+    /// <summary>The folder of the files of the merge, in the form of the machine that runs the test: the launcher takes it from a real path.</summary>
+    private static readonly string _folder = Path.Combine(Path.GetTempPath(), "merges", "s", "0");
+
     /// <summary>The files of the merge.</summary>
-    private static readonly MergeToolFiles _files = new(@"C:\data\merges\s\0\a.local.cs", @"C:\data\merges\s\0\a.base.cs", @"C:\data\merges\s\0\a.incoming.cs", @"C:\data\merges\s\0\a.cs");
+    private static readonly MergeToolFiles _files = new(Path.Combine(_folder, "a.local.cs"), Path.Combine(_folder, "a.base.cs"), Path.Combine(_folder, "a.incoming.cs"), Path.Combine(_folder, "a.cs"));
 
     /// <summary>The titles of the panes.</summary>
     private static readonly MergeToolLabels _labels = new("Local", "Base", "Incoming", "Result");
@@ -39,8 +42,8 @@ public sealed class MergeToolLauncherTests
 
         process.Should().BeSameAs(running);
         started!.FileName.Should().Be(EXECUTABLE);
-        started.Arguments.Should().Equal(@"/out:C:\data\merges\s\0\a.cs", _files.Local, _files.Incoming);
-        started.WorkingDirectory.Should().Be(@"C:\data\merges\s\0");
+        started.Arguments.Should().Equal("/out:" + _files.Result, _files.Local, _files.Incoming);
+        started.WorkingDirectory.Should().Be(_folder);
     }
 
     /// <summary>
