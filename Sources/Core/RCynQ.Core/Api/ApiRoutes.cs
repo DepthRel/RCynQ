@@ -66,11 +66,29 @@ public static class ApiRoutes
     /// <summary>Resolve a conflicting patch.</summary>
     public const string RESOLVE_PATCH = "/patches/{id:guid}/resolve";
 
+    /// <summary>Prepare the files of a conflicting patch for a merge tool.</summary>
+    public const string PATCH_MERGE_SESSIONS = "/patches/{id:guid}/merge-sessions";
+
+    /// <summary>A merge session; deleting it gives the merge up.</summary>
+    public const string MERGE_SESSION = "/merge-sessions/{id:guid}";
+
+    /// <summary>Apply the files merged in a merge tool.</summary>
+    public const string MERGE_SESSION_COMPLETE = "/merge-sessions/{id:guid}/complete";
+
     /// <summary>The unified diff of a patch.</summary>
     public const string PATCH_DIFF = "/patches/{id:guid}/diff";
 
     /// <summary>Build and send a patch to the chain endpoint.</summary>
     public const string SEND_PATCH = "/patches/send";
+
+    /// <summary>Build the patch file of the changed files of the working tree.</summary>
+    public const string PATCH_FILE = "/patches/file";
+
+    /// <summary>List the files a patch file changes.</summary>
+    public const string PATCH_FILE_READ = "/patches/file/read";
+
+    /// <summary>Bring a patch file into the working tree without committing it, or take it out again.</summary>
+    public const string PATCH_FILE_APPLY = "/patches/file/apply";
 
     /// <summary>Create the sync base from the working tree.</summary>
     public const string BASELINE = "/patches/baseline";
@@ -249,6 +267,27 @@ public static class ApiRoutes
     /// <param name="id">The patch identifier.</param>
     /// <returns>The path.</returns>
     public static string ResolvePatchPath(Guid id) => $"/patches/{id}/resolve";
+
+    /// <summary>
+    /// Builds the path that prepares a merge session of a patch.
+    /// </summary>
+    /// <param name="id">The patch identifier.</param>
+    /// <returns>The path.</returns>
+    public static string PatchMergeSessionsPath(Guid id) => $"/patches/{id}/merge-sessions";
+
+    /// <summary>
+    /// Builds the path of a merge session.
+    /// </summary>
+    /// <param name="id">The session identifier.</param>
+    /// <returns>The path.</returns>
+    public static string MergeSessionPath(Guid id) => $"/merge-sessions/{id}";
+
+    /// <summary>
+    /// Builds the path that applies a merge session.
+    /// </summary>
+    /// <param name="id">The session identifier.</param>
+    /// <returns>The path.</returns>
+    public static string MergeSessionCompletePath(Guid id) => $"/merge-sessions/{id}/complete";
 
     /// <summary>
     /// Builds the path that applies a delivery of commits that waits.

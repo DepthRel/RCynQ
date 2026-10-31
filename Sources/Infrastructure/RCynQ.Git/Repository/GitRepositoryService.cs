@@ -644,10 +644,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         Guard.NotBlank(directory, nameof(directory));
         ValidateTreeish(commit);
-        var changed = await _git.RunInWorkingTreeAsync(
-            new[] { "diff", "--name-only", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" },
-            directory,
-            cancellationToken: cancellationToken);
+        var changed = await RunWorkingTreeDiffAsync(new[] { "diff", "--name-only", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" }, directory, cancellationToken);
         EnsureSuccess(changed, "git diff");
         var untracked = await _git.RunInWorkingTreeAsync(
             new[] { "ls-files", "--others", "--exclude-standard", "-z" },
@@ -666,10 +663,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     {
         Guard.NotBlank(directory, nameof(directory));
         ValidateTreeish(commit);
-        var changed = await _git.RunInWorkingTreeAsync(
-            new[] { "diff", "--name-status", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" },
-            directory,
-            cancellationToken: cancellationToken);
+        var changed = await RunWorkingTreeDiffAsync(new[] { "diff", "--name-status", "--relative", "--no-renames", "--no-ext-diff", "-z", commit, "--" }, directory, cancellationToken);
         EnsureSuccess(changed, "git diff");
         var untracked = await _git.RunInWorkingTreeAsync(
             new[] { "ls-files", "--others", "--exclude-standard", "-z" },
@@ -698,6 +692,63 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Runs a <c>git diff</c> against the working tree on a private copy of the index.
+    /// </summary>
+    /// <remarks>
+    /// When a file got a new time stamp but kept its content, <c>git diff</c> rewrites the index it read, and unlike
+    /// <c>git status</c> it does so whatever <c>GIT_OPTIONAL_LOCKS</c> says. The repository of an Origin is only read, so the
+    /// rewrite goes to the copy. A copy that cannot be made (Git is replacing the index right now) only costs that protection
+    /// for one look.
+    /// </remarks>
+    /// <param name="arguments">The git arguments.</param>
+    /// <param name="directory">The working tree.</param>
+    /// <param name="cancellationToken">A token to cancel the command.</param>
+    /// <returns>The captured result.</returns>
+    /// <exception cref="GitExecutionException">The index could not be found.</exception>
+    private async Task<Core.Abstractions.Processes.ProcessResult> RunWorkingTreeDiffAsync(string[] arguments, string directory, CancellationToken cancellationToken)
+    {
+        var location = await _git.RunAsync(new[] { "rev-parse", "--git-path", "index" }, directory, cancellationToken: cancellationToken);
+        EnsureSuccess(location, "git rev-parse");
+
+        var index = Path.GetFullPath(Path.Combine(directory, location.StandardOutput.TrimEnd('\r', '\n')));
+        var copy = Path.Combine(Path.GetTempPath(), $"rcynq-diff-{Guid.NewGuid():N}.index");
+        try
+        {
+            File.Copy(index, copy);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return await _git.RunInWorkingTreeAsync(arguments, directory, cancellationToken: cancellationToken);
+        }
+
+        try
+        {
+            var environment = new Dictionary<string, string> { ["GIT_INDEX_FILE"] = copy };
+            return await _git.RunInWorkingTreeAsync(arguments, directory, environment, cancellationToken);
+        }
+        finally
+        {
+            DeleteQuietly(copy);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a temporary file, ignoring failures.
+    /// </summary>
+    /// <param name="path">The file.</param>
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Temporary file; a later cleanup removes it.
+        }
     }
 
     /// <inheritdoc />

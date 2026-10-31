@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
-using RCynQ.Core.Enums;
+using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Wizard;
 using RCynQ.UI.Views.Dialogs;
@@ -13,6 +13,9 @@ namespace RCynQ.UI.Services.Dialogs;
 /// </summary>
 public sealed class AvaloniaDialogService : IDialogService
 {
+    /// <summary>The extension of patch files.</summary>
+    private const string PATCH_EXTENSION = "patch";
+
     /// <summary>Returns the owner window.</summary>
     private readonly Func<Window?> _owner;
 
@@ -26,10 +29,18 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
-    public async Task<ConflictPolicy?> ShowConflictDialogAsync(ConflictDialogViewModel dialog)
+    public async Task<ConflictChoice?> ShowConflictDialogAsync(ConflictDialogViewModel dialog)
     {
         ArgumentNullException.ThrowIfNull(dialog);
         return await ShowAsync(new ConflictDialog { DataContext = dialog }) ? dialog.Result : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<ExternalMergeOutcome?> ShowMergeProgressAsync(MergeProgressDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        await ShowAsync(new MergeProgressDialog { DataContext = dialog });
+        return dialog.Outcome;
     }
 
     /// <inheritdoc />
@@ -44,6 +55,20 @@ public sealed class AvaloniaDialogService : IDialogService
     {
         ArgumentNullException.ThrowIfNull(dialog);
         return ShowAsync(new ExportDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ShowSavePatchDialogAsync(SavePatchDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new SavePatchDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ShowApplyPatchDialogAsync(ApplyPatchDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new ApplyPatchDialog { DataContext = dialog });
     }
 
     /// <inheritdoc />
@@ -161,6 +186,65 @@ public sealed class AvaloniaDialogService : IDialogService
             ShowOverwritePrompt = true
         });
         return file?.TryGetLocalPath();
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> PickPatchToSaveAsync(string title, string suggestedName, string fileType)
+    {
+        if (TopWindow() is not { } window)
+        {
+            return null;
+        }
+
+        var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = title,
+            SuggestedFileName = suggestedName,
+            DefaultExtension = PATCH_EXTENSION,
+            ShowOverwritePrompt = true,
+            SuggestedStartLocation = await window.StorageProvider.TryGetWellKnownFolderAsync(WellKnownFolder.Downloads),
+            FileTypeChoices = new[] { PatchFileType(fileType) }
+        });
+        return file?.TryGetLocalPath();
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> PickPatchToOpenAsync(string title, string fileType)
+    {
+        if (TopWindow() is not { } window)
+        {
+            return null;
+        }
+
+        var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            FileTypeFilter = new[] { PatchFileType(fileType), FilePickerFileTypes.All }
+        });
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
+
+    /// <summary>
+    /// Describes the patch files for a file picker.
+    /// </summary>
+    /// <param name="name">The name of the type of the file.</param>
+    /// <returns>The type.</returns>
+    private static FilePickerFileType PatchFileType(string name) => new(name) { Patterns = new[] { "*." + PATCH_EXTENSION } };
+
+    /// <summary>
+    /// Finds the window on top: a picker opened from a dialog belongs to that dialog, not to the disabled window under it.
+    /// </summary>
+    /// <returns>The top window, or <see langword="null"/>.</returns>
+    private Window? TopWindow()
+    {
+        var window = _owner();
+        while (window?.OwnedWindows.LastOrDefault() is { } owned)
+        {
+            window = owned;
+        }
+
+        return window;
     }
 
     /// <summary>

@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using RCynQ.Git.Processes;
 using RCynQ.Localization;
+using RCynQ.MergeTools;
 using RCynQ.Ssh.Server;
 using RCynQ.UI.Localization;
 using RCynQ.UI.Services.Api;
@@ -14,6 +16,7 @@ using RCynQ.UI.Services.Dispatching;
 using RCynQ.UI.Services.Events;
 using RCynQ.UI.Services.Hosting;
 using RCynQ.UI.Services.Localization;
+using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Navigation;
@@ -203,6 +206,12 @@ public sealed class App : Application
         var owner = new OwnerHolder();
         var dialogs = new AvaloniaDialogService(() => owner.Value);
         var languageSelector = new LanguageViewModel(Localizer, language, FlagImages.Load);
+
+        // The merge tools of this machine: found once, chosen in the settings, started for a conflict.
+        var processes = new SystemProcessRunner(Localizer);
+        var machine = new SystemMergeToolEnvironment();
+        var mergeTools = new MergeToolPreferences(new MergeToolLocator(machine, processes), uiSettings, machine);
+        var merges = new ExternalMergeCoordinator(Localizer, api, new MergeToolLauncher(Localizer, new SystemMergeToolProcessStarter(Localizer), machine));
         var main = new MainViewModel(
             Localizer,
             api,
@@ -219,12 +228,12 @@ public sealed class App : Application
                 new ElevatedCliRunner(Localizer, settings.ConfigPath, cli),
                 new LocalNodeSettings(Localizer, settings.ConfigPath),
                 new ServerSetupService(Localizer, new SystemHostSystemSource(), new SystemElevatedProcessLauncher())),
-            new SyncViewModel(Localizer, api, dialogs, uiSettings),
+            new SyncViewModel(Localizer, api, dialogs, uiSettings, mergeTools, merges),
             new TunnelViewModel(Localizer, api),
             new DiagnosticsViewModel(Localizer, api, dialogs),
-            new BranchViewModel(Localizer, api),
+            new BranchViewModel(Localizer, api, dialogs, uiSettings),
             new LogsViewModel(Localizer, api, dialogs),
-            new SettingsViewModel(Localizer, languageSelector, api, dialogs, uiSettings.FilePath),
+            new SettingsViewModel(Localizer, languageSelector, api, dialogs, uiSettings.FilePath, new MergeToolSettingsViewModel(Localizer, mergeTools, dialogs)),
             new RepositoriesViewModel(Localizer, api, dialogs));
         return (main, owner);
     }

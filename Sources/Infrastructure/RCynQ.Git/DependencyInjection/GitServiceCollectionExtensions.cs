@@ -10,6 +10,7 @@ using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Diff;
+using RCynQ.Git.Patches.Files;
 using RCynQ.Git.Patches.Serialization;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Processes;
@@ -55,6 +56,7 @@ public static class GitServiceCollectionExtensions
         services.TryAddSingleton<IGitCommandRunner, GitCommandRunner>();
         services.TryAddSingleton<IGitDiffBuilder, GitDiffBuilder>();
         services.TryAddSingleton<IPatchDiffBuilder, PatchDiffBuilder>();
+        services.TryAddSingleton<IGitPatchFileService, GitPatchFileService>();
         services.TryAddSingleton<IPatchBuilder, DefaultPatchBuilder>();
         services.TryAddSingleton<PatchEnvelopeSerializer>();
         services.TryAddSingleton<IGitRepositoryService, GitRepositoryService>();

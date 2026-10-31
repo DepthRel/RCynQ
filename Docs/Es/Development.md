@@ -31,11 +31,12 @@ de pruebas solo enumera referencias a proyectos.
 | RCynQ.Core.Data.Tests | migraciones, repositorios, almacenamiento, permisos de archivo de la carpeta de datos |
 | RCynQ.Git.Tests | comandos de Git, paquetes, construcción de parches, hashes, `.gitignore`, la exportación de un repositorio, el remote de la copia de trabajo, integración con un Git real |
 | RCynQ.Ssh.Tests | comandos SSH, reenvíos de puertos, restricciones de `authorized_keys`, fijación de claves de host, `known_hosts`, el archivo de configuración del cliente |
+| RCynQ.MergeTools.Tests | el catálogo de herramientas de fusión, su búsqueda en los lugares habituales, en `PATH`, con `vswhere` y en la configuración de Git, las plantillas de sus argumentos, su arranque |
 | RCynQ.Transports.Tests | los transportes y el gestor de enlaces, la comprobación de un extremo |
-| RCynQ.Sync.Tests | parches (firma, repetición, entrega, aplicación de todo o nada, conflictos y fusión de Git), la base de sincronización, el canal Git, repositorios, rutas y su elección, diagnóstico, transferencia de configuración, conservación de datos |
+| RCynQ.Sync.Tests | parches (firma, repetición, entrega, aplicación de todo o nada, conflictos, fusión de Git y sesiones de fusión para una herramienta de fusión), la base de sincronización, el canal Git, repositorios, rutas y su elección, diagnóstico, transferencia de configuración, conservación de datos |
 | RCynQ.Service.Tests | la API HTTP local, su token y sus puntos públicos, el orden de arranque, Pull, envío y ping de extremo a extremo entre dos servicios, repositorios de extremo a extremo |
 | RCynQ.Cli.Tests | los comandos de `rcynq` y su salida |
-| RCynQ.UI.Tests | modelos de vista, diálogos, la ventana «Acerca de RCynQ» y la carta sobre un problema, el controlador del proceso del servicio, el cliente de la API, los almacenes de idioma y de ajustes |
+| RCynQ.UI.Tests | modelos de vista, diálogos, la ventana «Acerca de RCynQ» y la carta sobre un problema, el controlador del proceso del servicio, el cliente de la API, los almacenes de idioma y de ajustes, la fusión en una herramienta de fusión y la elección de la herramienta |
 | RCynQ.UI.Headless.Tests | la ventana principal y la ventana «Acerca de RCynQ» en Avalonia Headless: cada texto cambia al instante con el idioma |
 
 Una prueba indica el idioma en que están escritas sus expectativas: `TestTexts.English` o `TestTexts.Russian`

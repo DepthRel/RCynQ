@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:RCynQ.UI.Localization"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
+             xmlns:controls="using:RCynQ.UI.Controls"
+             x:Class="RCynQ.UI.Views.Controls.ChangedRowsList">
+  <ItemsControl x:Name="List" Classes="rows">
+    <ItemsControl.DataTemplates>
+
+      <!-- A folder of the tree: the arrow and the name open or close it, the check mark checks every file below -->
+      <DataTemplate DataType="items:ChangedFolderItemViewModel">
+        <Border Classes="row" Padding="16,6">
+          <DockPanel>
+            <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+            <Button DockPanel.Dock="Left" Classes="tree-row" Width="20" Command="{Binding ToggleCommand}">
+              <Panel HorizontalAlignment="Left">
+                <controls:IconView Width="14" Height="14" IconKey="Icon.ChevronRight" Foreground="{StaticResource TextMutedBrush}"
+                                   IsVisible="{Binding !IsExpanded}" />
+                <controls:IconView Width="14" Height="14" IconKey="Icon.ChevronDown" Foreground="{StaticResource TextMutedBrush}"
+                                   IsVisible="{Binding IsExpanded}" />
+              </Panel>
+            </Button>
+            <CheckBox DockPanel.Dock="Left" IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsChecked}"
+                      MinHeight="0" MinWidth="0" Padding="0" Margin="0,-7,8,-7" VerticalAlignment="Center" />
+            <Button Classes="tree-row" Command="{Binding ToggleCommand}" ToolTip.Tip="{Binding Path}">
+              <Grid ColumnDefinitions="22,*,Auto">
+                <controls:IconView Classes="small" IconKey="Icon.Folder" HorizontalAlignment="Left" Foreground="{StaticResource BrandBlueBrush}" />
+                <TextBlock Grid.Column="1" Classes="mono" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Classes="muted mono" FontSize="12" Margin="12,0,0,0" Text="{Binding FileCount}" />
+              </Grid>
+            </Button>
+          </DockPanel>
+        </Border>
+      </DataTemplate>
+
+      <!-- A file: its path in the flat list, its name under its folder in the tree -->
+      <DataTemplate DataType="items:ChangedFileItemViewModel">
+        <Border Classes="row" Classes.selected="{Binding IsSelected}" Padding="16,6">
+          <DockPanel>
+            <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+            <Panel>
+              <Grid ColumnDefinitions="22,*,Auto" IsVisible="{Binding !IsSelectable}">
+                <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
+                <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding Path}" />
+                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                           Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+              </Grid>
+              <CheckBox IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsSelected}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="0" Padding="8,0,0,0" Margin="0,-7">
+                <Grid ColumnDefinitions="22,*,Auto">
+                  <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
+                  <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                             ToolTip.Tip="{Binding Path}" />
+                  <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                             Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                </Grid>
+              </CheckBox>
+            </Panel>
+          </DockPanel>
+        </Border>
+      </DataTemplate>
+
+    </ItemsControl.DataTemplates>
+  </ItemsControl>
+</UserControl>

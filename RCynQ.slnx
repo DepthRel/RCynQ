@@ -16,6 +16,7 @@
   </Folder>
   <Folder Name="/Sources/Infrastructure/">
     <Project Path="Sources/Infrastructure/RCynQ.Git/RCynQ.Git.csproj" />
+    <Project Path="Sources/Infrastructure/RCynQ.MergeTools/RCynQ.MergeTools.csproj" />
     <Project Path="Sources/Infrastructure/RCynQ.Ssh/RCynQ.Ssh.csproj" />
   </Folder>
   <Folder Name="/Sources/Sync/">
@@ -33,6 +34,7 @@
     <Project Path="Tests/RCynQ.Core.Tests/RCynQ.Core.Tests.csproj" />
     <Project Path="Tests/RCynQ.Git.Tests/RCynQ.Git.Tests.csproj" />
     <Project Path="Tests/RCynQ.Localization.Tests/RCynQ.Localization.Tests.csproj" />
+    <Project Path="Tests/RCynQ.MergeTools.Tests/RCynQ.MergeTools.Tests.csproj" />
     <Project Path="Tests/RCynQ.Service.Tests/RCynQ.Service.Tests.csproj" />
     <Project Path="Tests/RCynQ.Ssh.Tests/RCynQ.Ssh.Tests.csproj" />
     <Project Path="Tests/RCynQ.Sync.Tests/RCynQ.Sync.Tests.csproj" />

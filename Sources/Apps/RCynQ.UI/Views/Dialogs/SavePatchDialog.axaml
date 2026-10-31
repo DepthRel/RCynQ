@@ -1,0 +1,29 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.SavePatchDialog"
+                     x:DataType="vm:SavePatchDialogViewModel"
+                     Title="{loc:Loc SavePatch.Title}"
+                     Width="480" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <controls:IconView IconKey="Icon.PatchSave" Width="22" Height="22" Foreground="{StaticResource AccentBrush}" />
+      <TextBlock Classes="page-title" Text="{loc:Loc SavePatch.Title}" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{loc:Loc SavePatch.Description}" />
+    <CheckBox IsChecked="{Binding KeepChanges}">
+      <StackPanel Spacing="2">
+        <TextBlock Text="{loc:Loc SavePatch.KeepChanges}" FontWeight="Medium" TextWrapping="Wrap" />
+        <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc SavePatch.KeepChangesHint}" />
+      </StackPanel>
+    </CheckBox>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="{loc:Loc Common.Save}" IsDefault="True" Command="{Binding SaveCommand}" />
+    </StackPanel>
+  </StackPanel>
+</dialogs:DialogWindow>

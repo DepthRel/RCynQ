@@ -31,7 +31,14 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     /// <param name="api">The service API client.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="settingsPath">The file the settings are stored in, shown to the user, or <see langword="null"/>.</param>
-    public SettingsViewModel(ILocalizer localizer, LanguageViewModel language, IServiceApiClient api, IDialogService dialogs, string? settingsPath = null)
+    /// <param name="mergeTool">The choice of the merge tool, or <see langword="null"/> when it is not offered.</param>
+    public SettingsViewModel(
+        ILocalizer localizer,
+        LanguageViewModel language,
+        IServiceApiClient api,
+        IDialogService dialogs,
+        string? settingsPath = null,
+        MergeToolSettingsViewModel? mergeTool = null)
         : base(localizer)
     {
         Language = language ?? throw new ArgumentNullException(nameof(language));
@@ -39,7 +46,18 @@ public sealed partial class SettingsViewModel : PageViewModelBase
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _project = new ProjectActions(localizer, dialogs);
         SettingsPath = settingsPath;
+        MergeTool = mergeTool;
     }
+
+    /// <summary>
+    /// Gets the choice of the merge tool conflicts are resolved in, or <see langword="null"/> when it is not offered.
+    /// </summary>
+    public MergeToolSettingsViewModel? MergeTool { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the choice of the merge tool is shown.
+    /// </summary>
+    public bool HasMergeTool => MergeTool is not null;
 
     /// <summary>
     /// Gets the line with the version of the application, shown in the part about the application.
@@ -77,7 +95,25 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     public bool AcceptCommits { get; set; }
 
     /// <inheritdoc />
-    protected override Task<bool> LoadAsync() => Task.FromResult(true);
+    public override void RefreshTexts()
+    {
+        base.RefreshTexts();
+
+        // The entry of the tool the user describes is named in the language of the interface.
+        _ = MergeTool?.LoadAsync();
+    }
+
+    /// <inheritdoc />
+    protected override async Task<bool> LoadAsync()
+    {
+        // The search of the machine is kept after the first time, so showing the page again is quick.
+        if (MergeTool is not null)
+        {
+            await MergeTool.LoadAsync();
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Shows the settings of the node the service runs, from the configuration the application loaded at the start.

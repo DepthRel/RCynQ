@@ -48,6 +48,26 @@ public interface IServiceApiClient
     /// <returns>The send result.</returns>
     Task<SendPatchResult> SendPatchAsync(IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Builds the patch file of the changed files.</summary>
+    /// <param name="paths">The relative paths of the files, or <see langword="null"/> for every changed file.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The bytes of the patch; empty when there is nothing to save.</returns>
+    Task<byte[]> BuildPatchFileAsync(IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists the files a patch file changes.</summary>
+    /// <param name="content">The bytes of the patch.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The files, in the order of the patch.</returns>
+    Task<IReadOnlyList<ChangedFile>> ReadPatchFileAsync(byte[] content, CancellationToken cancellationToken = default);
+
+    /// <summary>Brings a patch file into the working tree without committing it, or takes it out again.</summary>
+    /// <param name="content">The bytes of the patch.</param>
+    /// <param name="paths">The files of the patch to use, or <see langword="null"/> for all of them.</param>
+    /// <param name="reverse">Whether the changes are taken out instead of brought in.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>How it ended.</returns>
+    Task<PatchFileApplyResult> ApplyPatchFileAsync(byte[] content, IReadOnlyList<string>? paths, bool reverse, CancellationToken cancellationToken = default);
+
     /// <summary>Creates the sync base from the working tree.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The snapshot.</returns>
@@ -59,6 +79,25 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The result.</returns>
     Task<PatchApplyResult> ResolvePatchAsync(Guid patchId, ConflictPolicy policy, CancellationToken cancellationToken = default);
+
+    /// <summary>Prepares the files of a conflicting patch for a merge tool.</summary>
+    /// <param name="patchId">The patch identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The session, or the files no merge tool can merge.</returns>
+    Task<MergeSessionResponse> PrepareMergeAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>Applies the files merged in a merge tool.</summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <param name="toolName">The name of the tool, recorded in the history.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The result.</returns>
+    Task<PatchApplyResult> CompleteMergeAsync(Guid sessionId, string toolName, CancellationToken cancellationToken = default);
+
+    /// <summary>Gives a merge up; the patch keeps waiting for a decision.</summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>A task that completes when the session is gone.</returns>
+    Task CancelMergeAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
     /// <summary>Gets the configured links.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>

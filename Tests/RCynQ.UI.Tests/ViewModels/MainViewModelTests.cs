@@ -308,7 +308,7 @@ public sealed class MainViewModelTests : IDisposable
             new SyncViewModel(TestTexts.Russian, _api, dialogs),
             new TunnelViewModel(TestTexts.Russian, _api),
             new DiagnosticsViewModel(TestTexts.Russian, _api, dialogs),
-            new BranchViewModel(TestTexts.Russian, _api),
+            new BranchViewModel(TestTexts.Russian, _api, dialogs),
             new LogsViewModel(TestTexts.Russian, _api, dialogs),
             new SettingsViewModel(TestTexts.Russian, new LanguageViewModel(TestTexts.Russian, new FakeLanguageService()), _api, dialogs));
     }

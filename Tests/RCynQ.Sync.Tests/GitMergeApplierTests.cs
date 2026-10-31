@@ -264,7 +264,9 @@ public sealed class GitMergeApplierTests : IDisposable
     private async Task<PatchApplyResult> MergeAsync()
     {
         var envelope = await _fixture.BuildSignedEnvelopeAsync();
-        var applier = new GitMergeApplier(_git, _fixture.Paths, _fixture.Applier, new BackupService(_fixture.OriginPaths, _fixture.Paths, TimeProvider.System));
+        var applier = new GitMergeApplier(
+            new MergePlanner(_git, _fixture.Paths),
+            new MergeOutcomeWriter(_fixture.Applier, new BackupService(_fixture.OriginPaths, _fixture.Paths, TimeProvider.System)));
         return await applier.MergeAsync(envelope, _fixture.WorkstationContent, _fixture.OriginPaths.SyncBase, _fixture.OriginWork);
     }
 

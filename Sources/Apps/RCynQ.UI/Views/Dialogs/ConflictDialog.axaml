@@ -5,6 +5,7 @@
                      xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
                      xmlns:items="using:RCynQ.UI.ViewModels.Items"
                      xmlns:controls="using:RCynQ.UI.Controls"
+                     xmlns:tools="using:RCynQ.MergeTools"
                      x:Class="RCynQ.UI.Views.Dialogs.ConflictDialog"
                      x:DataType="vm:ConflictDialogViewModel"
                      Title="{loc:Loc Conflict.WindowTitle}"
@@ -62,6 +63,27 @@
           <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.UseGit.Hint}" />
         </StackPanel>
       </Button>
+
+      <!-- The files are merged in a merge tool of the machine: the one of the settings, or another one picked here. -->
+      <Button Classes="outline choice" Command="{Binding UseMergeToolCommand}">
+        <StackPanel Spacing="2">
+          <TextBlock Text="{Binding MergeToolText}" FontWeight="Medium" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.ExternalTool.Hint}"
+                     IsVisible="{Binding HasMergeTool}" />
+          <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc Conflict.ExternalTool.NoneHint}"
+                     IsVisible="{Binding !HasMergeTool}" />
+        </StackPanel>
+      </Button>
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="14,0,0,0" IsVisible="{Binding HasToolChoice}">
+        <TextBlock Classes="muted" FontSize="12" VerticalAlignment="Center" Text="{loc:Loc Conflict.ExternalTool.Pick}" />
+        <ComboBox MinWidth="260" ItemsSource="{Binding Tools}" SelectedItem="{Binding SelectedTool}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="tools:MergeTool">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
     </StackPanel>
 
     <Button Classes="outline" HorizontalAlignment="Right" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />

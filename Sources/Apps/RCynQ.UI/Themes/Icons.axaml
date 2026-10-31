@@ -29,6 +29,8 @@
   <StreamGeometry x:Key="Icon.Pull">M12 4V14 M8 10L12 14L16 10 M6 19H18</StreamGeometry>
   <StreamGeometry x:Key="Icon.ChevronDown">M6 9L12 15L18 9</StreamGeometry>
   <StreamGeometry x:Key="Icon.ChevronUp">M6 15L12 9L18 15</StreamGeometry>
+  <StreamGeometry x:Key="Icon.PatchSave">M14 3V7A1 1 0 0 0 15 8H19 M17 21H7A2 2 0 0 1 5 19V5A2 2 0 0 1 7 3H14L19 8V19A2 2 0 0 1 17 21Z M12 11V17 M9.5 14.5L12 17L14.5 14.5</StreamGeometry>
+  <StreamGeometry x:Key="Icon.PatchApply">M14 3V7A1 1 0 0 0 15 8H19 M17 21H7A2 2 0 0 1 5 19V5A2 2 0 0 1 7 3H14L19 8V19A2 2 0 0 1 17 21Z M12 17V11 M9.5 13.5L12 11L14.5 13.5</StreamGeometry>
   <StreamGeometry x:Key="Icon.Search">M4 10.5A6.5 6.5 0 1 0 17 10.5A6.5 6.5 0 1 0 4 10.5 M20 20L15.2 15.2</StreamGeometry>
   <StreamGeometry x:Key="Icon.List">M9 6H20 M9 12H20 M9 18H20 M4.5 6H4.51 M4.5 12H4.51 M4.5 18H4.51</StreamGeometry>
   <StreamGeometry x:Key="Icon.Tree">M3 3.5H10V8.5H3Z M6.5 8.5V18.5H13 M6.5 11.5H13 M13 9H21V14H13Z M13 16H21V21H13Z</StreamGeometry>

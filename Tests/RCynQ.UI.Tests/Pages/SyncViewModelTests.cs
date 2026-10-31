@@ -5,9 +5,12 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
+using RCynQ.MergeTools;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.Services.Merging;
 using RCynQ.UI.Tests.Support;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Items;
@@ -47,7 +50,7 @@ public sealed class SyncViewModelTests
         _api.ResolvePatchAsync(patch.Id, ConflictPolicy.ApplyIncomingOverLocal, Arg.Any<CancellationToken>())
             .Returns(new PatchApplyResult(patch.Id, PatchStatus.ConflictResolved, 1, Array.Empty<ConflictFile>(), null));
         ConflictDialogViewModel? shown = null;
-        _dialogs.ShowConflictDialogAsync(Arg.Do<ConflictDialogViewModel>(dialog => shown = dialog)).Returns(ConflictPolicy.ApplyIncomingOverLocal);
+        _dialogs.ShowConflictDialogAsync(Arg.Do<ConflictDialogViewModel>(dialog => shown = dialog)).Returns(new ConflictChoice(ConflictPolicy.ApplyIncomingOverLocal, null));
         var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
@@ -73,7 +76,7 @@ public sealed class SyncViewModelTests
         _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
         _api.ResolvePatchAsync(patch.Id, ConflictPolicy.UseGit, Arg.Any<CancellationToken>())
             .Returns(new PatchApplyResult(patch.Id, PatchStatus.ConflictResolved, 3, new[] { new ConflictFile("src/app.cs", null, null), new ConflictFile("src/b.cs", null, null) }, null));
-        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns(ConflictPolicy.UseGit);
+        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns(new ConflictChoice(ConflictPolicy.UseGit, null));
         var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
@@ -92,13 +95,75 @@ public sealed class SyncViewModelTests
     {
         var patch = TestData.ConflictPatch();
         _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
-        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns((ConflictPolicy?)null);
+        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns((ConflictChoice?)null);
         var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
         await sync.RefreshAsync();
 
         await sync.ResolveCommand.ExecuteAsync(sync.History.Single());
 
         await _api.DidNotReceiveWithAnyArgs().ResolvePatchAsync(default, default, default);
+    }
+
+    /// <summary>
+    /// Verifies the choice of a merge tool: the dialog offers the tools of the machine with the one of the settings, the
+    /// merge runs in its window instead of a policy, and the end of it is reported with the tool.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task A_Merge_Tool_Resolves_The_Conflict_In_Its_Window()
+    {
+        var tool = new MergeTool("kdiff3", "KDiff3", @"C:\KDiff3\kdiff3.exe", new[] { "{local}", "{incoming}", "{result}" }, true);
+        var tools = Substitute.For<IMergeToolPreferences>();
+        tools.GetToolsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(new[] { tool });
+        tools.GetDefaultAsync(Arg.Any<CancellationToken>()).Returns(tool);
+        var patch = TestData.ConflictPatch();
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
+        ConflictDialogViewModel? shown = null;
+        _dialogs.ShowConflictDialogAsync(Arg.Do<ConflictDialogViewModel>(dialog => shown = dialog)).Returns(new ConflictChoice(null, tool));
+        MergeProgressDialogViewModel? window = null;
+        _dialogs.ShowMergeProgressAsync(Arg.Do<MergeProgressDialogViewModel>(dialog => window = dialog))
+            .Returns(new ExternalMergeOutcome(
+                ExternalMergeOutcomeKind.Completed,
+                new PatchApplyResult(patch.Id, PatchStatus.ConflictResolved, 1, Array.Empty<ConflictFile>(), null),
+                Array.Empty<ConflictFile>(),
+                null,
+                Array.Empty<string>()));
+        var merges = new ExternalMergeCoordinator(TestTexts.Russian, _api, Substitute.For<IMergeToolLauncher>());
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs, mergeTools: tools, merges: merges);
+        await sync.RefreshAsync();
+
+        await sync.ResolveCommand.ExecuteAsync(sync.History.Single());
+
+        shown!.SelectedTool.Should().Be(tool);
+        window!.Title.Should().Contain("KDiff3");
+        sync.SuccessMessage.Should().Contain("KDiff3");
+        await _api.DidNotReceiveWithAnyArgs().ResolvePatchAsync(default, default, default);
+    }
+
+    /// <summary>
+    /// Verifies that files no merge tool can merge are named, and nothing is resolved.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Files_No_Merge_Tool_Can_Merge_Are_Named()
+    {
+        var tool = new MergeTool("meld", "Meld", "/usr/bin/meld", new[] { "{local}", "{incoming}", "{result}" }, false);
+        var patch = TestData.ConflictPatch();
+        _api.GetPatchesAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new[] { patch });
+        _dialogs.ShowConflictDialogAsync(Arg.Any<ConflictDialogViewModel>()).Returns(new ConflictChoice(null, tool));
+        _dialogs.ShowMergeProgressAsync(Arg.Any<MergeProgressDialogViewModel>())
+            .Returns(new ExternalMergeOutcome(ExternalMergeOutcomeKind.Unmergeable, null, new[] { new ConflictFile("logo.png", null, null) }, null, Array.Empty<string>()));
+        var sync = new SyncViewModel(
+            TestTexts.Russian,
+            _api,
+            _dialogs,
+            mergeTools: Substitute.For<IMergeToolPreferences>(),
+            merges: new ExternalMergeCoordinator(TestTexts.Russian, _api, Substitute.For<IMergeToolLauncher>()));
+        await sync.RefreshAsync();
+
+        await sync.ResolveCommand.ExecuteAsync(sync.History.Single());
+
+        sync.ErrorMessage.Should().Contain("logo.png");
     }
 
     /// <summary>
@@ -630,8 +695,8 @@ public sealed class SyncViewModelTests
 
         sync.ShowTreeCommand.Execute(null);
 
-        settings.Received(1).Set(SyncViewModel.FILES_VIEW_SETTING, "tree");
-        settings.Get(SyncViewModel.FILES_VIEW_SETTING).Returns("tree");
+        settings.Received(1).Set(ChangedFilesLayoutSetting.KEY, "tree");
+        settings.Get(ChangedFilesLayoutSetting.KEY).Returns("tree");
         new SyncViewModel(TestTexts.Russian, _api, _dialogs, settings).IsTreeView.Should().BeTrue();
     }
 

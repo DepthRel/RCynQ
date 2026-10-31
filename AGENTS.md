@@ -28,7 +28,7 @@ You are a senior software engineer. You design reliable, maintainable, secure an
 - Security-sensitive operations (keys, `authorized_keys`, host keys, tokens, signatures, applying patches) are
   explicit, restricted and auditable.
 - The repository on an Origin is only read: RCynQ writes no remote, ref, setting or commit into it. Only the files of a
-  patch the user sent change there.
+  patch the user sent, or of a patch file the user applied or took out on that node, change there.
 - Time comes from `TimeProvider`, so tests are deterministic.
 - Critical logic is covered by unit and integration tests; external dependencies (processes, Git, SSH, files, network,
   transports, database) are replaced with mocks and stubs.
@@ -101,7 +101,7 @@ Sources/
                    the project page RCynQ.Pages (static, GitHub Pages)
   Core/            core contracts and configuration, localization, data (EF Core) and FluentMigrator migrations
   Database/        console database migrator
-  Infrastructure/  Git (RCynQ.Git) and SSH (RCynQ.Ssh)
+  Infrastructure/  Git (RCynQ.Git), SSH (RCynQ.Ssh) and external merge tools (RCynQ.MergeTools)
   Sync/            patches, sync base, Git channel, repositories, routes, diagnostics
   Transports/      links to neighbours: abstractions, Direct, AmneziaWG
 Tests/             test projects (<Project>.Tests), Shared (the localizers of the tests)

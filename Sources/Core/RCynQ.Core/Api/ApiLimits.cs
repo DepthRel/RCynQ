@@ -13,4 +13,7 @@ public static class ApiLimits
 
     /// <summary>The most commits one delivery of commits carries and the list of unsent commits shows.</summary>
     public const int MAX_DELIVERY_COMMITS = 1000;
+
+    /// <summary>The largest patch file the service builds, reads or applies, in bytes.</summary>
+    public const long MAX_PATCH_FILE_BYTES = 256L * 1024 * 1024;
 }

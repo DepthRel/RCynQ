@@ -232,7 +232,7 @@ public sealed partial class LanguageRefreshTests
             new SyncViewModel(AppLocalizer, api, dialogs),
             new TunnelViewModel(AppLocalizer, api),
             new DiagnosticsViewModel(AppLocalizer, api, dialogs),
-            new BranchViewModel(AppLocalizer, api),
+            new BranchViewModel(AppLocalizer, api, dialogs),
             new LogsViewModel(AppLocalizer, api, dialogs),
             new SettingsViewModel(AppLocalizer, language, api, dialogs, configFile));
         await main.InitializeAsync();

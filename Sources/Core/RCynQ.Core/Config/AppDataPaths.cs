@@ -117,6 +117,12 @@ public sealed record AppDataPaths
     public string TempDirectory => Path.Combine(Root, "tmp");
 
     /// <summary>
+    /// Gets the directory of the merge sessions: the files of a conflicting patch the user merges in a merge tool. They
+    /// live outside <see cref="TempDirectory"/>, whose cleanup would remove them in the middle of a long merge.
+    /// </summary>
+    public string MergeSessionsDirectory => Path.Combine(Root, "merges");
+
+    /// <summary>
     /// Gets the SQLite connection string for <see cref="DatabasePath"/>.
     /// </summary>
     public string ConnectionString => $"Data Source={DatabasePath}";

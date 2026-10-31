@@ -1,4 +1,4 @@
-using RCynQ.Core.Enums;
+using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Wizard;
 
@@ -13,8 +13,15 @@ public interface IDialogService
     /// Shows the conflict dialog.
     /// </summary>
     /// <param name="dialog">The dialog view model.</param>
-    /// <returns>The chosen policy, or <see langword="null"/> when cancelled.</returns>
-    Task<ConflictPolicy?> ShowConflictDialogAsync(ConflictDialogViewModel dialog);
+    /// <returns>The chosen policy or merge tool, or <see langword="null"/> when cancelled.</returns>
+    Task<ConflictChoice?> ShowConflictDialogAsync(ConflictDialogViewModel dialog);
+
+    /// <summary>
+    /// Shows the window of a merge in a merge tool and runs the merge while it is open.
+    /// </summary>
+    /// <param name="dialog">The dialog view model, which runs the merge and closes when it ends.</param>
+    /// <returns>How the merge ended, or <see langword="null"/> when there is no window to show it in.</returns>
+    Task<ExternalMergeOutcome?> ShowMergeProgressAsync(MergeProgressDialogViewModel dialog);
 
     /// <summary>
     /// Shows the dialog that rolls back unsent commits.
@@ -29,6 +36,20 @@ public interface IDialogService
     /// <param name="dialog">The dialog view model.</param>
     /// <returns><see langword="true"/> when the user confirmed.</returns>
     Task<bool> ShowExportDialogAsync(ExportDialogViewModel dialog);
+
+    /// <summary>
+    /// Shows the dialog that saves the changes to a patch file.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the patch was saved.</returns>
+    Task<bool> ShowSavePatchDialogAsync(SavePatchDialogViewModel dialog);
+
+    /// <summary>
+    /// Shows the dialog that chooses the files of a patch to apply.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user confirmed.</returns>
+    Task<bool> ShowApplyPatchDialogAsync(ApplyPatchDialogViewModel dialog);
 
     /// <summary>
     /// Shows the dialog that adds a chain node.
@@ -88,6 +109,23 @@ public interface IDialogService
     /// <param name="suggestedName">The suggested file name.</param>
     /// <returns>The file path, or <see langword="null"/>.</returns>
     Task<string?> PickSaveFileAsync(string title, string suggestedName);
+
+    /// <summary>
+    /// Picks where to save a patch; the picker starts in the downloads folder and sits on top of the dialog that is open.
+    /// </summary>
+    /// <param name="title">The picker title.</param>
+    /// <param name="suggestedName">The suggested file name.</param>
+    /// <param name="fileType">The name of the type of the file.</param>
+    /// <returns>The file path, or <see langword="null"/>.</returns>
+    Task<string?> PickPatchToSaveAsync(string title, string suggestedName, string fileType);
+
+    /// <summary>
+    /// Picks a patch file to open.
+    /// </summary>
+    /// <param name="title">The picker title.</param>
+    /// <param name="fileType">The name of the type of the file.</param>
+    /// <returns>The file path, or <see langword="null"/>.</returns>
+    Task<string?> PickPatchToOpenAsync(string title, string fileType);
 
     /// <summary>
     /// Shows the window about the application.

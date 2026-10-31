@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- External merge tools: the catalog of known ones, finding them on the machine and starting them. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\RCynQ.Core\RCynQ.Core.csproj" />
+    <ProjectReference Include="..\RCynQ.Git\RCynQ.Git.csproj" />
+  </ItemGroup>
+
+</Project>

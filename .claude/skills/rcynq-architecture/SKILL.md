@@ -22,6 +22,7 @@ Full design: `Docs/En/Architecture.md`; setup from scratch: `Docs/En/SetupGuide.
 | `Core/RCynQ.Core.Data*` | EF Core (`RCynQDbContext`) + FluentMigrator SQL migrations (SQLite) |
 | `Infrastructure/RCynQ.Git` | Git commands, bundles, manifests, patch building |
 | `Infrastructure/RCynQ.Ssh` | ssh commands, local forwards, `authorized_keys` restrictions, host key pinning |
+| `Infrastructure/RCynQ.MergeTools` | catalog of external merge tools, finding them (`PATH`, usual places, `vswhere`, `git config merge.tool`), starting them without a shell |
 | `Transports/*` | links to neighbours (`Direct`, `AmneziaWG`) and their state |
 | `Sync/RCynQ.Sync` | patches, sync base, Git channel, repositories catalog, routes (`Routing/`), diagnostics and auto-fixes |
 | `Apps/RCynQ.Service` | local HTTP API (loopback, token), SignalR events, role pipelines (`WorkstationPipeline`, `OriginPipeline`, `RelayPipeline`) |

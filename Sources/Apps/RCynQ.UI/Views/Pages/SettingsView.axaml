@@ -3,6 +3,7 @@
              xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:vm="using:RCynQ.UI.ViewModels"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Views.Controls"
              x:Class="RCynQ.UI.Views.Pages.SettingsView"
              x:DataType="pages:SettingsViewModel">
@@ -19,6 +20,45 @@
                        IsVisible="{Binding Language.HasError}" Text="{Binding Language.Error}" />
             <TextBlock Classes="muted mono" FontSize="12" TextWrapping="Wrap"
                        IsVisible="{Binding HasSettingsPath}" Text="{Binding StoredInText}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- The merge tool conflicts are resolved in: a tool found on the machine, or one the user describes. -->
+      <StackPanel IsVisible="{Binding HasMergeTool}">
+        <TextBlock Classes="section" Text="{loc:Loc Settings.MergeTool.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10" DataContext="{Binding MergeTool}" x:DataType="vm:MergeToolSettingsViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox MinWidth="320" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" IsEnabled="{Binding !IsScanning}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="items:MergeToolOptionViewModel">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <Button Classes="outline" Content="{loc:Loc Settings.MergeTool.Rescan}" Command="{Binding RescanCommand}"
+                      IsEnabled="{Binding !IsScanning}" />
+            </StackPanel>
+            <TextBlock Classes="muted mono" FontSize="12" TextWrapping="Wrap" Text="{Binding PathText}" IsVisible="{Binding !IsCustom}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.Scanning}" IsVisible="{Binding IsScanning}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.NoneFound}" IsVisible="{Binding HasNoTools}" />
+
+            <!-- A tool that is not in the catalog: its executable and the template of its arguments. -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsCustom}">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Classes="outline" Margin="8,0,0,0" Content="{loc:Loc Settings.MergeTool.Browse}"
+                        Command="{Binding BrowseCommand}" />
+                <TextBox Text="{Binding CustomPath}" PlaceholderText="{loc:Loc Settings.MergeTool.PathWatermark}" />
+              </DockPanel>
+              <TextBox Classes="mono" Text="{Binding CustomArguments}" PlaceholderText="{loc:Loc Settings.MergeTool.ArgumentsWatermark}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.ArgumentsHint}" />
+              <Button Classes="outline" HorizontalAlignment="Left" Content="{loc:Loc Settings.MergeTool.Save}" Command="{Binding SaveCustomCommand}" />
+            </StackPanel>
+
+            <TextBlock Classes="danger" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SavedText}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.Hint}" />
           </StackPanel>
         </Border>
       </StackPanel>

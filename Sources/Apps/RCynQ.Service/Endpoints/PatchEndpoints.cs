@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -45,6 +46,9 @@ public static class PatchEndpoints
         app.MapGet(ApiRoutes.PATCH_DIFF, GetDiffAsync);
         app.MapPost(ApiRoutes.RESOLVE_PATCH, ResolveAsync);
         app.MapPost(ApiRoutes.SEND_PATCH, SendAsync);
+        app.MapPost(ApiRoutes.PATCH_FILE, BuildFileAsync);
+        app.MapPost(ApiRoutes.PATCH_FILE_READ, ReadFileAsync);
+        app.MapPost(ApiRoutes.PATCH_FILE_APPLY, ApplyFileAsync);
         app.MapPost(ApiRoutes.BASELINE, BaselineAsync);
         app.MapGet(ApiRoutes.HISTORY, async (ISyncHistoryRepository history, int? take, CancellationToken ct) => Results.Ok(await history.GetRecentAsync(Math.Clamp(take ?? 100, 1, 1000), ct)));
         return app;
@@ -306,6 +310,96 @@ public static class PatchEndpoints
         }
         catch (Exception ex) when (IsNodeFailure(ex))
         {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /patches/file</c>: builds the patch file of the changed files.
+    /// </summary>
+    /// <param name="request">The optional body naming the files; without it every changed file is taken.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The bytes of the patch, or the reason there are none.</returns>
+    private static async Task<IResult> BuildFileAsync(BuildPatchFileRequest? request, NodeConfig node, IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!node.ParticipatesInPatchChannel)
+        {
+            return NotFound(localizer.Format("Patch.NoChannel", node.Role));
+        }
+
+        try
+        {
+            return Results.File(await patches.BuildPatchFileAsync(request?.Paths, cancellationToken), "text/x-diff; charset=utf-8");
+        }
+        catch (Exception ex) when (IsNodeFailure(ex))
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /patches/file/read</c>: lists the files of a patch file.
+    /// </summary>
+    /// <param name="request">The body with the patch.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The files, or the reason the patch cannot be used.</returns>
+    private static async Task<IResult> ReadFileAsync(ReadPatchFileRequest request, NodeConfig node, IPatchService patches, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!node.ParticipatesInPatchChannel)
+        {
+            return NotFound(localizer.Format("Patch.NoChannel", node.Role));
+        }
+
+        try
+        {
+            return Results.Ok(await patches.ReadPatchFileAsync(request.Content, cancellationToken));
+        }
+        catch (Exception ex) when (IsNodeFailure(ex) || ex is ArgumentException)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /patches/file/apply</c>: brings a patch file into the working tree or takes it out, and leaves a
+    /// note in the log of the node, as for everything that changes files from outside.
+    /// </summary>
+    /// <param name="request">The body with the patch.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="patches">The patch service.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>How it ended, or the reason the request cannot be used.</returns>
+    private static async Task<IResult> ApplyFileAsync(ApplyPatchFileRequest request, NodeConfig node, IPatchService patches, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!node.ParticipatesInPatchChannel)
+        {
+            return NotFound(localizer.Format("Patch.NoChannel", node.Role));
+        }
+
+        var logger = loggers.CreateLogger(LOGGER_CATEGORY);
+        try
+        {
+            var result = await patches.ApplyPatchFileAsync(request.Content, request.Paths, request.Reverse, cancellationToken);
+            logger.LogInformation(
+                "Patch file {Hash} of {Length} bytes, reverse {Reverse}, chosen files {Chosen}: succeeded {Succeeded}.",
+                Convert.ToHexStringLower(SHA256.HashData(request.Content)),
+                request.Content.Length,
+                request.Reverse,
+                request.Paths?.Count,
+                result.Succeeded);
+            return Results.Ok(result);
+        }
+        catch (Exception ex) when (IsNodeFailure(ex) || ex is ArgumentException)
+        {
+            logger.LogWarning("Refused a patch file: {Error}", ex.Message);
             return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }
     }

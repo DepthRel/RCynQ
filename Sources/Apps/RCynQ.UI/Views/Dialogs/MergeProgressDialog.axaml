@@ -1,0 +1,38 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     x:Class="RCynQ.UI.Views.Dialogs.MergeProgressDialog"
+                     x:DataType="vm:MergeProgressDialogViewModel"
+                     Title="{Binding Title}"
+                     Width="560" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <TextBlock Classes="page-title" Text="{Binding Title}" TextWrapping="Wrap" />
+    <TextBlock Classes="mono" FontSize="12.5" Text="{Binding FileText}" TextWrapping="Wrap" />
+    <TextBlock Classes="secondary" Text="{Binding StatusText}" TextWrapping="Wrap" IsVisible="{Binding !IsAsking}" />
+
+    <!-- A question of the merge: the file is not saved, markers are left, the tool did not start, the service failed. -->
+    <Border Classes="card" IsVisible="{Binding IsAsking}">
+      <StackPanel Margin="16,14" Spacing="12">
+        <TextBlock Text="{Binding QuestionText}" TextWrapping="Wrap" />
+        <ItemsControl ItemsSource="{Binding Options}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:MergePromptOptionViewModel">
+              <Button Classes="outline" Margin="0,0,8,8" Content="{Binding Text}" Command="{Binding ChooseCommand}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <Button Classes="outline" HorizontalAlignment="Right" Content="{loc:Loc MergeTool.CancelMerge}" IsCancel="True"
+            Command="{Binding CancelCommand}" />
+  </StackPanel>
+</dialogs:DialogWindow>

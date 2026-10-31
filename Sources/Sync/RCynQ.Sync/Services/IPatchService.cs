@@ -1,3 +1,4 @@
+using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
 using RCynQ.Core.Patches;
@@ -136,4 +137,33 @@ public interface IPatchService
     /// <returns>The recorded snapshot.</returns>
     /// <exception cref="SyncBridgeException">The working tree is a Git repository, is missing, or the snapshot failed.</exception>
     Task<SnapshotInfo> RebuildBaselineAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Builds the patch file of the changed files of the working tree.
+    /// </summary>
+    /// <param name="paths">The relative paths of the files, or <see langword="null"/> for every changed file.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The bytes of the patch; empty when there is nothing to save.</returns>
+    /// <exception cref="SyncBridgeException">The node has no working tree or no sync base, or Git failed.</exception>
+    Task<byte[]> BuildPatchFileAsync(IReadOnlyCollection<string>? paths = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the files a patch file changes.
+    /// </summary>
+    /// <param name="patch">The bytes of the patch.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The files, in the order of the patch.</returns>
+    /// <exception cref="SyncBridgeException">The node has no working tree, or the bytes hold no patch or are too many.</exception>
+    Task<IReadOnlyList<ChangedFile>> ReadPatchFileAsync(byte[] patch, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Brings a patch file into the working tree without committing it, or takes it out again.
+    /// </summary>
+    /// <param name="patch">The bytes of the patch.</param>
+    /// <param name="paths">The files of the patch to use, or <see langword="null"/> for all of them.</param>
+    /// <param name="reverse">Whether the changes are taken out instead of brought in.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>How it ended; when it failed, the working tree stayed as it was.</returns>
+    /// <exception cref="SyncBridgeException">The node has no working tree, or the choice of files or the patch cannot be used.</exception>
+    Task<PatchFileApplyResult> ApplyPatchFileAsync(byte[] patch, IReadOnlyCollection<string>? paths, bool reverse, CancellationToken cancellationToken = default);
 }

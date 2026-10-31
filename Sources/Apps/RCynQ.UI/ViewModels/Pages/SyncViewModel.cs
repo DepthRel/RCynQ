@@ -5,9 +5,12 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.MergeTools;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Commits;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Formatting;
@@ -26,14 +29,8 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <summary>The number of patches the collapsed history shows.</summary>
     public const int COLLAPSED_HISTORY_ROWS = 3;
 
-    /// <summary>The name of the interface setting that keeps how the changed files are laid out.</summary>
-    public const string FILES_VIEW_SETTING = "syncFilesView";
-
-    /// <summary>The value of <see cref="FILES_VIEW_SETTING"/> for the tree of folders.</summary>
-    private const string TREE_VIEW_VALUE = "tree";
-
-    /// <summary>The value of <see cref="FILES_VIEW_SETTING"/> for the flat list of paths.</summary>
-    private const string FLAT_VIEW_VALUE = "flat";
+    /// <summary>The name the file picker suggests for a patch.</summary>
+    public const string PATCH_FILE_NAME = "changes.patch";
 
     /// <summary>The API client.</summary>
     private readonly IServiceApiClient _api;
@@ -43,6 +40,12 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
 
     /// <summary>The store of the interface settings, or <see langword="null"/> when the choices are not kept.</summary>
     private readonly IUiSettingsStore? _uiSettings;
+
+    /// <summary>The merge tools of the machine, or <see langword="null"/> when merging in a tool is not offered.</summary>
+    private readonly IMergeToolPreferences? _mergeTools;
+
+    /// <summary>Runs a merge in a merge tool, or <see langword="null"/> when merging in a tool is not offered.</summary>
+    private readonly ExternalMergeCoordinator? _merges;
 
     /// <summary>The folders the user closed in the tree, by path.</summary>
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
@@ -119,17 +122,29 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <param name="api">The API client.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="uiSettings">The store that keeps how the changed files are laid out, or <see langword="null"/>.</param>
-    public SyncViewModel(ILocalizer localizer, IServiceApiClient api, IDialogService dialogs, IUiSettingsStore? uiSettings = null)
+    /// <param name="mergeTools">The merge tools of the machine, or <see langword="null"/> when merging in a tool is not offered.</param>
+    /// <param name="merges">Runs a merge in a merge tool, or <see langword="null"/> when merging in a tool is not offered.</param>
+    public SyncViewModel(
+        ILocalizer localizer,
+        IServiceApiClient api,
+        IDialogService dialogs,
+        IUiSettingsStore? uiSettings = null,
+        IMergeToolPreferences? mergeTools = null,
+        ExternalMergeCoordinator? merges = null)
         : base(localizer)
     {
         _api = api;
         _dialogs = dialogs;
         _uiSettings = uiSettings;
-        _isTreeView = string.Equals(uiSettings?.Get(FILES_VIEW_SETTING), TREE_VIEW_VALUE, StringComparison.OrdinalIgnoreCase);
+        _mergeTools = mergeTools;
+        _merges = merges;
+        _isTreeView = ChangedFilesLayoutSetting.IsTree(uiSettings);
         ChangedFiles.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(HasNoChangedFiles));
             OnPropertyChanged(nameof(CountText));
+            OnPropertyChanged(nameof(CanSavePatch));
+            SavePatchCommand.NotifyCanExecuteChanged();
         };
         Rows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMatches));
         History.CollectionChanged += (_, _) =>
@@ -191,6 +206,9 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
 
     /// <summary>Gets a value indicating whether the send button can be pressed: with check marks at least one file has to be checked.</summary>
     public bool CanSend => !IsSelectionMode || SelectedCount > 0;
+
+    /// <summary>Gets a value indicating whether a patch can be saved: there has to be a changed file.</summary>
+    public bool CanSavePatch => ChangedFiles.Count > 0;
 
     /// <summary>Gets the number of files next to the title of the list, or an empty text when there are none.</summary>
     public string CountText
@@ -371,6 +389,64 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     }
 
     /// <summary>
+    /// Opens the dialog that saves the changes to a patch file.
+    /// </summary>
+    /// <returns>A task that completes when the dialog is closed.</returns>
+    [RelayCommand(CanExecute = nameof(CanSavePatch))]
+    private Task SavePatchAsync() => _dialogs.ShowSavePatchDialogAsync(new SavePatchDialogViewModel(WritePatchAsync));
+
+    /// <summary>
+    /// Asks where to save and writes the patch of the checked files, or of all of them when none is checked. The changes
+    /// leave the working branch only after the file is written.
+    /// </summary>
+    /// <param name="keepChanges">Whether the changes stay in the working branch.</param>
+    /// <returns><see langword="false"/> when the user gave up on the file picker.</returns>
+    private async Task<bool> WritePatchAsync(bool keepChanges)
+    {
+        var file = await _dialogs.PickPatchToSaveAsync(Localizer.Get("SavePatch.Title"), PATCH_FILE_NAME, Localizer.Get("PatchFile.FileType"));
+        if (file is null)
+        {
+            return false;
+        }
+
+        var selected = ChangedFiles.Where(item => item.IsSelected).Select(item => item.Path).ToArray();
+        var saved = await RunSafeAsync(async () =>
+        {
+            var patch = await _api.BuildPatchFileAsync(selected.Length > 0 ? selected : null);
+            if (patch.Length == 0)
+            {
+                InfoMessage = Localizer.Get("SavePatch.Nothing");
+                return;
+            }
+
+            await File.WriteAllBytesAsync(file, patch);
+            if (keepChanges)
+            {
+                SuccessMessage = Localizer.Format("SavePatch.Saved", file);
+                return;
+            }
+
+            var removed = await _api.ApplyPatchFileAsync(patch, null, reverse: true);
+            if (removed.Succeeded)
+            {
+                SuccessMessage = Localizer.Format("SavePatch.SavedAndRemoved", file);
+            }
+            else
+            {
+                ErrorMessage = Localizer.Format("SavePatch.SavedNotRemoved", file, removed.Message);
+            }
+        });
+
+        if (saved)
+        {
+            NotifyDataChanged();
+            await RefreshAsync();
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Switches the check marks in front of the files on or off; switching them off forgets the choice, so everything is sent again.
     /// </summary>
     [RelayCommand]
@@ -498,14 +574,7 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     partial void OnIsTreeViewChanged(bool value)
     {
         RebuildRows();
-        try
-        {
-            _uiSettings?.Set(FILES_VIEW_SETTING, value ? TREE_VIEW_VALUE : FLAT_VIEW_VALUE);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Only the choice for the next start is lost; the list is already laid out.
-        }
+        ChangedFilesLayoutSetting.Save(_uiSettings, value);
     }
 
     /// <summary>
@@ -650,16 +719,23 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
             return;
         }
 
-        var dialog = new ConflictDialogViewModel(Localizer, item.Id, item.Patch.SourceNode.Value, item.Patch.Conflicts);
-        var policy = await _dialogs.ShowConflictDialogAsync(dialog);
-        if (policy is null)
+        var (tools, preferred) = await FindMergeToolsAsync();
+        var dialog = new ConflictDialogViewModel(Localizer, item.Id, item.Patch.SourceNode.Value, item.Patch.Conflicts, tools, preferred);
+        var choice = await _dialogs.ShowConflictDialogAsync(dialog);
+        if (choice?.Tool is { } tool)
+        {
+            await MergeInToolAsync(item, tool);
+            return;
+        }
+
+        if (choice?.Policy is not { } policy)
         {
             return;
         }
 
         if (await RunSafeAsync(async () =>
         {
-            var result = await _api.ResolvePatchAsync(item.Id, policy.Value);
+            var result = await _api.ResolvePatchAsync(item.Id, policy);
             InfoMessage = result.Status switch
             {
                 // A merge that left conflict markers is done, but the files it names still need an edit.
@@ -675,6 +751,75 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
             NotifyDataChanged();
             await RefreshAsync();
         }
+    }
+
+    /// <summary>
+    /// Finds the merge tools the conflict dialog offers, and the one of the settings.
+    /// </summary>
+    /// <returns>The tools and the preferred one; none when merging in a tool is not available.</returns>
+    private async Task<(IReadOnlyList<MergeTool> Tools, MergeTool? Preferred)> FindMergeToolsAsync()
+    {
+        if (_mergeTools is null || _merges is null)
+        {
+            return (Array.Empty<MergeTool>(), null);
+        }
+
+        try
+        {
+            return (await _mergeTools.GetToolsAsync(), await _mergeTools.GetDefaultAsync());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The search failed: the conflict is still resolved with the other choices.
+            return (Array.Empty<MergeTool>(), null);
+        }
+    }
+
+    /// <summary>
+    /// Merges a conflicting patch in a merge tool, in the window of the merge, and reports how it ended.
+    /// </summary>
+    /// <param name="item">The patch.</param>
+    /// <param name="tool">The merge tool.</param>
+    /// <returns>A task that completes when the merge has ended.</returns>
+    private async Task MergeInToolAsync(PatchHistoryItemViewModel item, MergeTool tool)
+    {
+        var merges = _merges!;
+        var progress = new MergeProgressDialogViewModel(Localizer, tool.Name, (sink, token) => merges.RunAsync(item.Id, tool, sink, token));
+        var outcome = await _dialogs.ShowMergeProgressAsync(progress);
+        if (outcome is null)
+        {
+            return;
+        }
+
+        switch (outcome.Kind)
+        {
+            case ExternalMergeOutcomeKind.Completed when outcome.Result is { Status: PatchStatus.ConflictResolved }:
+                if (outcome.FilesWithMarkers.Count > 0)
+                {
+                    InfoMessage = Localizer.Format("Sync.ResolvedWithMarkers", outcome.FilesWithMarkers.Count, string.Join(", ", outcome.FilesWithMarkers));
+                }
+                else
+                {
+                    SuccessMessage = Localizer.Format("Sync.ResolvedInTool", tool.Name);
+                }
+
+                break;
+            case ExternalMergeOutcomeKind.Completed:
+                ErrorMessage = LocalizedText.Render(outcome.Result?.Error, Localizer) ?? outcome.Result?.Status.ToString();
+                break;
+            case ExternalMergeOutcomeKind.Unmergeable:
+                ErrorMessage = Localizer.Format("MergeTool.Unmergeable", outcome.Unmergeable.Count, string.Join(", ", outcome.Unmergeable.Select(file => file.Path)));
+                break;
+            case ExternalMergeOutcomeKind.Cancelled:
+                InfoMessage = Localizer.Get("MergeTool.Cancelled");
+                break;
+            default:
+                ErrorMessage = outcome.Message;
+                break;
+        }
+
+        NotifyDataChanged();
+        await RefreshAsync();
     }
 
     /// <summary>

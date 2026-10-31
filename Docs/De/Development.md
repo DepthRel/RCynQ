@@ -31,11 +31,12 @@ Projektverweise.
 | RCynQ.Core.Data.Tests | Migrationen, Repositories, Speicher, Dateirechte des Datenordners |
 | RCynQ.Git.Tests | Git-Befehle, Bundles, Erstellung von Patches, Hashes, `.gitignore`, der Export eines Repositorys, das Remote der Arbeitskopie, Integration mit einem echten Git |
 | RCynQ.Ssh.Tests | SSH-Befehle, Portweiterleitungen, Einschränkungen in `authorized_keys`, Festlegen von Hostschlüsseln, `known_hosts`, die Konfigurationsdatei des Clients |
+| RCynQ.MergeTools.Tests | der Katalog der Merge-Tools, ihre Suche an üblichen Orten, in `PATH`, über `vswhere` und in der Git-Konfiguration, die Vorlagen ihrer Argumente, ihr Start |
 | RCynQ.Transports.Tests | Transporte und der Verbindungsmanager, die Prüfung eines Endpunkts |
-| RCynQ.Sync.Tests | Patches (Signatur, Wiederholung, Zustellung, Anwenden ganz oder gar nicht, Konflikte und Git-Merge), die Synchronisationsbasis, der Git-Kanal, Repositories, Routen und ihre Auswahl, Diagnose, Übertragung der Konfiguration, Aufbewahrung der Daten |
+| RCynQ.Sync.Tests | Patches (Signatur, Wiederholung, Zustellung, Anwenden ganz oder gar nicht, Konflikte, Git-Merge und Merge-Sitzungen für ein Merge-Tool), die Synchronisationsbasis, der Git-Kanal, Repositories, Routen und ihre Auswahl, Diagnose, Übertragung der Konfiguration, Aufbewahrung der Daten |
 | RCynQ.Service.Tests | die lokale HTTP-API, ihr Token und öffentliche Endpunkte, die Startreihenfolge, Pull, Senden und Ping zwischen zwei Diensten von Ende zu Ende, Repositories von Ende zu Ende |
 | RCynQ.Cli.Tests | die Befehle von `rcynq` und ihre Ausgabe |
-| RCynQ.UI.Tests | View-Models, Dialoge, das Fenster „Über RCynQ“ und der Problembrief, der Controller des Dienstprozesses, der API-Client, die Speicher für Sprache und Einstellungen |
+| RCynQ.UI.Tests | View-Models, Dialoge, das Fenster „Über RCynQ“ und der Problembrief, der Controller des Dienstprozesses, der API-Client, die Speicher für Sprache und Einstellungen, das Zusammenführen in einem Merge-Tool und die Wahl des Tools |
 | RCynQ.UI.Headless.Tests | das Hauptfenster und das Fenster „Über RCynQ“ in Avalonia Headless: jeder Text ändert sich mit der Sprache sofort |
 
 Ein Test nennt die Sprache, in der seine Erwartungen geschrieben sind: `TestTexts.English` oder `TestTexts.Russian`

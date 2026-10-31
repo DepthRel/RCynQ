@@ -597,7 +597,7 @@ public sealed class SyncBaseManager
     /// <summary>
     /// Gets the comparer for paths as the file system of the node compares them.
     /// </summary>
-    private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    internal static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     /// <summary>
     /// Builds a new base in a staging directory and swaps it in place of the current one.

@@ -31,11 +31,12 @@ references.
 | RCynQ.Core.Data.Tests | migrations, repositories, storage, file permissions of the data folder |
 | RCynQ.Git.Tests | Git commands, bundles, patch building, hashes, `.gitignore`, the export of a repository, the remote of the working copy, integration with a real Git |
 | RCynQ.Ssh.Tests | SSH commands, port forwards, `authorized_keys` restrictions, host key pinning, `known_hosts`, the client configuration file |
+| RCynQ.MergeTools.Tests | the catalog of merge tools, finding them in usual places, in `PATH`, through `vswhere` and in the Git configuration, the templates of their arguments, starting them |
 | RCynQ.Transports.Tests | transports and the link manager, the probe of an endpoint |
-| RCynQ.Sync.Tests | patches (signature, replay, delivery, all-or-nothing apply, conflicts and Git merge), the sync base, the Git channel, repositories, routes and their choice, diagnostics, configuration transfer, data retention |
+| RCynQ.Sync.Tests | patches (signature, replay, delivery, all-or-nothing apply, conflicts, Git merge and merge sessions for a merge tool), the sync base, the Git channel, repositories, routes and their choice, diagnostics, configuration transfer, data retention |
 | RCynQ.Service.Tests | the local HTTP API, its token and public endpoints, the startup order, end-to-end Pull, send and ping between two services, repositories end to end |
 | RCynQ.Cli.Tests | the `rcynq` commands and their output |
-| RCynQ.UI.Tests | view models, dialogs, the window "About RCynQ" and the letter about a problem, the service process controller, the API client, the language and settings stores |
+| RCynQ.UI.Tests | view models, dialogs, the window "About RCynQ" and the letter about a problem, the service process controller, the API client, the language and settings stores, the merge in a merge tool and the choice of the tool |
 | RCynQ.UI.Headless.Tests | the main window and the window "About RCynQ" in Avalonia Headless: every text changes on the fly with the language |
 
 A test names the language its expectations are written in: `TestTexts.English` or `TestTexts.Russian`

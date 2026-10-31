@@ -21,17 +21,24 @@
         </Grid>
       </Border>
 
-      <WrapPanel IsVisible="{Binding CanPull}">
-        <Button Classes="accent" Margin="0,0,10,10" Command="{Binding PullCommand}">
+      <WrapPanel>
+        <Button Classes="accent" Margin="0,0,10,10" IsVisible="{Binding CanPull}" Command="{Binding PullCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Pull" />
             <TextBlock Text="{loc:Loc Branch.Pull}" />
           </StackPanel>
         </Button>
-        <Button Classes="outline" Margin="0,0,10,10" Command="{Binding FetchCommand}">
+        <Button Classes="outline" Margin="0,0,10,10" IsVisible="{Binding CanPull}" Command="{Binding FetchCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Download" />
             <TextBlock Text="Fetch" />
+          </StackPanel>
+        </Button>
+        <Border Classes="toolbar-divider" Margin="0,0,10,10" IsVisible="{Binding CanPull}" />
+        <Button Classes="outline" Margin="0,0,10,10" ToolTip.Tip="{loc:Loc Branch.ApplyPatchTip}" Command="{Binding ApplyPatchCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.PatchApply" />
+            <TextBlock Text="{loc:Loc Branch.ApplyPatch}" />
           </StackPanel>
         </Button>
       </WrapPanel>

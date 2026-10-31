@@ -13,6 +13,7 @@ using RCynQ.Git.Hashing;
 using RCynQ.Git.Manifest;
 using RCynQ.Git.Patches;
 using RCynQ.Git.Patches.Diff;
+using RCynQ.Git.Patches.Files;
 using RCynQ.Git.Paths;
 using RCynQ.Git.Processes;
 using RCynQ.Git.Repository;
@@ -242,7 +243,7 @@ public sealed class SyncFixture : IDisposable
     {
         var applier = Applier;
         var backups = new BackupService(OriginPaths, Paths, TimeProvider.System);
-        return new DefaultConflictResolver(applier, new GitMergeApplier(git, Paths, applier, backups), backups, OriginPaths);
+        return new DefaultConflictResolver(applier, new GitMergeApplier(new MergePlanner(git, Paths), new MergeOutcomeWriter(applier, backups)), backups, OriginPaths);
     }
 
     /// <summary>
@@ -284,7 +285,32 @@ public sealed class SyncFixture : IDisposable
             tracker,
             WorkstationLock,
             WorkstationSyncBase);
-        return new PatchService(WorkstationNode, send, resolve, Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase, repository);
+        return new PatchService(WorkstationNode, send, resolve, CreatePatchFileOperation(WorkstationNode), Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase, repository);
+    }
+
+    /// <summary>
+    /// Creates the operation on patch files of a node, on the real Git.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The operation.</returns>
+    public PatchFileOperation CreatePatchFileOperation(NodeConfig node)
+    {
+        var runner = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
+        var isWorkstation = node.Id == WorkstationNode.Id;
+        var appData = isWorkstation ? _workstationAppData : _originAppData;
+        return new PatchFileOperation(
+            TestTexts.English,
+            node,
+            isWorkstation ? WorkstationPaths : OriginPaths,
+            CreateBuilder(),
+            SyncBaseOf(node),
+            new GitPatchFileService(runner, appData),
+            new PatchDiffBuilder(new GitDiffBuilder(runner), Paths, appData),
+            Paths,
+            GitRepository,
+            CreateTracker(node),
+            LockOf(node),
+            appData);
     }
 
     /// <summary>

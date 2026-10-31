@@ -10,6 +10,7 @@ using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Merging;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.State;
 using RCynQ.Sync.SyncBase;
@@ -58,6 +59,9 @@ public sealed class PatchResolveOperation
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
+    /// <summary>The merge sessions, or <see langword="null"/> when the host keeps none.</summary>
+    private readonly MergeSessionStore? _mergeSessions;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchResolveOperation"/> class.
     /// </summary>
@@ -72,6 +76,7 @@ public sealed class PatchResolveOperation
     /// <param name="tracker">The state tracker.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="syncBase">The sync base manager.</param>
+    /// <param name="mergeSessions">The merge sessions, which end when their patch is decided here; <see langword="null"/> when the host keeps none.</param>
     public PatchResolveOperation(
         ILocalizer localizer,
         NodeConfig node,
@@ -83,9 +88,11 @@ public sealed class PatchResolveOperation
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
         WorkingTreeLock workingTreeLock,
-        SyncBaseManager syncBase)
+        SyncBaseManager syncBase,
+        MergeSessionStore? mergeSessions = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _mergeSessions = mergeSessions;
         _node = node;
         _paths = paths;
         _resolver = resolver;
@@ -158,6 +165,9 @@ public sealed class PatchResolveOperation
             if (result.Status is PatchStatus.ConflictResolved or PatchStatus.Rejected)
             {
                 await _storage.DeleteContentAsync(patchId, CancellationToken.None);
+
+                // A merge the user started in a merge tool has nothing to apply to any more.
+                _mergeSessions?.RemoveForPatch(patchId);
             }
 
             await _outcomes.RecordAsync(metadata, result, LocalizedText.Encode("Patch.ResolvedWith", policy), CancellationToken.None);

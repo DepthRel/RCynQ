@@ -1,0 +1,47 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     xmlns:lists="using:RCynQ.UI.Views.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.ApplyPatchDialog"
+                     x:DataType="vm:ApplyPatchDialogViewModel"
+                     Title="{loc:Loc ApplyPatch.Title}"
+                     Width="640" Height="540" MinWidth="460" MinHeight="340"
+                     WindowStartupLocation="CenterOwner">
+  <Grid Margin="22" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <controls:IconView IconKey="Icon.PatchApply" Width="22" Height="22" Foreground="{StaticResource AccentBrush}" />
+      <TextBlock Classes="page-title" Text="{loc:Loc ApplyPatch.Title}" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock Grid.Row="1" Classes="secondary" TextWrapping="Wrap" Text="{Binding Description}" />
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Sync.SelectAll}" Command="{Binding SelectAllCommand}" />
+        <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Sync.ClearSelection}" Command="{Binding ClearSelectionCommand}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding CountText}" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button Classes="outline tool segment-start" Classes.toggled="{Binding !IsTreeView}" Command="{Binding ShowFlatCommand}" ToolTip.Tip="{loc:Loc Sync.ViewFlat}">
+          <controls:IconView Classes="small" IconKey="Icon.List" />
+        </Button>
+        <Button Classes="outline tool segment-end" Classes.toggled="{Binding IsTreeView}" Command="{Binding ShowTreeCommand}" ToolTip.Tip="{loc:Loc Sync.ViewTree}">
+          <controls:IconView Classes="small" IconKey="Icon.Tree" />
+        </Button>
+      </StackPanel>
+    </Grid>
+
+    <Border Grid.Row="3" Classes="card">
+      <ScrollViewer>
+        <lists:ChangedRowsList Rows="{Binding Rows}" />
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="{loc:Loc ApplyPatch.Apply}" IsDefault="True" Command="{Binding ApplyCommand}" />
+    </StackPanel>
+  </Grid>
+</dialogs:DialogWindow>

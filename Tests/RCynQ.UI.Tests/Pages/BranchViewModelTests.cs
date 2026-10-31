@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using RCynQ.Core.Api;
 using RCynQ.UI.Services.Api;
+using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.ViewModels.Pages;
 
 namespace RCynQ.UI.Tests.Pages;
@@ -14,6 +15,9 @@ public sealed class BranchViewModelTests
     /// <summary>The API substitute.</summary>
     private readonly IServiceApiClient _api = Substitute.For<IServiceApiClient>();
 
+    /// <summary>The dialog substitute.</summary>
+    private readonly IDialogService _dialogs = Substitute.For<IDialogService>();
+
     /// <summary>
     /// Verifies that a Pull that succeeded shows a green message and a failed one a red message, and that each action
     /// hides the message of the previous one.
@@ -22,7 +26,7 @@ public sealed class BranchViewModelTests
     [Fact]
     public async Task Pull_Shows_A_Green_Or_A_Red_Message()
     {
-        var branch = new BranchViewModel(TestTexts.Russian, _api);
+        var branch = new BranchViewModel(TestTexts.Russian, _api, _dialogs);
         _api.PullAsync(Arg.Any<CancellationToken>()).Returns(new GitOperationResult(true, "Fast-forward", null));
 
         await branch.PullCommand.ExecuteAsync(null);
@@ -50,7 +54,7 @@ public sealed class BranchViewModelTests
     [InlineData(false)]
     public async Task Fetch_Shows_A_Green_Or_A_Red_Message(bool succeeded)
     {
-        var branch = new BranchViewModel(TestTexts.Russian, _api);
+        var branch = new BranchViewModel(TestTexts.Russian, _api, _dialogs);
         _api.FetchAsync(Arg.Any<CancellationToken>()).Returns(new GitOperationResult(succeeded, "output", null));
 
         await branch.FetchCommand.ExecuteAsync(null);
@@ -68,7 +72,7 @@ public sealed class BranchViewModelTests
     [Fact]
     public async Task Dismissing_Hides_The_Green_Message()
     {
-        var branch = new BranchViewModel(TestTexts.Russian, _api);
+        var branch = new BranchViewModel(TestTexts.Russian, _api, _dialogs);
         _api.FetchAsync(Arg.Any<CancellationToken>()).Returns(new GitOperationResult(true, "output", null));
         await branch.FetchCommand.ExecuteAsync(null);
 

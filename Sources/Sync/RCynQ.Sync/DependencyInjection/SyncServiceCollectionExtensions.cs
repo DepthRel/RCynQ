@@ -73,6 +73,8 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<SyncBaseUpdater>();
         services.TryAddSingleton<IPatchApplier>(provider => provider.GetRequiredService<ContentOverwriteApplier>());
         services.TryAddSingleton<BackupService>();
+        services.TryAddSingleton<MergePlanner>();
+        services.TryAddSingleton<MergeOutcomeWriter>();
         services.TryAddSingleton<GitMergeApplier>();
         services.TryAddSingleton<IConflictResolver, DefaultConflictResolver>();
         services.TryAddSingleton<StateTracker>();
@@ -99,6 +101,9 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<IPatchReceiver, DefaultPatchReceiver>();
         services.TryAddSingleton<PatchSendOperation>();
         services.TryAddSingleton<PatchResolveOperation>();
+        services.TryAddSingleton<PatchFileOperation>();
+        services.TryAddSingleton<Merging.MergeSessionStore>();
+        services.TryAddSingleton<MergeSessionOperation>();
         services.TryAddSingleton<IPatchService, PatchService>();
         services.TryAddSingleton(provider => ActivatorUtilities.CreateInstance<Configuration.NodeConfigurationTransfer>(
             provider,

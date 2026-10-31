@@ -1,6 +1,7 @@
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Abstractions.Storage;
+using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
@@ -29,6 +30,9 @@ public sealed class PatchService : IPatchService
     /// <summary>Resolves a patch that waits for a decision.</summary>
     private readonly PatchResolveOperation _resolve;
 
+    /// <summary>Saves, applies and removes patch files.</summary>
+    private readonly PatchFileOperation _files;
+
     /// <summary>The receiver.</summary>
     private readonly IPatchReceiver _receiver;
 
@@ -53,6 +57,7 @@ public sealed class PatchService : IPatchService
     /// <param name="node">The local node.</param>
     /// <param name="send">Sends the local changes.</param>
     /// <param name="resolve">Resolves a patch that waits for a decision.</param>
+    /// <param name="files">Saves, applies and removes patch files.</param>
     /// <param name="receiver">The receiver.</param>
     /// <param name="patches">The patch repository.</param>
     /// <param name="storage">The payload storage.</param>
@@ -63,6 +68,7 @@ public sealed class PatchService : IPatchService
         NodeConfig node,
         PatchSendOperation send,
         PatchResolveOperation resolve,
+        PatchFileOperation files,
         IPatchReceiver receiver,
         IPatchRepository patches,
         IPatchFileStorage storage,
@@ -74,6 +80,7 @@ public sealed class PatchService : IPatchService
         _node = node;
         _send = send;
         _resolve = resolve;
+        _files = files;
         _receiver = receiver;
         _patches = patches;
         _storage = storage;
@@ -188,16 +195,7 @@ public sealed class PatchService : IPatchService
     /// </summary>
     /// <param name="patch">The patch.</param>
     /// <returns><see langword="true"/> when the patch belongs to that repository, or the node has one repository only.</returns>
-    private bool Belongs(PatchMetadata patch)
-    {
-        if (_repository?.Current is not { } current || _repository.Entries.Count <= 1)
-        {
-            return true;
-        }
-
-        // A patch without a name was exchanged before the node knew the name: it is of the repository the node started with.
-        return patch.Repository is null ? current.Id == RepositoryEntry.DefaultId : current.IsNamed(patch.Repository);
-    }
+    private bool Belongs(PatchMetadata patch) => PatchRepositoryMembership.Belongs(_repository, patch);
 
     /// <summary>
     /// Counts the incoming patches of the repository the node works with that wait for a decision about a conflict.
@@ -230,4 +228,16 @@ public sealed class PatchService : IPatchService
         await PatchOperations.RefreshQuietlyAsync(() => _tracker.RefreshAsync(cancellationToken));
         return snapshot;
     }
+
+    /// <inheritdoc />
+    public Task<byte[]> BuildPatchFileAsync(IReadOnlyCollection<string>? paths = null, CancellationToken cancellationToken = default)
+        => _files.BuildAsync(paths, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ChangedFile>> ReadPatchFileAsync(byte[] patch, CancellationToken cancellationToken = default)
+        => _files.ReadAsync(patch, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PatchFileApplyResult> ApplyPatchFileAsync(byte[] patch, IReadOnlyCollection<string>? paths, bool reverse, CancellationToken cancellationToken = default)
+        => _files.ApplyAsync(patch, paths, reverse, cancellationToken);
 }

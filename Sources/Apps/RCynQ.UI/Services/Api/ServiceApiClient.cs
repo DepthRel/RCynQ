@@ -86,11 +86,42 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         => PostAsync<SendPatchResult>(ApiRoutes.SEND_PATCH, paths is null ? null : new SendPatchRequest(paths), cancellationToken, longRunning: true);
 
     /// <inheritdoc />
+    public async Task<byte[]> BuildPatchFileAsync(IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
+    {
+        using var response = await _long.PostAsJsonAsync(ApiRoutes.PATCH_FILE, new BuildPatchFileRequest(paths), _json, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ChangedFile>> ReadPatchFileAsync(byte[] content, CancellationToken cancellationToken = default)
+        => await PostAsync<ChangedFile[]>(ApiRoutes.PATCH_FILE_READ, new ReadPatchFileRequest(content), cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public Task<PatchFileApplyResult> ApplyPatchFileAsync(byte[] content, IReadOnlyList<string>? paths, bool reverse, CancellationToken cancellationToken = default)
+        => PostAsync<PatchFileApplyResult>(ApiRoutes.PATCH_FILE_APPLY, new ApplyPatchFileRequest(content, paths, reverse), cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
     public Task<SnapshotInfo> CreateBaselineAsync(CancellationToken cancellationToken = default) => PostAsync<SnapshotInfo>(ApiRoutes.BASELINE, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
     public Task<PatchApplyResult> ResolvePatchAsync(Guid patchId, ConflictPolicy policy, CancellationToken cancellationToken = default)
         => PostAsync<PatchApplyResult>(ApiRoutes.ResolvePatchPath(patchId), new ResolvePatchRequest(policy), cancellationToken);
+
+    /// <inheritdoc />
+    public Task<MergeSessionResponse> PrepareMergeAsync(Guid patchId, CancellationToken cancellationToken = default)
+        => PostAsync<MergeSessionResponse>(ApiRoutes.PatchMergeSessionsPath(patchId), null, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public Task<PatchApplyResult> CompleteMergeAsync(Guid sessionId, string toolName, CancellationToken cancellationToken = default)
+        => PostAsync<PatchApplyResult>(ApiRoutes.MergeSessionCompletePath(sessionId), new CompleteMergeSessionRequest(toolName), cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
+    public async Task CancelMergeAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync(ApiRoutes.MergeSessionPath(sessionId), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<LinkDto>> GetLinksAsync(CancellationToken cancellationToken = default) => await GetAsync<LinkDto[]>(ApiRoutes.LINKS, cancellationToken);

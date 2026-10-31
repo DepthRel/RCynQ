@@ -4,17 +4,26 @@ using RCynQ.Core.Api;
 using RCynQ.Core.State;
 using RCynQ.Localization;
 using RCynQ.UI.Services.Api;
+using RCynQ.UI.Services.Configuration;
+using RCynQ.UI.Services.Dialogs;
+using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Repositories;
 
 namespace RCynQ.UI.ViewModels.Pages;
 
 /// <summary>
-/// The branches tab: current branch, divergence from Origin and pull.
+/// The branches tab: current branch, divergence from Origin, pull and applying a patch file.
 /// </summary>
 public sealed partial class BranchViewModel : PageViewModelBase
 {
     /// <summary>The API client.</summary>
     private readonly IServiceApiClient _api;
+
+    /// <summary>The dialog service.</summary>
+    private readonly IDialogService _dialogs;
+
+    /// <summary>The store of the interface settings, or <see langword="null"/> when the choices are not kept.</summary>
+    private readonly IUiSettingsStore? _uiSettings;
 
     /// <summary>The last branch information, or <see langword="null"/> before the first reply of the service.</summary>
     private GitBranchInfo? _branch;
@@ -57,10 +66,14 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// </summary>
     /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="api">The API client.</param>
-    public BranchViewModel(ILocalizer localizer, IServiceApiClient api)
+    /// <param name="dialogs">The dialog service.</param>
+    /// <param name="uiSettings">The store that keeps how lists of files are laid out, or <see langword="null"/>.</param>
+    public BranchViewModel(ILocalizer localizer, IServiceApiClient api, IDialogService dialogs, IUiSettingsStore? uiSettings = null)
         : base(localizer)
     {
         _api = api;
+        _dialogs = dialogs;
+        _uiSettings = uiSettings;
     }
 
     /// <summary>
@@ -102,6 +115,49 @@ public sealed partial class BranchViewModel : PageViewModelBase
     /// <returns>A task representing the operation.</returns>
     [RelayCommand]
     private Task FetchAsync() => RunSafeAsync(async () => Show(await _api.FetchAsync(), "Branch.FetchSucceeded", "Branch.FetchFailed"));
+
+    /// <summary>
+    /// Asks for a patch file and its files, and brings the chosen ones into the working branch without committing them.
+    /// </summary>
+    /// <returns>A task representing the operation.</returns>
+    [RelayCommand]
+    private async Task ApplyPatchAsync()
+    {
+        var file = await _dialogs.PickPatchToOpenAsync(Localizer.Get("ApplyPatch.OpenTitle"), Localizer.Get("PatchFile.FileType"));
+        if (file is null)
+        {
+            return;
+        }
+
+        await RunSafeAsync(async () =>
+        {
+            if (new FileInfo(file).Length > ApiLimits.MAX_PATCH_FILE_BYTES)
+            {
+                ErrorMessage = Localizer.Format("PatchFile.TooLarge", ApiLimits.MAX_PATCH_FILE_BYTES / (1024 * 1024));
+                return;
+            }
+
+            var patch = await File.ReadAllBytesAsync(file);
+            var files = await _api.ReadPatchFileAsync(patch);
+            var dialog = new ApplyPatchDialogViewModel(Localizer, Path.GetFileName(file), files, _uiSettings);
+            if (!await _dialogs.ShowApplyPatchDialogAsync(dialog))
+            {
+                return;
+            }
+
+            var result = await _api.ApplyPatchFileAsync(patch, dialog.ChosenPaths, reverse: false);
+            Output = result.Output;
+            NotifyDataChanged();
+            if (result.Succeeded)
+            {
+                SuccessMessage = result.Message;
+            }
+            else
+            {
+                ErrorMessage = result.Message;
+            }
+        });
+    }
 
     /// <summary>
     /// Shows the result of a Git operation: its output, the branch after it and a green or red message.

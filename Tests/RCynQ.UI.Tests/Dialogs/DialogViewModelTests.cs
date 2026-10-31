@@ -46,11 +46,11 @@ public sealed class DialogViewModelTests
         dialog.CloseRequested += (_, confirmed) => closed = confirmed;
 
         dialog.UseGitCommand.Execute(null);
-        dialog.Result.Should().Be(ConflictPolicy.UseGit);
+        dialog.Result.Should().Be(new ConflictChoice(ConflictPolicy.UseGit, null));
         closed.Should().BeTrue();
 
         dialog.KeepLocalCommand.Execute(null);
-        dialog.Result.Should().Be(ConflictPolicy.KeepLocal);
+        dialog.Result.Should().Be(new ConflictChoice(ConflictPolicy.KeepLocal, null));
 
         dialog.CancelCommand.Execute(null);
         dialog.Result.Should().BeNull();
