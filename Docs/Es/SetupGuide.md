@@ -158,7 +158,7 @@ Los archivos no contienen claves privadas. Pásalos por un canal de confianza.
 
 Tras cada importación RCynQ ofrece permitir la clave del vecino.
 
-- **Variante A:** confirma. En Windows confirma también la petición de administrador. La clave solo puede reenviar un puerto y no puede ejecutar comandos.
+- **Variante A:** confirma. En Windows confirma también la petición de administrador. La clave solo puede reenviar puertos a lo largo de la cadena y no puede ejecutar comandos.
 - **Variante B:** no hay nada que hacer; no hay servidor SSH que configurar.
 
 Si lo rechazaste, pulsa **Rol y nodos → Permitir conexiones de nodos**.
@@ -228,6 +228,29 @@ Si el árbol de trabajo del Origin tiene cambios, los commits esperan allí: oc�
 **Deshacer commits** deshace los commits sin enviar más recientes, como `git reset`: Soft deja sus cambios en el índice, Mixed en el árbol de trabajo y Hard los descarta. Solo funciona si el árbol de trabajo no tiene cambios.
 
 Línea de comandos: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, en el Origin `rcynq commits apply <id>` y `rcynq commits decline <id>`. En `syncbridge.json` el interruptor es `AcceptCommits`.
+
+## 13. Archivos de parche
+
+Los cambios no tienen por qué enviarse enseguida. Un archivo `.patch` corriente los guarda para más tarde, en la Workstation y en el Origin.
+
+1. **Sincronización → Guardar** escribe los archivos marcados en un archivo de parche, o todos si no hay ninguno marcado. `git apply` también entiende ese archivo.
+2. Con **Conservar los cambios en la rama de trabajo** desactivado, los cambios guardados salen del árbol de trabajo en cuanto se escribe el archivo.
+3. **Ramas → Aplicar patch** devuelve un parche: elige sus archivos en una lista plana o en un árbol y pulsa **Aplicar**. Nada pasa al índice ni a un commit: el resultado aparece como cambios locales corrientes.
+
+Un parche encaja entero o no cambia nada, y RCynQ dice por qué. Un archivo de parche no llega por sí solo al otro nodo: aplícalo y envía los cambios como siempre.
+
+Línea de comandos: `rcynq patch save <file> [--path <file>]... [--discard] [--force]`, `rcynq patch files <file>`, `rcynq patch apply <file> [--path <file>]...`.
+
+## 14. Conflictos y herramienta de fusión
+
+Cuando un parche entrante se encuentra con cambios locales en los mismos archivos, RCynQ los muestra archivo por archivo y pregunta qué hacer: **Conservar los cambios locales**, **Aplicar lo entrante sobre lo local** (se hace copia de seguridad de los archivos reemplazados), **Usar Git** (una fusión a tres bandas) o resolver el conflicto en una herramienta de fusión.
+
+1. **Ajustes → Herramienta de fusión** elige la herramienta: RCynQ encuentra las conocidas en el equipo, y **Otra herramienta…** describe cualquier otra por su programa y sus argumentos.
+2. En la ventana del conflicto elige resolverlo en la herramienta. Los cambios en lugares distintos se fusionan solos; los archivos cuyas ediciones chocan se abren uno por uno. Fusiona el archivo, guárdalo y cierra la herramienta.
+
+No se escribe nada hasta que todos los archivos estén fusionados.
+
+Línea de comandos: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; una herramienta de fusión solo se usa desde la aplicación.
 
 ## Actualizar desde una versión anterior
 

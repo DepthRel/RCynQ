@@ -7,7 +7,8 @@ RCynQ {version} ({runtime}): Remote Code sYNchronization, Quick
 [win] Командная строка: cli\rcynq.exe (запустите «rcynq --help»).
 [unix] Командная строка: cli/rcynq (запустите «rcynq --help»).
 Настройки хранятся в папке config, а все данные (ключи, база, журналы) — в папке data рядом с программой: это личность этого узла. Переносите и удаляйте папку RCynQ целиком и никогда не копируйте на другой компьютер папку, в которой RCynQ уже запускался.
-На узлах Workstation и Origin нужен Git, а на каждом узле, который ходит через Relay, — SSH-клиент.
+[win] При установке для всех пользователей они лежат в %APPDATA%\RCynQ и %LOCALAPPDATA%\RCynQ каждого пользователя.
+На узлах Workstation и Origin нужен Git, а на каждом узле, который подключается к соседу по SSH, — SSH-клиент.
 [win] Windows покажет предупреждение SmartScreen, пока сборка не подписана.
 [linux] Установите Git и SSH-клиент вашего дистрибутива: sudo apt install git openssh-client (или dnf, pacman, ...).
 [macos] Сборка не подписана Apple. Перед первым запуском выполните в этой папке: xattr -dr com.apple.quarantine .

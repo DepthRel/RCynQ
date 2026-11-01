@@ -158,7 +158,7 @@ Les fichiers ne contiennent aucune clé privée. Transmettez-les par un canal de
 
 Après chaque import, RCynQ propose d'autoriser la clé du voisin.
 
-- **Variante A :** confirmez. Sous Windows, confirmez aussi la demande d'administrateur. La clé est limitée au transfert d'un port et ne peut exécuter aucune commande.
+- **Variante A :** confirmez. Sous Windows, confirmez aussi la demande d'administrateur. La clé ne peut que transférer des ports le long de la chaîne et n'exécute aucune commande.
 - **Variante B :** rien à faire ; il n'y a pas de serveur SSH à configurer.
 
 Si vous avez refusé, cliquez sur **Rôle et nœuds → Autoriser les connexions des nœuds**.
@@ -228,6 +228,29 @@ Si l'arbre de travail de l'Origin a des modifications, les commits y attendent :
 **Annuler des commits** annule les commits non envoyés les plus récents, comme `git reset` : Soft garde leurs modifications dans l'index, Mixed dans l'arbre de travail, Hard les abandonne. Cela ne fonctionne que si l'arbre de travail n'a pas de modifications.
 
 Ligne de commande : `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, sur l'Origin `rcynq commits apply <id>` et `rcynq commits decline <id>`. Dans `syncbridge.json`, l'interrupteur s'appelle `AcceptCommits`.
+
+## 13. Fichiers de patch
+
+Les modifications n'ont pas besoin de partir tout de suite. Un fichier `.patch` ordinaire les garde pour plus tard, sur la Workstation comme sur l'Origin.
+
+1. **Synchronisation → Enregistrer** écrit les fichiers cochés dans un fichier de patch, ou tous si aucun n'est coché. `git apply` comprend aussi ce fichier.
+2. Avec **Conserver les modifications dans la branche de travail** désactivé, les modifications enregistrées quittent l'arbre de travail dès que le fichier est écrit.
+3. **Branches → Appliquer le patch** ramène un patch : choisissez ses fichiers dans une liste plate ou une arborescence et cliquez sur **Appliquer**. Rien ne va dans l'index ni dans un commit : le résultat apparaît comme des modifications locales ordinaires.
+
+Un patch s'applique en entier ou ne change rien, et RCynQ dit pourquoi. Un fichier de patch n'atteint pas seul l'autre nœud : appliquez-le, puis envoyez les modifications comme d'habitude.
+
+Ligne de commande : `rcynq patch save <file> [--path <file>]... [--discard] [--force]`, `rcynq patch files <file>`, `rcynq patch apply <file> [--path <file>]...`.
+
+## 14. Conflits et outil de fusion
+
+Quand un patch entrant rencontre des modifications locales dans les mêmes fichiers, RCynQ les montre fichier par fichier et demande quoi faire : **Garder les modifications locales**, **Appliquer l'entrant par-dessus le local** (les fichiers remplacés sont sauvegardés), **Utiliser Git** (une fusion à trois voies) ou résoudre le conflit dans un outil de fusion.
+
+1. **Réglages → Outil de fusion** choisit l'outil : RCynQ trouve les outils connus sur l'ordinateur, et **Autre outil…** décrit n'importe quel autre par son programme et ses arguments.
+2. Dans la fenêtre du conflit, choisissez de résoudre dans l'outil. Les modifications à des endroits différents fusionnent d'elles-mêmes ; les fichiers dont les modifications se heurtent s'ouvrent un par un. Fusionnez le fichier, enregistrez-le et fermez l'outil.
+
+Rien n'est écrit tant que tous les fichiers ne sont pas fusionnés.
+
+Ligne de commande : `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit` ; un outil de fusion ne s'utilise que depuis l'application.
 
 ## Mise à jour depuis une version antérieure
 

@@ -73,7 +73,7 @@ A new language is one more template.
 
 | Script | Used by |
 |---|---|
-| `Shared/package-notes.ps1` | `App/publish-win.ps1` (dot-sourced) |
+| `Shared/package-notes.ps1` | `App/publish-win.ps1` and `App/build-installer.ps1` (dot-sourced) |
 | `Shared/package-notes.sh` | `App/publish-common.sh` (sourced) |
 | `Shared/sign-file.ps1` | `App/publish-win.ps1` and the installer with `-Sign`; the certificate comes from `RCYNQ_SIGN_THUMBPRINT` or `RCYNQ_SIGN_PFX` + `RCYNQ_SIGN_PFX_PASSWORD` |
 

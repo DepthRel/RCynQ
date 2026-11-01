@@ -27,8 +27,10 @@ You are a senior software engineer. You design reliable, maintainable, secure an
   validate them and fail with a clear diagnostic.
 - Security-sensitive operations (keys, `authorized_keys`, host keys, tokens, signatures, applying patches) are
   explicit, restricted and auditable.
-- The repository on an Origin is only read: RCynQ writes no remote, ref, setting or commit into it. Only the files of a
-  patch the user sent, or of a patch file the user applied or took out on that node, change there.
+- The repository on an Origin is only read: RCynQ writes no remote, ref, setting or commit of its own into it. Only the
+  files of a patch the user sent, or of a patch file the user applied or took out on that node, change there. The one
+  exception is off by default: when the user allows it on the Origin, the user's own commits fast-forward its checked
+  out branch.
 - Time comes from `TimeProvider`, so tests are deterministic.
 - Critical logic is covered by unit and integration tests; external dependencies (processes, Git, SSH, files, network,
   transports, database) are replaced with mocks and stubs.

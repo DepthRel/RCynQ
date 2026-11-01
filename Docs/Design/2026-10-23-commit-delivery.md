@@ -1,7 +1,7 @@
 # Commit delivery: design
 
-Status: approved, in implementation. A working document of the change, not part of the user documentation set
-(`Docs/<Language>`); it is removed or folded into `Docs/<Language>/Architecture.md` when the work is done.
+Status: implemented. A working document of the change, not part of the user documentation set (`Docs/<Language>`); what
+stays true is in `Docs/<Language>/Architecture.md` and `Docs/<Language>/SetupGuide.md`.
 
 ## 1. Goal
 

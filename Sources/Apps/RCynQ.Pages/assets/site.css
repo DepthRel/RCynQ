@@ -259,6 +259,18 @@ section.alt .steps li { background: var(--bg); }
 .card h3 { margin: 0 0 6px; font-size: 18px; }
 .card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
 .card .icon { font-size: 26px; margin-bottom: 8px; }
+/* The icon and the "New!" mark share one line: the mark stands at the right edge of the card. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.card-head .icon { margin-bottom: 0; }
+.card .new { font-size: 15px; font-weight: 600; white-space: nowrap; color: var(--violet-light); }
+/* A light glint runs over the mark from time to time; reduced motion leaves it plain violet. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .card .new {
+    background: linear-gradient(100deg, var(--violet-light) 35%, #F3E8FF 50%, var(--violet-light) 65%) 100% 0 / 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: glint 3.2s ease-in-out infinite;
+  }
+}
 
 .note {
   margin-top: 22px; border: 1px solid var(--line); border-left: 3px solid var(--violet-light); border-radius: 10px;
@@ -285,6 +297,7 @@ footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space
   0%, 30%, 100% { color: var(--muted); text-shadow: none; }
   10%, 20% { color: var(--sky); text-shadow: 0 0 14px rgba(96, 165, 250, 0.7); }
 }
+@keyframes glint { 0%, 30% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
 @keyframes out { from { left: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { left: calc(100% - 12px); opacity: 0; } }
 @keyframes back { from { right: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { right: calc(100% - 12px); opacity: 0; } }

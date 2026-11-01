@@ -7,7 +7,8 @@ RCynQ {version} ({runtime}): Remote Code sYNchronization, Quick
 [win] Linha de comandos: cli\rcynq.exe (execute «rcynq --help»).
 [unix] Linha de comandos: cli/rcynq (execute «rcynq --help»).
 As definições ficam na pasta config e todos os dados (chaves, base de dados, registos) na pasta data junto ao programa: são a identidade deste nó. Mova ou elimine a pasta RCynQ inteira e nunca copie para outro computador uma pasta onde o RCynQ já foi executado.
-Na Workstation e no Origin é preciso o Git, e em cada nó que passe por um Relay, um cliente SSH.
+[win] Numa instalação para todos os utilizadores, ficam em %APPDATA%\RCynQ e %LOCALAPPDATA%\RCynQ de cada utilizador.
+Na Workstation e no Origin é preciso o Git, e em cada nó que se ligue a um vizinho por SSH, um cliente SSH.
 [win] O Windows mostra um aviso do SmartScreen enquanto a compilação não estiver assinada.
 [linux] Instale o Git e o cliente SSH da sua distribuição: sudo apt install git openssh-client (ou dnf, pacman, ...).
 [macos] A compilação não está assinada pela Apple. Antes do primeiro arranque execute nesta pasta: xattr -dr com.apple.quarantine .

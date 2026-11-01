@@ -15,7 +15,7 @@
   <title>RCynQ: Remote Code Synchronization, Quick</title>
   <meta name="description" content="RCynQ delivers uncommitted code to a remote machine and brings its branches back, without commits or pushes: directly or through Relay nodes that only pass encrypted traffic.">
   <meta property="og:title" content="RCynQ: Remote Code Synchronization, Quick">
-  <meta property="og:description" content="Ship your code to a remote machine without a commit. Through any Relay, with nothing to trust in the middle.">
+  <meta property="og:description" content="Ship your code to a remote machine without a commit, directly or through a Relay that cannot read it.">
   <link rel="icon" href="assets/rcynq.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
 </head>
@@ -111,7 +111,7 @@
         <div class="roles">
           <div class="role"><h3>Workstation</h3><p data-t="role.workstation">The computer you work on. Keeps the working copies, sends changes, pulls branches.</p></div>
           <div class="role"><h3>Relay</h3><p data-t="role.relay">Any computer both ends can reach. Forwards SSH, has no repository and sees no content.</p></div>
-          <div class="role"><h3>Origin</h3><p data-t="role.origin">The computer with the private repositories. RCynQ only reads them; only your patches change files there.</p></div>
+          <div class="role"><h3>Origin</h3><p data-t="role.origin">The computer with the private repositories. RCynQ only reads them; only what you sent yourself changes anything there.</p></div>
         </div>
       </div>
     </section>
@@ -121,16 +121,16 @@
         <div>
           <p class="eyebrow" data-t="relay.eyebrow">Relay services</p>
           <h2 data-t="relay.title">Your code goes where you cannot</h2>
-          <p class="sub" data-t="relay.sub">The repository sits in a closed network, your laptop is somewhere else. Put a Relay between them: a cloud VM, a bastion host, an office gateway, a teammate's machine.</p>
+          <p class="sub" data-t="relay.sub">The repository sits in a closed network, the developer's machine is outside it. Put a Relay between them: any machine with an SSH server both can reach will do, such as a cloud VM, a bastion host, an office gateway or a teammate's computer.</p>
           <ul class="checks">
             <li data-t="relay.1">A chain passes as many Relays as the road needs: <code>Workstation → Relay 1 → Relay 2 → Origin</code>.</li>
-            <li data-t="relay.2">A Relay stays passive. Its key in <code>authorized_keys</code> may forward one port and run no command.</li>
+            <li data-t="relay.2">A Relay stays passive. A node's key in <code>authorized_keys</code> may only forward to the next nodes on the way and runs no command.</li>
             <li data-t="relay.3">Traffic is encrypted end to end; the Relay never sees a file, a branch or a repository path.</li>
             <li data-t="relay.4">A node can have spare routes, for example two tunnels. RCynQ checks them every 15 seconds and moves to the one that answers.</li>
           </ul>
         </div>
         <div class="hops" aria-hidden="true">
-          <div class="hop"><span>Workstation</span><small data-t="hops.workstation">your laptop</small></div>
+          <div class="hop"><span>Workstation</span><small data-t="hops.workstation">your system</small></div>
           <div class="hop-line"><i></i></div>
           <div class="hop relay"><span>Relay 1</span><small data-t="hops.relay1">a cloud VM</small></div>
           <div class="hop-line"><i></i></div>
@@ -144,18 +144,18 @@
     <section id="why">
       <div class="wrap">
         <p class="eyebrow" data-t="why.eyebrow">Why RCynQ</p>
-        <h2 data-t="why.title">Quick to set up, careful with your code</h2>
-        <p class="sub" data-t="why.sub">Built for closed networks, where the code must arrive and nothing else may leak.</p>
+        <h2 data-t="why.title">Quick setup, reliable delivery</h2>
+        <p class="sub" data-t="why.sub">Built for closed networks, where code has to reach the machine with the repository safely and easily.</p>
         <div class="cards">
           <div class="card"><div class="icon" aria-hidden="true">⚡</div><h3 data-t="why.1.title">No commits, no pushes</h3><p data-t="why.1.text">Work in progress travels as a patch. The history stays yours: nothing to squash, nothing to force-push.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🛰️</div><h3 data-t="why.2.title">Through any Relay</h3><p data-t="why.2.text">One hop or several. Any machine with an SSH server both sides reach is enough.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🔏</div><h3 data-t="why.3.title">Nothing to trust in the middle</h3><p data-t="why.3.text">Patches are signed with ECDSA P-256, accepted once and checked to stay inside the working tree.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🧊</div><h3 data-t="why.4.title">The Origin stays clean</h3><p data-t="why.4.text">No remotes, refs, settings or commits are written into its repository. Only your files change.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🔀</div><h3 data-t="why.5.title">Routes that heal</h3><p data-t="why.5.text">Several addresses for one node, the fastest one that answers is used, and it comes back when the better one returns.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🚪</div><h3 data-t="why.6.title">No SSH server? Fine</h3><p data-t="why.6.text">An end node can accept connections on its own TLS port, verified by a pinned certificate.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">📚</div><h3 data-t="why.7.title">Many repositories</h3><p data-t="why.7.text">Register as many as you need on the Origin and switch between them from either side, without a restart.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">🎒</div><h3 data-t="why.8.title">Portable</h3><p data-t="why.8.text">Settings, keys and data stay in the program folder. Nothing is scattered over the system.</p></div>
-          <div class="card"><div class="icon" aria-hidden="true">⌘</div><h3 data-t="why.9.title">Window or terminal</h3><p data-t="why.9.text">A desktop application for every day and the <code>rcynq</code> command line for scripts.</p></div>
+          <div class="card"><div class="card-head"><div class="icon" aria-hidden="true">🩹</div><span class="new" data-t="why.new">New!</span></div><h3 data-t="why.2.title">Patches by hand</h3><p data-t="why.2.text">Save the changes you pick to an ordinary <code>.patch</code> file, then apply it whole or file by file. Nothing is staged or committed.</p></div>
+          <div class="card"><div class="card-head"><div class="icon" aria-hidden="true">📦</div><span class="new" data-t="why.new">New!</span></div><h3 data-t="why.3.title">Unpushed commits, too</h3><p data-t="why.3.text">Building a branch or preparing a release? Commits reach the Origin as they are, with the same hashes and authors. The rules are strict: only if the Origin allows it, only to its checked out branch, only as a fast-forward.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🔏</div><h3 data-t="why.4.title">A Relay never sees your code</h3><p data-t="why.4.text">Traffic is encrypted end to end, so a Relay passes it on but cannot read it. Patches are signed with ECDSA P-256: a forged or repeated one is refused, and no file lands outside the working tree.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🧊</div><h3 data-t="why.5.title">The Origin stays in your hands</h3><p data-t="why.5.text">RCynQ writes no remotes, refs or settings into its repository and creates no commits. Only the files you sent or applied change there, and the branch moves forward only if you allowed commits.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🔀</div><h3 data-t="why.6.title">Routes that heal</h3><p data-t="why.6.text">Several addresses for one node: the most preferred one that answers is used, and the node returns to a better one when it answers again.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">🚪</div><h3 data-t="why.7.title">No SSH server? Fine</h3><p data-t="why.7.text">An end node can accept connections on its own TLS port, verified by a pinned certificate.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">📚</div><h3 data-t="why.8.title">Many repositories</h3><p data-t="why.8.text">Register as many as you need on the Origin and switch between them from either side, without a restart.</p></div>
+          <div class="card"><div class="icon" aria-hidden="true">⌘</div><h3 data-t="why.9.title">Window or terminal</h3><p data-t="why.9.text">A desktop application for every day and the <code>rcynq</code> command line for scripts. A portable package keeps settings, keys and data in its own folder.</p></div>
         </div>
       </div>
     </section>
@@ -171,8 +171,8 @@
             <p data-t="start.1.text">Put RCynQ on the Workstation, the Origin and the Relay, and pick the role of each one.</p>
           </li>
           <li>
-            <h3 data-t="start.2.title">Introduce the nodes</h3>
-            <p data-t="start.2.text">Export a node file on each computer and import it on its neighbours. RCynQ allows the keys itself.</p>
+            <h3 data-t="start.2.title">Connect the nodes</h3>
+            <p data-t="start.2.text">Create an invitation on one node and paste it on its neighbour: a line of text carries everything, and RCynQ allows the keys itself. Where an invitation cannot be used, node files do the same.</p>
           </li>
           <li>
             <h3 data-t="start.3.title">Pull and send</h3>

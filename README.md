@@ -24,13 +24,16 @@ The repository sits in a closed network. Your computer is somewhere else, and th
 ## What you get
 
 - **Pull.** One button brings the current branch from the Origin, even into an empty folder.
-- **Send changes.** Uncommitted edits travel as a patch in either direction. Conflicts are shown file by file and can be merged with Git.
-- **Through Relays.** Put one or more Relays on the way: a cloud VM, a bastion host, an office gateway. Each forwards an SSH port and nothing else.
+- **Send changes.** Uncommitted edits travel as a patch in either direction. Conflicts are shown file by file and can be merged with Git or in your own merge tool (VS Code, Visual Studio, JetBrains, KDiff3, Meld…).
+- **Patch files.** Save the changes you pick to an ordinary `.patch` file, then apply it whole or file by file. Nothing is staged or committed.
+- **Unpushed commits, too.** Building a branch or preparing a release? Commits reach the Origin as they are, with the same hashes and authors. The rules are strict: only if the Origin allows it, only to its checked out branch, only as a fast-forward. RCynQ itself never pushes.
+- **Through Relays.** Put one or more Relays on the way: a cloud VM, a bastion host, an office gateway. Each only forwards the connection to the next node.
 - **Several repositories.** Register as many as you need on the Origin and switch between them from either side, without a restart. A repository the Workstation does not have yet is downloaded into the folder you choose.
-- **The repository on the Origin is only read.** RCynQ writes no remotes, refs, settings or commits into it. The only thing that changes there is the files you sent yourself.
-- **Nothing to trust in the middle.** The Relay forwards encrypted traffic and sees no content. Patches are signed, protected against replay and applied all-or-nothing.
+- **The Origin stays in your hands.** RCynQ writes no remotes, refs or settings into its repository and creates no commits. Only the files you sent or applied change there, and the branch moves forward only if you allowed commits.
+- **A Relay never sees your code.** Traffic is encrypted end to end, so a Relay passes it on but cannot read it. Patches are signed, protected against replay and applied all-or-nothing.
 - **Works where an SSH server is not allowed.** An end node accepts connections either through its SSH server or on its own TLS port.
-- **Portable.** Settings, keys and data stay in the program folder. Windows, Linux and macOS; a desktop application and a command line (`rcynq`).
+- **Quick to connect.** An invitation, one line of text, joins a node to the chain; node files do the same where an invitation cannot be used.
+- **Window or terminal.** Windows, Linux and macOS; a desktop application and a command line (`rcynq`). A portable package keeps settings, keys and data in its own folder.
 
 ## Install
 

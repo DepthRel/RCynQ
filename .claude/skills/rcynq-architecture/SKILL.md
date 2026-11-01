@@ -18,7 +18,7 @@ Full design: `Docs/En/Architecture.md`; setup from scratch: `Docs/En/SetupGuide.
 | Folder | Owns |
 |---|---|
 | `Core/RCynQ.Core` | contracts, `SyncBridgeOptions` (`syncbridge.json`), `ConfigLocations` (portable `rcynq.portable`), API records (`Api/`), events, `Enums/` |
-| `Core/RCynQ.Localization` | language packs (`Languages/en.json`, `ru.json`), `ILocalizer`, `Localizer` |
+| `Core/RCynQ.Localization` | language packs (`Languages/<code>.json`), `ILocalizer`, `Localizer` |
 | `Core/RCynQ.Core.Data*` | EF Core (`RCynQDbContext`) + FluentMigrator SQL migrations (SQLite) |
 | `Infrastructure/RCynQ.Git` | Git commands, bundles, manifests, patch building |
 | `Infrastructure/RCynQ.Ssh` | ssh commands, local forwards, `authorized_keys` restrictions, host key pinning |
@@ -37,13 +37,19 @@ Dependencies point inwards; Core depends on nothing app-level.
 - **The Origin repository is only read:** no remote, ref, setting, commit or index refresh (`GIT_OPTIONAL_LOCKS=0`);
   an end-to-end test compares every file under `.git` before and after. Git housekeeping happens only in the
   Workstation working copy (remote `rcynq`, `refs/remotes/rcynq/*`, fast-forward on Pull).
+- **Commits are the one exception, off by default:** with `AcceptCommits` on, the user's own commits come from the
+  Workstation as a signed bundle, wait in a quarantine until checked and fast-forward the checked out branch of the
+  Origin; a refused delivery leaves `.git` untouched.
 - **Two channels, one connection:** Git channel (Origin → Workstation, incremental bundles, never a push) and patch
   channel (both ways: signed manifest → files by SHA-256 → all-or-nothing commit; conflicts: keep, take with backup, or
   three-way merge).
+- **Patch files:** on a Workstation and an Origin the user saves changes to an ordinary `.patch` file and applies one
+  back into the working tree; it stays out of the index and of `.git`, and it reaches the other node only as a change.
 - **Trust nothing from the network or disk:** ECDSA P-256 signature over the manifest (repository name included),
   replay protection, canonical paths inside the working tree, a patch for another repository is refused, a neighbour
   learns repository names only, never paths.
-- **Relays are passive:** keys in `authorized_keys` may only forward one port and run no command; the endpoint lists
+- **Relays are passive:** keys in `authorized_keys` may only forward (on a Relay to the next nodes on the way, on an endpoint to its
+  local port) and run no command; the endpoint lists
   the Relays and passes them as SSH jump hosts.
 - **Routes:** several addresses of one node; checked every 15 s, lowest priority that answers wins, a pinned route
   wins always. A link with one address has no routes and is never touched.

@@ -1,7 +1,7 @@
 # RCynQ.Pages
 
 The project page: <https://depthrel.github.io/RCynQ/>. Plain static files with no build step, published by GitHub Pages
-from this folder (`.github/workflows/pages.yml`) on every change in the `main` branch. A prototype: the name is told as
+from this folder (`.github/workflows/pages.yml`) on every change in the `main` branch. The name is told as
 **R**emote **C**ode s**YN**chronization, **Q**uick, and the page is built around the main idea of RCynQ: code reaches a
 remote machine without a commit, directly or through Relays.
 
@@ -22,7 +22,7 @@ remote machine without a commit, directly or through Relays.
 ## A new release
 
 1. Run `Scripts/build-release.ps1`, create the GitHub release `X.Y.Z` with its packages and publish it.
-2. Fill in `updates.json` (it is `{}` until the first release, and the buttons lead to the releases page):
+2. Fill in `updates.json` (without it the buttons lead to the releases page):
 
    ```json
    {
@@ -50,7 +50,10 @@ remote machine without a commit, directly or through Relays.
   English page has. Without scripts the language picker is hidden.
 - The language is chosen like in the application: the one the visitor picked before (kept in `localStorage`),
   otherwise the first language of the browser the page speaks, otherwise English.
-- The documentation links in the footer lead to `Docs/En` or `Docs/Ru` by the `docs` table of `assets/languages.js`.
+- The documentation links in the footer lead to the documents in the chosen language by the `docs` table of
+  `assets/languages.js`.
+- The "Why RCynQ" section stays three cards by three: a new feature takes the place of a card or joins one, and carries
+  the "New!" mark (`<span class="new" data-t="why.new">`) until the next features replace it.
 - A new language: one more entry in `list` of `assets/languages.js`, its flag in `assets/flags/<code>.svg` (3:2), one
   more table in `assets/site.js`.
 

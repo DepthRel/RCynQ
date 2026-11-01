@@ -29,12 +29,12 @@ Projektverweise.
 | RCynQ.Core.Tests | Knotenrollen, Datensätze, Speicherorte der Konfiguration (portable Installation), der Installationsstempel, Prüfung und Umwandlung früherer Konfigurationsdateien, Repositories in der Konfiguration |
 | RCynQ.Localization.Tests | Sprachpakete: Lesen, der Katalog, Wahl einer Sprache nach Kultur, der Rückfall auf Englisch, dieselben Schlüssel und Platzhalter in jeder Sprache, jeder angeforderte Schlüssel existiert (Code und Bildschirme), kein russischer Text im Code, Knoten nur nach ihren Rollen benannt |
 | RCynQ.Core.Data.Tests | Migrationen, Repositories, Speicher, Dateirechte des Datenordners |
-| RCynQ.Git.Tests | Git-Befehle, Bundles, Erstellung von Patches, Hashes, `.gitignore`, der Export eines Repositorys, das Remote der Arbeitskopie, Integration mit einem echten Git |
+| RCynQ.Git.Tests | Git-Befehle, Bundles, Erstellung von Patches, Patch-Dateien, Commits zur Zustellung, Hashes, `.gitignore`, der Export eines Repositorys, das Remote der Arbeitskopie, Integration mit einem echten Git |
 | RCynQ.Ssh.Tests | SSH-Befehle, Portweiterleitungen, Einschränkungen in `authorized_keys`, Festlegen von Hostschlüsseln, `known_hosts`, die Konfigurationsdatei des Clients |
 | RCynQ.MergeTools.Tests | der Katalog der Merge-Tools, ihre Suche an üblichen Orten, in `PATH`, über `vswhere` und in der Git-Konfiguration, die Vorlagen ihrer Argumente, ihr Start |
 | RCynQ.Transports.Tests | Transporte und der Verbindungsmanager, die Prüfung eines Endpunkts |
-| RCynQ.Sync.Tests | Patches (Signatur, Wiederholung, Zustellung, Anwenden ganz oder gar nicht, Konflikte, Git-Merge und Merge-Sitzungen für ein Merge-Tool), die Synchronisationsbasis, der Git-Kanal, Repositories, Routen und ihre Auswahl, Diagnose, Übertragung der Konfiguration, Aufbewahrung der Daten |
-| RCynQ.Service.Tests | die lokale HTTP-API, ihr Token und öffentliche Endpunkte, die Startreihenfolge, Pull, Senden und Ping zwischen zwei Diensten von Ende zu Ende, Repositories von Ende zu Ende |
+| RCynQ.Sync.Tests | Patches (Signatur, Wiederholung, Zustellung, Anwenden ganz oder gar nicht, Konflikte, Git-Merge und Merge-Sitzungen für ein Merge-Tool), Patch-Dateien, die Zustellung von Commits, die Synchronisationsbasis, der Git-Kanal, Repositories, Routen und ihre Auswahl, Diagnose, Übertragung der Konfiguration, Aufbewahrung der Daten |
+| RCynQ.Service.Tests | die lokale HTTP-API, ihr Token und öffentliche Endpunkte, die Startreihenfolge, Pull, Senden und Ping zwischen zwei Diensten von Ende zu Ende, Repositories und die Zustellung von Commits von Ende zu Ende, die Endpunkte für Patch-Dateien |
 | RCynQ.Cli.Tests | die Befehle von `rcynq` und ihre Ausgabe |
 | RCynQ.UI.Tests | View-Models, Dialoge, das Fenster „Über RCynQ“ und der Problembrief, der Controller des Dienstprozesses, der API-Client, die Speicher für Sprache und Einstellungen, das Zusammenführen in einem Merge-Tool und die Wahl des Tools |
 | RCynQ.UI.Headless.Tests | das Hauptfenster und das Fenster „Über RCynQ“ in Avalonia Headless: jeder Text ändert sich mit der Sprache sofort |

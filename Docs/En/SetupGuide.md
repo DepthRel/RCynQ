@@ -158,7 +158,7 @@ The files hold no private keys. Pass them over a channel you trust.
 
 After each import RCynQ offers to allow the neighbour's key.
 
-- **Variant A:** confirm. On Windows also confirm the administrator prompt. The key is limited to forwarding one port and cannot run commands.
+- **Variant A:** confirm. On Windows also confirm the administrator prompt. The key may only forward ports along the chain and cannot run commands.
 - **Variant B:** nothing to do; there is no SSH server to configure.
 
 If you declined, press **Role and nodes → Allow node connections**.
@@ -228,6 +228,29 @@ If the working tree of the Origin has changes, the commits wait there: deal with
 **Roll back commits** undoes the newest unsent commits as `git reset` does: Soft keeps their changes staged, Mixed keeps them in the working tree, Hard discards them. It works only while the working tree has no changes.
 
 Command line: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, on the Origin `rcynq commits apply <id>` and `rcynq commits decline <id>`. In `syncbridge.json` the switch is `AcceptCommits`.
+
+## 13. Patch files
+
+Changes do not have to be sent right away. An ordinary `.patch` file keeps them for later, on the Workstation and on the Origin.
+
+1. **Synchronization → Save** writes the checked files to a patch file, or all of them when none is checked. `git apply` understands that file too.
+2. With **Keep the changes in the working branch** switched off, the saved changes leave the working tree once the file is written.
+3. **Branches → Apply patch** brings a patch back: choose its files in a flat list or a tree and press **Apply**. Nothing is staged or committed: the result shows up as ordinary local changes.
+
+A patch either fits whole or changes nothing, and RCynQ says why. A patch file does not reach the other node on its own: apply it, then send the changes as usual.
+
+Command line: `rcynq patch save <file> [--path <file>]... [--discard] [--force]`, `rcynq patch files <file>`, `rcynq patch apply <file> [--path <file>]...`.
+
+## 14. Conflicts and a merge tool
+
+When an incoming patch meets local changes in the same files, RCynQ shows them file by file and asks what to do: **Keep local changes**, **Apply incoming over local** (the replaced files are backed up), **Use Git** (a three-way merge), or resolve the conflict in a merge tool.
+
+1. **Settings → Merge tool** picks the tool: RCynQ finds the known ones on the computer, and **Other tool…** describes any other one by its program and arguments.
+2. In the conflict window choose to resolve in the tool. Changes in different places are merged on their own; the files whose edits collide open one by one. Merge the file, save it and close the tool.
+
+Nothing is written until every file is merged.
+
+Command line: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; a merge tool is used only from the application.
 
 ## Updating from an earlier version
 

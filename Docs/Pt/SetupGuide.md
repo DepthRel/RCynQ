@@ -158,7 +158,7 @@ Os ficheiros não contêm chaves privadas. Passe-os por um canal de confiança.
 
 Depois de cada importação, o RCynQ propõe permitir a chave do vizinho.
 
-- **Variante A:** confirme. No Windows confirme também o pedido de administrador. A chave só pode reencaminhar uma porta e não pode executar comandos.
+- **Variante A:** confirme. No Windows confirme também o pedido de administrador. A chave só pode reencaminhar portas ao longo da cadeia e não pode executar comandos.
 - **Variante B:** não há nada a fazer; não há servidor SSH para configurar.
 
 Se recusou, prima **Papel e nós → Permitir ligações de nós**.
@@ -228,6 +228,29 @@ Se a árvore de trabalho do Origin tiver alterações, os commits esperam lá: t
 **Anular commits** anula os commits por enviar mais recentes, como `git reset`: Soft mantém as alterações no índice, Mixed na árvore de trabalho, Hard descarta-as. Só funciona quando a árvore de trabalho não tem alterações.
 
 Linha de comandos: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, no Origin `rcynq commits apply <id>` e `rcynq commits decline <id>`. No `syncbridge.json`, o interruptor chama-se `AcceptCommits`.
+
+## 13. Ficheiros de patch
+
+As alterações não têm de ser enviadas logo. Um ficheiro `.patch` comum guarda-as para mais tarde, na Workstation e no Origin.
+
+1. **Sincronização → Guardar** escreve os ficheiros marcados num ficheiro de patch, ou todos quando nenhum está marcado. O `git apply` também entende esse ficheiro.
+2. Com **Manter as alterações no ramo de trabalho** desligado, as alterações guardadas saem da árvore de trabalho assim que o ficheiro é escrito.
+3. **Ramos → Aplicar patch** traz um patch de volta: escolha os ficheiros numa lista simples ou numa árvore e prima **Aplicar**. Nada vai para o índice nem para um commit: o resultado aparece como alterações locais comuns.
+
+Um patch encaixa por inteiro ou não muda nada, e o RCynQ diz porquê. Um ficheiro de patch não chega sozinho ao outro nó: aplique-o e envie as alterações como habitualmente.
+
+Linha de comandos: `rcynq patch save <file> [--path <file>]... [--discard] [--force]`, `rcynq patch files <file>`, `rcynq patch apply <file> [--path <file>]...`.
+
+## 14. Conflitos e ferramenta de fusão
+
+Quando um patch recebido encontra alterações locais nos mesmos ficheiros, o RCynQ mostra-os ficheiro a ficheiro e pergunta o que fazer: **Manter as alterações locais**, **Aplicar o recebido por cima do local** (é feita uma cópia de segurança dos ficheiros substituídos), **Usar o Git** (uma fusão a três vias) ou resolver o conflito numa ferramenta de fusão.
+
+1. **Definições → Ferramenta de fusão** escolhe a ferramenta: o RCynQ encontra as conhecidas no computador, e **Outra ferramenta…** descreve qualquer outra pelo seu programa e argumentos.
+2. Na janela do conflito escolha resolver na ferramenta. As alterações em sítios diferentes fundem-se sozinhas; os ficheiros cujas edições colidem abrem-se um a um. Funda o ficheiro, guarde-o e feche a ferramenta.
+
+Nada é escrito até todos os ficheiros estarem fundidos.
+
+Linha de comandos: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; uma ferramenta de fusão só se usa a partir da aplicação.
 
 ## Atualizar a partir de uma versão anterior
 

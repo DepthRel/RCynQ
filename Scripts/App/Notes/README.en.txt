@@ -7,7 +7,8 @@ RCynQ {version} ({runtime}): Remote Code sYNchronization, Quick
 [win] Command line: cli\rcynq.exe (run "rcynq --help").
 [unix] Command line: cli/rcynq (run "rcynq --help").
 The settings are kept in the config folder and all data (keys, database, logs) in the data folder next to the program: they are the identity of this node. Move or delete the RCynQ folder as a whole, and never copy a folder in which RCynQ has already run to another computer.
-Git is needed on the Workstation and the Origin, and an SSH client on every node that goes through a Relay.
+[win] Installed for all users, RCynQ keeps them in %APPDATA%\RCynQ and %LOCALAPPDATA%\RCynQ of each user instead.
+Git is needed on the Workstation and the Origin, and an SSH client on every node that connects to a neighbour over SSH.
 [win] Windows shows a SmartScreen warning while the build is not signed.
 [linux] Install Git and the SSH client of your distribution: sudo apt install git openssh-client (or dnf, pacman, ...).
 [macos] The build is not signed by Apple. Before the first start run, in this folder: xattr -dr com.apple.quarantine .

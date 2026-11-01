@@ -158,7 +158,7 @@ Die Dateien enthalten keine privaten Schlüssel. Geben Sie sie über einen Kanal
 
 Nach jedem Import bietet RCynQ an, den Schlüssel des Nachbarn zu erlauben.
 
-- **Variante A:** bestätigen. Unter Windows bestätigen Sie auch die Administratorabfrage. Der Schlüssel ist auf die Weiterleitung eines Ports beschränkt und kann keine Befehle ausführen.
+- **Variante A:** bestätigen. Unter Windows bestätigen Sie auch die Administratorabfrage. Der Schlüssel darf nur Ports entlang der Kette weiterleiten und keine Befehle ausführen.
 - **Variante B:** nichts zu tun; es gibt keinen SSH-Server einzurichten.
 
 Wenn Sie abgelehnt haben, klicken Sie auf **Rolle und Knoten → Knotenverbindungen erlauben**.
@@ -228,6 +228,29 @@ Hat der Arbeitsbaum von Origin Änderungen, warten die Commits dort: Kümmern Si
 **Commits zurücknehmen** macht die neuesten nicht gesendeten Commits rückgängig, wie `git reset`: Soft behält ihre Änderungen im Index, Mixed im Arbeitsbaum, Hard verwirft sie. Das geht nur, wenn der Arbeitsbaum keine Änderungen hat.
 
 Befehlszeile: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcynq commits reset --to <hash> --mode Soft|Mixed|Hard`, auf Origin `rcynq commits apply <id>` und `rcynq commits decline <id>`. In `syncbridge.json` heißt der Schalter `AcceptCommits`.
+
+## 13. Patch-Dateien
+
+Änderungen müssen nicht sofort gesendet werden. Eine gewöhnliche `.patch`-Datei hebt sie für später auf, auf der Workstation wie auf Origin.
+
+1. **Synchronisation → Speichern** schreibt die markierten Dateien in eine Patch-Datei, oder alle, wenn keine markiert ist. Auch `git apply` versteht diese Datei.
+2. Ist **Änderungen im Arbeitszweig behalten** ausgeschaltet, verlassen die gespeicherten Änderungen den Arbeitsbaum, sobald die Datei geschrieben ist.
+3. **Branches → Patch anwenden** holt einen Patch zurück: Wählen Sie seine Dateien in einer flachen Liste oder einem Baum und klicken Sie auf **Anwenden**. Nichts kommt in den Index oder in einen Commit: Das Ergebnis erscheint als gewöhnliche lokale Änderungen.
+
+Ein Patch passt entweder ganz oder ändert nichts, und RCynQ sagt, warum. Eine Patch-Datei gelangt nicht von selbst zum anderen Knoten: Wenden Sie sie an und senden Sie die Änderungen wie gewohnt.
+
+Befehlszeile: `rcynq patch save <file> [--path <file>]... [--discard] [--force]`, `rcynq patch files <file>`, `rcynq patch apply <file> [--path <file>]...`.
+
+## 14. Konflikte und Merge-Tool
+
+Trifft ein eingehender Patch auf lokale Änderungen in denselben Dateien, zeigt RCynQ sie Datei für Datei und fragt, was geschehen soll: **Lokale Änderungen behalten**, **Eingehendes über Lokales anwenden** (die ersetzten Dateien werden gesichert), **Git verwenden** (ein Drei-Wege-Merge) oder den Konflikt in einem Merge-Tool lösen.
+
+1. **Einstellungen → Merge-Tool** wählt das Werkzeug: RCynQ findet die bekannten auf dem Rechner, und **Anderes Tool…** beschreibt jedes andere über sein Programm und seine Argumente.
+2. Wählen Sie im Konfliktfenster das Lösen im Tool. Änderungen an verschiedenen Stellen werden von selbst zusammengeführt; die Dateien mit kollidierenden Bearbeitungen öffnen sich nacheinander. Führen Sie die Datei zusammen, speichern Sie sie und schließen Sie das Tool.
+
+Geschrieben wird erst, wenn alle Dateien zusammengeführt sind.
+
+Befehlszeile: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; ein Merge-Tool wird nur aus der Anwendung heraus verwendet.
 
 ## Aktualisieren von einer früheren Version
 

@@ -29,12 +29,12 @@ que des références de projets.
 | RCynQ.Core.Tests | rôles des nœuds, enregistrements, emplacements de la configuration (installation portable), marque d'installation, validation et conversion des configurations antérieures, dépôts dans la configuration |
 | RCynQ.Localization.Tests | paquets de langue : lecture, catalogue, choix de la langue selon la culture, repli sur l'anglais, mêmes clés et marqueurs dans chaque langue, existence de chaque clé demandée (code et écrans), aucun texte russe dans le code, nœuds nommés seulement par leur rôle |
 | RCynQ.Core.Data.Tests | migrations, référentiels, stockage, droits des fichiers du dossier de données |
-| RCynQ.Git.Tests | commandes Git, paquets, construction des patchs, hashs, `.gitignore`, export d'un dépôt, remote de la copie de travail, intégration avec un vrai Git |
+| RCynQ.Git.Tests | commandes Git, paquets, construction des patchs, fichiers de patch, commits à livrer, hashs, `.gitignore`, export d'un dépôt, remote de la copie de travail, intégration avec un vrai Git |
 | RCynQ.Ssh.Tests | commandes SSH, transferts de ports, restrictions de `authorized_keys`, fixation des clés d'hôte, `known_hosts`, fichier de configuration du client |
 | RCynQ.MergeTools.Tests | catalogue des outils de fusion, leur recherche aux emplacements habituels, dans `PATH`, avec `vswhere` et dans la configuration de Git, modèles de leurs arguments, leur lancement |
 | RCynQ.Transports.Tests | les transports et le gestionnaire de liaisons, la vérification d'une extrémité |
-| RCynQ.Sync.Tests | patchs (signature, rejeu, livraison, application tout ou rien, conflits, fusion Git et sessions de fusion pour un outil de fusion), base de synchronisation, canal Git, dépôts, routes et leur choix, diagnostic, transfert de configuration, conservation des données |
-| RCynQ.Service.Tests | l'API HTTP locale, son jeton et ses points publics, l'ordre de démarrage, Pull, envoi et ping de bout en bout entre deux services, dépôts de bout en bout |
+| RCynQ.Sync.Tests | patchs (signature, rejeu, livraison, application tout ou rien, conflits, fusion Git et sessions de fusion pour un outil de fusion), fichiers de patch, livraison de commits, base de synchronisation, canal Git, dépôts, routes et leur choix, diagnostic, transfert de configuration, conservation des données |
+| RCynQ.Service.Tests | l'API HTTP locale, son jeton et ses points publics, l'ordre de démarrage, Pull, envoi et ping de bout en bout entre deux services, dépôts et livraison de commits de bout en bout, points des fichiers de patch |
 | RCynQ.Cli.Tests | les commandes de `rcynq` et leur sortie |
 | RCynQ.UI.Tests | modèles de vue, dialogues, la fenêtre « À propos de RCynQ » et le message de signalement d'un problème, le contrôleur du processus du service, le client de l'API, les magasins de langue et de réglages, la fusion dans un outil de fusion et le choix de l'outil |
 | RCynQ.UI.Headless.Tests | la fenêtre principale et la fenêtre « À propos de RCynQ » dans Avalonia Headless : chaque texte change à la volée avec la langue |

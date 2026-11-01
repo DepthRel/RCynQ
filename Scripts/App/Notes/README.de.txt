@@ -7,7 +7,8 @@ RCynQ {version} ({runtime}): Remote Code sYNchronization, Quick
 [win] Befehlszeile: cli\rcynq.exe (führen Sie „rcynq --help“ aus).
 [unix] Befehlszeile: cli/rcynq (führen Sie „rcynq --help“ aus).
 Die Einstellungen liegen im Ordner config und alle Daten (Schlüssel, Datenbank, Protokolle) im Ordner data neben dem Programm: sie sind die Identität dieses Knotens. Verschieben oder löschen Sie den Ordner RCynQ als Ganzes und kopieren Sie nie einen Ordner, in dem RCynQ schon gelaufen ist, auf einen anderen Rechner.
-Auf Workstation und Origin wird Git gebraucht, und auf jedem Knoten, der über ein Relay geht, ein SSH-Client.
+[win] Bei einer Installation für alle Benutzer liegen sie stattdessen in %APPDATA%\RCynQ und %LOCALAPPDATA%\RCynQ jedes Benutzers.
+Auf Workstation und Origin wird Git gebraucht, und auf jedem Knoten, der sich über SSH mit einem Nachbarn verbindet, ein SSH-Client.
 [win] Windows zeigt eine SmartScreen-Warnung, solange der Build nicht signiert ist.
 [linux] Installieren Sie Git und den SSH-Client Ihrer Distribution: sudo apt install git openssh-client (oder dnf, pacman, ...).
 [macos] Der Build ist nicht von Apple signiert. Führen Sie vor dem ersten Start in diesem Ordner aus: xattr -dr com.apple.quarantine .
