@@ -7,7 +7,7 @@
              x:Class="RCynQ.UI.Views.Pages.RoleAndNodesView"
              x:DataType="pages:RoleAndNodesViewModel">
   <Grid RowDefinitions="*,Auto">
-    <ScrollViewer>
+    <ScrollViewer x:Name="PageScroll">
       <StackPanel Margin="28,22,28,28" Spacing="18">
 
         <StackPanel>
@@ -105,12 +105,13 @@
               <ItemsControl Classes="rows" ItemsSource="{Binding Nodes}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="items:ChainNodeItemViewModel">
-                    <Border Classes="row">
-                      <StackPanel Spacing="6">
+                    <!-- The row has no padding of its own: the line of the node reaches its edges, so all of it can be pressed. -->
+                    <Border Classes="row" Padding="0">
+                      <StackPanel>
                         <!-- One line per node; a node reachable at several addresses unfolds to list them when its line is clicked. -->
                         <Grid ColumnDefinitions="*,Auto">
-                          <Button Classes="tree-row" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding HasRoutes}">
-                            <Grid ColumnDefinitions="20,1.2*,*,1.3*,110">
+                          <Button Grid.ColumnSpan="2" Classes="tree-row" Padding="16,11,46,11" Command="{Binding ToggleCommand}" IsHitTestVisible="{Binding HasRoutes}">
+                            <Grid ColumnDefinitions="20,1.2*,*,1.3*,110" MinHeight="24">
                               <Panel HorizontalAlignment="Left" VerticalAlignment="Center" IsVisible="{Binding HasRoutes}">
                                 <controls:IconView Width="14" Height="14" IconKey="Icon.ChevronRight" Foreground="{StaticResource TextMutedBrush}"
                                                    IsVisible="{Binding !IsExpanded}" />
@@ -127,7 +128,7 @@
                                          Text="{Binding StatusText}" />
                             </Grid>
                           </Button>
-                          <Button Grid.Column="1" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Roles.RemoveNode}"
+                          <Button Grid.Column="1" Classes="icon hover-only" Padding="5" Margin="0,0,16,0" VerticalAlignment="Center" ToolTip.Tip="{loc:Loc Roles.RemoveNode}"
                                   Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).RemoveNodeCommand}"
                                   CommandParameter="{Binding}">
                             <controls:IconView Classes="small" IconKey="Icon.Trash" />
@@ -135,37 +136,63 @@
                         </Grid>
 
                         <!-- The ways to the node: shown when it is reachable at more than one address and its line is unfolded. -->
-                        <StackPanel Margin="38,0,0,0" Spacing="2" IsVisible="{Binding AreRoutesShown}">
+                        <StackPanel Margin="54,0,16,11" Spacing="2" Grid.IsSharedSizeScope="True" IsVisible="{Binding AreRoutesShown}">
                           <RadioButton IsChecked="{Binding IsAutoRoute, Mode=OneWay}"
                                        Content="{loc:Loc Routes.Auto}" ToolTip.Tip="{loc:Loc Routes.AutoTip}"
                                        Command="{Binding $parent[ItemsControl].((pages:RoleAndNodesViewModel)DataContext).AutoRouteCommand}"
                                        CommandParameter="{Binding}" />
+                          <Border Classes="header-row" Padding="0,6,0,4">
+                            <Grid ColumnSpacing="16">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="RouteChoice" />
+                                <ColumnDefinition Width="1.3*" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="RouteUsage" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="RouteState" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="RouteActions" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="1" Text="{loc:Loc Field.Address}" />
+                              <TextBlock Grid.Column="2" Text="{loc:Loc Routes.Usage}" />
+                              <TextBlock Grid.Column="3" Text="{loc:Loc Common.Status}" />
+                              <TextBlock Grid.Column="4" Text="{loc:Loc Routes.PriorityColumn}" />
+                            </Grid>
+                          </Border>
                           <ItemsControl ItemsSource="{Binding Routes}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="items:LinkRouteItemViewModel">
-                                <Grid ColumnDefinitions="Auto,1.3*,90,110,*,Auto,Auto,Auto">
+                                <Grid ColumnSpacing="16">
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="RouteChoice" />
+                                    <ColumnDefinition Width="1.3*" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="RouteUsage" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="RouteState" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="RouteActions" />
+                                  </Grid.ColumnDefinitions>
                                   <RadioButton IsChecked="{Binding IsPinned, Mode=OneWay}" ToolTip.Tip="{loc:Loc Routes.PinTip}"
                                                Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).SelectRouteCommand}"
                                                CommandParameter="{Binding}" />
-                                  <TextBlock Grid.Column="1" Classes="mono secondary" VerticalAlignment="Center" Margin="6,0,0,0"
+                                  <TextBlock Grid.Column="1" Classes="mono secondary" VerticalAlignment="Center"
                                              Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
                                   <TextBlock Grid.Column="2" Classes="status online" VerticalAlignment="Center" Text="{Binding ActiveText}" />
                                   <TextBlock Grid.Column="3" Classes="status" VerticalAlignment="Center"
                                              Classes.online="{Binding IsReachable}"
                                              Classes.offline="{Binding IsUnreachable}"
                                              Text="{Binding StatusText}" />
-                                  <TextBlock Grid.Column="4" Classes="muted" VerticalAlignment="Center" Text="{Binding PriorityText}" />
-                                  <Button Grid.Column="5" Classes="icon hover-only" Padding="5" Content="▲" ToolTip.Tip="{loc:Loc Routes.Raise}"
-                                          Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RaiseRouteCommand}"
-                                          CommandParameter="{Binding}" />
-                                  <Button Grid.Column="6" Classes="icon hover-only" Padding="5" Content="▼" ToolTip.Tip="{loc:Loc Routes.Lower}"
-                                          Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).LowerRouteCommand}"
-                                          CommandParameter="{Binding}" />
-                                  <Button Grid.Column="7" Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Routes.Remove}"
-                                          Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RemoveRouteCommand}"
-                                          CommandParameter="{Binding}">
-                                    <controls:IconView Classes="small" IconKey="Icon.Trash" />
-                                  </Button>
+                                  <TextBlock Grid.Column="4" Classes="muted" VerticalAlignment="Center" Text="{Binding Priority}" />
+                                  <StackPanel Grid.Column="5" Orientation="Horizontal">
+                                    <Button Classes="icon hover-only" Padding="5" Content="▲" ToolTip.Tip="{loc:Loc Routes.Raise}"
+                                            Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RaiseRouteCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Classes="icon hover-only" Padding="5" Content="▼" ToolTip.Tip="{loc:Loc Routes.Lower}"
+                                            Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).LowerRouteCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Classes="icon hover-only" Padding="5" ToolTip.Tip="{loc:Loc Routes.Remove}"
+                                            Command="{Binding $parent[ItemsControl;1].((pages:RoleAndNodesViewModel)DataContext).RemoveRouteCommand}"
+                                            CommandParameter="{Binding}">
+                                      <controls:IconView Classes="small" IconKey="Icon.Trash" />
+                                    </Button>
+                                  </StackPanel>
                                 </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>

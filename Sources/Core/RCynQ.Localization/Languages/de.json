@@ -585,7 +585,8 @@
   "Routes.AutoTip": "Der Knoten verwendet die bevorzugte Route, die antwortet; unter Routen gleicher Priorität die schnellste. Er kehrt zu einer besseren Route zurück, sobald diese wieder antwortet.",
   "Routes.Lower": "Priorität senken",
   "Routes.PinTip": "Diese Route immer verwenden, ob sie antwortet oder nicht",
-  "Routes.Priority": "Priorität {0}",
+  "Routes.PriorityColumn": "Priorität",
+  "Routes.Usage": "Verwendung",
   "Routes.Raise": "Priorität erhöhen",
   "Routes.Reachable": "antwortet",
   "Routes.ReachableIn": "antwortet, {0} ms",
@@ -679,7 +680,7 @@
   "Sync.SelectAll": "Alle auswählen",
   "Sync.SelectedOf": "{0} von {1} ausgewählt",
   "Sync.SelectFiles": "Dateien auswählen",
-  "Sync.SelectFilesTip": "Häkchen anzeigen, um nur einen Teil der Dateien zu senden. Erneut klicken, um sie zu verbergen: dann werden alle Dateien gesendet.",
+  "Sync.SelectFilesTip": "Die zu sendenden Dateien festlegen. Ist dieser Modus nicht aktiv, werden alle Dateien im Arbeitsbaum gesendet.",
   "Sync.Scan": "Prüfen",
   "Sync.ScanTip": "Erneut nach lokalen Änderungen zum Senden suchen, ohne die Registerkarte zu wechseln.",
   "Sync.Search": "Dateien suchen",
@@ -1012,12 +1013,11 @@
   "PatchFile.TooLarge": "Die Patch-Datei ist größer als {0} MB.",
   "SavePatch.Description": "Die Änderungen werden in eine .patch-Datei geschrieben. Sie lässt sich später auf dem Tab „Branches“ oder mit git apply anwenden.",
   "SavePatch.KeepChanges": "Änderungen im Arbeitszweig behalten",
-  "SavePatch.KeepChangesHint": "Ist dies aus, verlassen die Änderungen den Arbeitszweig zusammen mit dem Patch.",
+  "SavePatch.KeepChangesHint": "Ist dies aus, wandern die ausgewählten Änderungen vollständig in den Patch, und der Git-Arbeitsbaum wird von ihnen bereinigt.",
   "SavePatch.Nothing": "Keine Änderungen zum Speichern.",
   "SavePatch.Saved": "Patch gespeichert: {0}",
   "SavePatch.SavedAndRemoved": "Patch gespeichert: {0}. Die Änderungen wurden aus dem Arbeitszweig entfernt.",
   "SavePatch.SavedNotRemoved": "Patch gespeichert: {0}. Die Änderungen sind im Arbeitszweig geblieben.\n{1}",
   "SavePatch.Title": "Patch speichern",
-  "Sync.SavePatch": "Speichern",
-  "Sync.SavePatchTip": "Die Änderungen in einer .patch-Datei speichern: die angehakten Dateien oder alle, wenn keine angehakt ist."
+  "Sync.SavePatchTip": "Die Änderungen in einer .patch-Datei speichern: alle Dateien, im Auswahlmodus nur die angehakten."
 }

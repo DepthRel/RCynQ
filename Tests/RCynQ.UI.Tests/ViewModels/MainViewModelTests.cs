@@ -70,6 +70,40 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that coming back to the window reads the changed files again: an edit made in another program raises no
+    /// event, and the buttons of the tab depend on the list. Another tab in view leaves the reading until the tab is opened.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Coming_Back_To_The_Window_Reads_The_Changes_Again()
+    {
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
+        _api.GetStateAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
+        _api.GetUnsentCommitsAsync(Arg.Any<CancellationToken>()).Returns(TestData.UnsentCommits());
+        var main = Create();
+        main.OnWindowActivated();
+        await _api.DidNotReceive().GetStateAsync(Arg.Any<CancellationToken>());
+
+        await main.InitializeAsync();
+        main.SelectedTab = main.Tabs.Single(tab => tab.Key == TabKey.Sync);
+        await main.Sync.EnsureLoadedAsync();
+        _api.ClearReceivedCalls();
+
+        main.OnWindowActivated();
+        await main.Sync.RefreshAsync();
+        await _api.Received().GetStateAsync(Arg.Any<CancellationToken>());
+
+        main.SelectedTab = main.Tabs.Single(tab => tab.Key == TabKey.Overview);
+        await main.Sync.EnsureLoadedAsync();
+        _api.ClearReceivedCalls();
+
+        main.OnWindowActivated();
+        await _api.DidNotReceive().GetStateAsync(Arg.Any<CancellationToken>());
+        await main.Sync.EnsureLoadedAsync();
+        await _api.Received().GetStateAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Verifies that without a configuration file the setup is shown and no service is started.
     /// </summary>
     /// <returns>A task representing the test.</returns>

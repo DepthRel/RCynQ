@@ -233,7 +233,7 @@ Ligne de commande : `rcynq commits list`, `rcynq commits send [--up-to <hash>]`,
 
 Les modifications n'ont pas besoin de partir tout de suite. Un fichier `.patch` ordinaire les garde pour plus tard, sur la Workstation comme sur l'Origin.
 
-1. **Synchronisation → Enregistrer** écrit les fichiers cochés dans un fichier de patch, ou tous si aucun n'est coché. `git apply` comprend aussi ce fichier.
+1. **Synchronisation → Enregistrer le patch** écrit tous les fichiers modifiés dans un fichier de patch, ou seulement les fichiers cochés en mode de sélection. `git apply` comprend aussi ce fichier.
 2. Avec **Conserver les modifications dans la branche de travail** désactivé, les modifications enregistrées quittent l'arbre de travail dès que le fichier est écrit.
 3. **Branches → Appliquer le patch** ramène un patch : choisissez ses fichiers dans une liste plate ou une arborescence et cliquez sur **Appliquer**. Rien ne va dans l'index ni dans un commit : le résultat apparaît comme des modifications locales ordinaires.
 

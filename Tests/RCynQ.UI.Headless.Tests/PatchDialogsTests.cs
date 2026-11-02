@@ -22,7 +22,7 @@ public sealed class PatchDialogsTests
         () =>
         {
             AppLocalizer.SetLanguage("ru");
-            var window = new SavePatchDialog { DataContext = new SavePatchDialogViewModel(_ => Task.FromResult(true)) };
+            var window = new SavePatchDialog { DataContext = new SavePatchDialogViewModel(() => Task.FromResult<string?>(null)) };
             window.Show();
             try
             {

@@ -57,17 +57,26 @@ public sealed class PatchFileViewModelTests : IDisposable
     private bool KeepChanges { get; set; } = true;
 
     /// <summary>
-    /// Verifies that the button is available exactly while there are changed files, with or without check marks.
+    /// Verifies that the button needs a changed file and, with check marks, a checked one, as the send button does.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task The_Button_Follows_The_Changed_Files()
+    public async Task The_Button_Follows_The_Chosen_Files()
     {
         var sync = await CreateSyncAsync();
         sync.SavePatchCommand.CanExecute(null).Should().BeTrue();
 
         sync.ToggleSelectionModeCommand.Execute(null);
-        sync.SavePatchCommand.CanExecute(null).Should().BeTrue("nothing checked means every file");
+        sync.SavePatchCommand.CanExecute(null).Should().BeFalse("nothing is checked");
+
+        sync.ChangedFiles[0].IsSelected = true;
+        sync.SavePatchCommand.CanExecute(null).Should().BeTrue();
+
+        sync.ChangedFiles[0].IsSelected = false;
+        sync.SavePatchCommand.CanExecute(null).Should().BeFalse("the mark is gone");
+
+        sync.ToggleSelectionModeCommand.Execute(null);
+        sync.SavePatchCommand.CanExecute(null).Should().BeTrue("without check marks every file is saved");
 
         Changed();
         await sync.RefreshAsync();
@@ -84,7 +93,7 @@ public sealed class PatchFileViewModelTests : IDisposable
     {
         var sync = await CreateSyncAsync();
 
-        new SavePatchDialogViewModel(_ => Task.FromResult(true)).KeepChanges.Should().BeTrue();
+        new SavePatchDialogViewModel(() => Task.FromResult<string?>(null)).KeepChanges.Should().BeTrue();
         await sync.SavePatchCommand.ExecuteAsync(null);
 
         (await File.ReadAllBytesAsync(PatchPath)).Should().Equal(_patch);
@@ -94,18 +103,18 @@ public sealed class PatchFileViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies that no checked file saves every file and that checked files narrow the patch.
+    /// Verifies that without check marks the patch holds every file and that checked files narrow it.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
-    public async Task The_Patch_Holds_The_Checked_Files_Or_All()
+    public async Task The_Patch_Holds_All_Files_Or_The_Checked_Ones()
     {
         var sync = await CreateSyncAsync();
-        sync.ToggleSelectionModeCommand.Execute(null);
 
         await sync.SavePatchCommand.ExecuteAsync(null);
         await _api.Received(1).BuildPatchFileAsync(null, Arg.Any<CancellationToken>());
 
+        sync.ToggleSelectionModeCommand.Execute(null);
         sync.ChangedFiles.Single(file => file.Path == "b.txt").IsSelected = true;
         await sync.SavePatchCommand.ExecuteAsync(null);
 
@@ -133,6 +142,38 @@ public sealed class PatchFileViewModelTests : IDisposable
         shown!.Confirmed.Should().BeFalse();
         await _api.DidNotReceiveWithAnyArgs().BuildPatchFileAsync(default, default);
         File.Exists(PatchPath).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that the dialog is gone before the patch is built, and that the page shows the work as going on.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task The_Dialog_Closes_Before_The_Work_Starts()
+    {
+        var sync = await CreateSyncAsync();
+        var dialogClosed = false;
+        var closedAtWork = false;
+        var busyAtWork = false;
+        _dialogs.ShowSavePatchDialogAsync(Arg.Any<SavePatchDialogViewModel>()).Returns(async call =>
+        {
+            var dialog = call.Arg<SavePatchDialogViewModel>();
+            await dialog.SaveCommand.ExecuteAsync(null);
+            dialogClosed = true;
+            return dialog.Confirmed;
+        });
+        _api.BuildPatchFileAsync(Arg.Any<IReadOnlyList<string>?>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            closedAtWork = dialogClosed;
+            busyAtWork = sync.IsBusy;
+            return _patch;
+        });
+
+        await sync.SavePatchCommand.ExecuteAsync(null);
+
+        closedAtWork.Should().BeTrue();
+        busyAtWork.Should().BeTrue();
+        sync.IsBusy.Should().BeFalse();
     }
 
     /// <summary>

@@ -420,6 +420,18 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Reads the changed files again when the user comes back to the window: an edit made in another program raises no
+    /// event, and the buttons of the Synchronization tab depend on the list.
+    /// </summary>
+    public void OnWindowActivated()
+    {
+        if (_initialized)
+        {
+            RefreshOrInvalidate(Sync);
+        }
+    }
+
+    /// <summary>
     /// Reloads the current page, or retries initialization (including starting the service) when it failed before.
     /// </summary>
     /// <returns>A task representing the operation.</returns>

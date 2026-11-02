@@ -585,7 +585,8 @@
   "Routes.AutoTip": "The node uses the most preferred route that answers; among routes of the same priority the fastest one. It returns to a better route as soon as that route answers again.",
   "Routes.Lower": "Lower the priority",
   "Routes.PinTip": "Always use this route, whether it answers or not",
-  "Routes.Priority": "priority {0}",
+  "Routes.PriorityColumn": "Priority",
+  "Routes.Usage": "Usage",
   "Routes.Raise": "Raise the priority",
   "Routes.Reachable": "answers",
   "Routes.ReachableIn": "answers, {0} ms",
@@ -679,7 +680,7 @@
   "Sync.SelectAll": "Select all",
   "Sync.SelectedOf": "{0} of {1} selected",
   "Sync.SelectFiles": "Choose files",
-  "Sync.SelectFilesTip": "Show check marks to send only some of the files. Press again to hide them: then all files are sent.",
+  "Sync.SelectFilesTip": "Choose the files to send. While this mode is off, all files in the working tree are sent.",
   "Sync.Scan": "Scan",
   "Sync.ScanTip": "Check again for local changes to send, without switching tabs.",
   "Sync.Search": "Search files",
@@ -1012,12 +1013,11 @@
   "PatchFile.TooLarge": "The patch file is larger than {0} MB.",
   "SavePatch.Description": "The changes go to a .patch file. It can be applied later on the Branches tab, or with git apply.",
   "SavePatch.KeepChanges": "Keep the changes in the working branch",
-  "SavePatch.KeepChangesHint": "When this is off, the changes leave the working branch together with the patch.",
+  "SavePatch.KeepChangesHint": "When this is off, the chosen changes move into the patch completely and the Git working tree is cleared of them.",
   "SavePatch.Nothing": "No changes to save.",
   "SavePatch.Saved": "Patch saved: {0}",
   "SavePatch.SavedAndRemoved": "Patch saved: {0}. The changes were taken out of the working branch.",
   "SavePatch.SavedNotRemoved": "Patch saved: {0}. The changes stayed in the working branch.\n{1}",
   "SavePatch.Title": "Save patch",
-  "Sync.SavePatch": "Save",
-  "Sync.SavePatchTip": "Save the changes to a .patch file: the checked files, or all of them when none is checked."
+  "Sync.SavePatchTip": "Save the changes to a .patch file: all files, or only the checked ones in selection mode."
 }

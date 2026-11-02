@@ -233,7 +233,7 @@ Befehlszeile: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcyn
 
 Änderungen müssen nicht sofort gesendet werden. Eine gewöhnliche `.patch`-Datei hebt sie für später auf, auf der Workstation wie auf Origin.
 
-1. **Synchronisation → Speichern** schreibt die markierten Dateien in eine Patch-Datei, oder alle, wenn keine markiert ist. Auch `git apply` versteht diese Datei.
+1. **Synchronisation → Patch speichern** schreibt alle geänderten Dateien in eine Patch-Datei, im Auswahlmodus nur die markierten. Auch `git apply` versteht diese Datei.
 2. Ist **Änderungen im Arbeitszweig behalten** ausgeschaltet, verlassen die gespeicherten Änderungen den Arbeitsbaum, sobald die Datei geschrieben ist.
 3. **Branches → Patch anwenden** holt einen Patch zurück: Wählen Sie seine Dateien in einer flachen Liste oder einem Baum und klicken Sie auf **Anwenden**. Nichts kommt in den Index oder in einen Commit: Das Ergebnis erscheint als gewöhnliche lokale Änderungen.
 

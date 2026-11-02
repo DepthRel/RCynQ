@@ -11,7 +11,7 @@
   <ScrollViewer x:Name="PageScroll">
     <StackPanel Margin="28,22,28,28" Spacing="18">
 
-      <Grid ColumnDefinitions="*,Auto">
+      <controls:PageHeadPanel>
         <WrapPanel>
           <StackPanel Spacing="2" Margin="0,0,32,0">
             <TextBlock Classes="muted" Text="{loc:Loc Field.Role}" />
@@ -30,13 +30,20 @@
             <TextBlock Classes="value danger" Text="{Binding ConflictCount}" />
           </StackPanel>
         </WrapPanel>
-        <Button Grid.Column="1" Classes="accent" VerticalAlignment="Center" Command="{Binding SendCommand}">
+        <!-- The two ways out for the changes in the list; both need a chosen file. -->
+        <Button Classes="outline" HorizontalAlignment="Stretch" IsEnabled="{Binding !IsBusy}" ToolTip.Tip="{loc:Loc Sync.SavePatchTip}" ToolTip.ShowOnDisabled="True" Command="{Binding SavePatchCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <controls:IconView Classes="small" IconKey="Icon.PatchSave" />
+            <TextBlock Text="{loc:Loc SavePatch.Title}" />
+          </StackPanel>
+        </Button>
+        <Button Classes="accent" HorizontalAlignment="Stretch" IsEnabled="{Binding !IsBusy}" Command="{Binding SendCommand}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <controls:IconView Classes="small" IconKey="Icon.Send" />
             <TextBlock Text="{loc:Loc Sync.Send}" />
           </StackPanel>
         </Button>
-      </Grid>
+      </controls:PageHeadPanel>
 
       <Border Classes="banner warning" IsVisible="{Binding NeedsSyncBase}">
         <Grid ColumnDefinitions="Auto,*,Auto">
@@ -64,12 +71,12 @@
 
       <!-- Changes to send -->
       <StackPanel>
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
-          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <controls:PageHeadPanel Margin="0,0,0,12">
+          <WrapPanel ItemSpacing="8">
             <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Sync.Pending}" />
             <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding CountText}" />
-          </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          </WrapPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="outline tool" Classes.toggled="{Binding IsSearchOpen}" Command="{Binding ToggleSearchCommand}">
               <ToolTip.Tip>
                 <StackPanel Classes="tip">
@@ -87,15 +94,6 @@
                 </StackPanel>
               </ToolTip.Tip>
               <controls:IconView Classes="small" IconKey="Icon.SquareCheck" />
-            </Button>
-            <Button Classes="outline tool" ToolTip.ShowOnDisabled="True" Command="{Binding SavePatchCommand}">
-              <ToolTip.Tip>
-                <StackPanel Classes="tip">
-                  <TextBlock Classes="tip-title" Text="{loc:Loc Sync.SavePatch}" />
-                  <TextBlock Classes="tip-text" Text="{loc:Loc Sync.SavePatchTip}" />
-                </StackPanel>
-              </ToolTip.Tip>
-              <controls:IconView Classes="small" IconKey="Icon.PatchSave" />
             </Button>
             <StackPanel Orientation="Horizontal">
               <Button Classes="outline tool segment-start" Classes.toggled="{Binding !IsTreeView}" Command="{Binding ShowFlatCommand}">
@@ -137,7 +135,7 @@
               <controls:IconView Classes="small" IconKey="Icon.Database" />
             </Button>
           </StackPanel>
-        </Grid>
+        </controls:PageHeadPanel>
 
         <TextBox x:Name="SearchBox" Margin="0,0,0,12" IsVisible="{Binding IsSearchOpen}"
                  Text="{Binding FilterText}" PlaceholderText="{loc:Loc Sync.SearchPlaceholder}">
@@ -176,33 +174,31 @@
 
       <!-- Commits to send (Workstation): a block from the oldest unsent commit; newest on top, as git log shows them -->
       <StackPanel IsVisible="{Binding Commits.IsVisible}">
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
-          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <controls:PageHeadPanel Margin="0,0,0,10">
+          <WrapPanel ItemSpacing="8">
             <TextBlock Classes="section" Margin="0" VerticalAlignment="Center" Text="{loc:Loc Commits.Title}" />
             <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Commits.CountText}" />
-          </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-            <Button Classes="danger muted" Command="{Binding RollBackCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.RollBackTip}">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <controls:IconView Classes="small" IconKey="Icon.Reload" />
-                <TextBlock Text="{loc:Loc Commits.RollBack}" />
-              </StackPanel>
-            </Button>
-            <Button Classes="accent" Command="{Binding SendCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.SendTip}">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <controls:IconView Classes="small" IconKey="Icon.Send" />
-                <TextBlock Text="{loc:Loc Commits.Send}" />
-              </StackPanel>
-            </Button>
-          </StackPanel>
-        </Grid>
+          </WrapPanel>
+          <Button Classes="danger muted" HorizontalAlignment="Stretch" Command="{Binding RollBackCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.RollBackTip}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <controls:IconView Classes="small" IconKey="Icon.Reload" />
+              <TextBlock Text="{loc:Loc Commits.RollBack}" />
+            </StackPanel>
+          </Button>
+          <Button Classes="accent" HorizontalAlignment="Stretch" Command="{Binding SendCommitsCommand}" ToolTip.Tip="{loc:Loc Commits.SendTip}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <controls:IconView Classes="small" IconKey="Icon.Send" />
+              <TextBlock Text="{loc:Loc Commits.Send}" />
+            </StackPanel>
+          </Button>
+        </controls:PageHeadPanel>
         <Border Classes="banner warning" Margin="0,0,0,10" IsVisible="{Binding Commits.HasProblem}">
           <TextBlock TextWrapping="Wrap" Text="{Binding Commits.Problem}" />
         </Border>
         <Border Classes="card" IsVisible="{Binding Commits.Items.Count}">
           <StackPanel>
             <Border Classes="header-row">
-              <Grid ColumnDefinitions="30,140,100,180,*">
+              <Grid ColumnDefinitions="30,160,100,180,*">
                 <TextBlock Grid.Column="1" Text="{loc:Loc Sync.Time}" />
                 <TextBlock Grid.Column="2" Text="{loc:Loc Commits.Hash}" />
                 <TextBlock Grid.Column="3" Text="{loc:Loc Commits.Author}" />
@@ -214,7 +210,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="commits:UnsentCommitItemViewModel">
                     <Border Classes="row" Classes.selected="{Binding IsChecked}" Padding="16,6">
-                      <Grid ColumnDefinitions="30,140,100,180,*">
+                      <Grid ColumnDefinitions="30,160,100,180,*">
                         <CheckBox IsChecked="{Binding IsChecked}" MinHeight="0" MinWidth="0" Padding="0" Margin="0,-7" VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" VerticalAlignment="Center" Text="{Binding TimeText}" />
                         <TextBlock Grid.Column="2" Classes="mono secondary" FontSize="12.5" VerticalAlignment="Center" Text="{Binding ShortHash}" ToolTip.Tip="{Binding Hash}" />

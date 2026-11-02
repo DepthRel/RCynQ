@@ -233,7 +233,7 @@ Línea de comandos: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`,
 
 Los cambios no tienen por qué enviarse enseguida. Un archivo `.patch` corriente los guarda para más tarde, en la Workstation y en el Origin.
 
-1. **Sincronización → Guardar** escribe los archivos marcados en un archivo de parche, o todos si no hay ninguno marcado. `git apply` también entiende ese archivo.
+1. **Sincronización → Guardar patch** escribe todos los archivos cambiados en un archivo de parche, o solo los marcados en el modo de selección. `git apply` también entiende ese archivo.
 2. Con **Conservar los cambios en la rama de trabajo** desactivado, los cambios guardados salen del árbol de trabajo en cuanto se escribe el archivo.
 3. **Ramas → Aplicar patch** devuelve un parche: elige sus archivos en una lista plana o en un árbol y pulsa **Aplicar**. Nada pasa al índice ni a un commit: el resultado aparece como cambios locales corrientes.
 

@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AddHandler(OverflowStackPanel.OverflowChangedEvent, OnTabsOverflowChanged);
+        Activated += (_, _) => _viewModel?.OnWindowActivated();
     }
 
     /// <inheritdoc />

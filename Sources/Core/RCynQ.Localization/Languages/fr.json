@@ -585,7 +585,8 @@
   "Routes.AutoTip": "Le nœud utilise la route préférée qui répond ; parmi les routes de même priorité, la plus rapide. Il revient à une meilleure route dès qu'elle répond de nouveau.",
   "Routes.Lower": "Baisser la priorité",
   "Routes.PinTip": "Toujours utiliser cette route, qu'elle réponde ou non",
-  "Routes.Priority": "priorité {0}",
+  "Routes.PriorityColumn": "Priorité",
+  "Routes.Usage": "Utilisation",
   "Routes.Raise": "Augmenter la priorité",
   "Routes.Reachable": "répond",
   "Routes.ReachableIn": "répond, {0} ms",
@@ -679,7 +680,7 @@
   "Sync.SelectAll": "Tout sélectionner",
   "Sync.SelectedOf": "{0} sur {1} sélectionné(s)",
   "Sync.SelectFiles": "Choisir les fichiers",
-  "Sync.SelectFilesTip": "Afficher des cases à cocher pour n'envoyer qu'une partie des fichiers. Cliquez de nouveau pour les masquer : tous les fichiers sont alors envoyés.",
+  "Sync.SelectFilesTip": "Indiquer les fichiers à envoyer. Si ce mode n'est pas actif, tous les fichiers de l'arbre de travail sont envoyés.",
   "Sync.Scan": "Analyser",
   "Sync.ScanTip": "Rechercher de nouveau les modifications locales à envoyer, sans changer d'onglet.",
   "Sync.Search": "Rechercher des fichiers",
@@ -1012,12 +1013,11 @@
   "PatchFile.TooLarge": "Le fichier patch dépasse {0} Mo.",
   "SavePatch.Description": "Les modifications sont écrites dans un fichier .patch. Il pourra être appliqué plus tard dans l’onglet Branches ou avec git apply.",
   "SavePatch.KeepChanges": "Conserver les modifications dans la branche de travail",
-  "SavePatch.KeepChangesHint": "Si cette option est désactivée, les modifications quittent la branche de travail avec le patch.",
+  "SavePatch.KeepChangesHint": "Si cette option est désactivée, les modifications choisies sont entièrement transférées dans le patch et retirées de l'arbre de travail Git.",
   "SavePatch.Nothing": "Aucune modification à enregistrer.",
   "SavePatch.Saved": "Patch enregistré : {0}",
   "SavePatch.SavedAndRemoved": "Patch enregistré : {0}. Les modifications ont été retirées de la branche de travail.",
   "SavePatch.SavedNotRemoved": "Patch enregistré : {0}. Les modifications sont restées dans la branche de travail.\n{1}",
   "SavePatch.Title": "Enregistrer le patch",
-  "Sync.SavePatch": "Enregistrer",
-  "Sync.SavePatchTip": "Enregistre les modifications dans un fichier .patch : les fichiers cochés, ou tous si aucun n’est coché."
+  "Sync.SavePatchTip": "Enregistre les modifications dans un fichier .patch : tous les fichiers, ou seulement les fichiers cochés en mode de sélection."
 }

@@ -233,7 +233,7 @@ Command line: `rcynq commits list`, `rcynq commits send [--up-to <hash>]`, `rcyn
 
 Changes do not have to be sent right away. An ordinary `.patch` file keeps them for later, on the Workstation and on the Origin.
 
-1. **Synchronization → Save** writes the checked files to a patch file, or all of them when none is checked. `git apply` understands that file too.
+1. **Synchronization → Save patch** writes all changed files to a patch file, or only the checked ones in selection mode. `git apply` understands that file too.
 2. With **Keep the changes in the working branch** switched off, the saved changes leave the working tree once the file is written.
 3. **Branches → Apply patch** brings a patch back: choose its files in a flat list or a tree and press **Apply**. Nothing is staged or committed: the result shows up as ordinary local changes.
 

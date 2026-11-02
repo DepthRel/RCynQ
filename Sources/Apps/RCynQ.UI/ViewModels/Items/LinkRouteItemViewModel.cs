@@ -49,9 +49,6 @@ public sealed class LinkRouteItemViewModel
     /// <summary>Gets the preference of the route; lower values are preferred.</summary>
     public int Priority => _route.Priority;
 
-    /// <summary>Gets the preference as text.</summary>
-    public string PriorityText => _localizer.Format("Routes.Priority", _route.Priority);
-
     /// <summary>Gets a value indicating whether the route was chosen by hand.</summary>
     public bool IsPinned { get; }
 

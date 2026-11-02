@@ -309,6 +309,32 @@ public sealed class SyncViewModelTests
     }
 
     /// <summary>
+    /// Verifies that the button needs a file in the list, as saving a patch does, and that a file the neighbour already has
+    /// counts: it is sent once more.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Send_Needs_A_Changed_File()
+    {
+        ReturnChangedFiles();
+        var sync = new SyncViewModel(TestTexts.Russian, _api, _dialogs);
+        await sync.RefreshAsync();
+
+        sync.HasChosenFiles.Should().BeFalse("nothing changed");
+        sync.SendCommand.CanExecute(null).Should().BeFalse();
+
+        ReturnChangedFiles(new ChangedFile(ChangeKind.Modified, "a.txt", true));
+        await sync.RefreshAsync();
+
+        sync.SendCommand.CanExecute(null).Should().BeTrue();
+
+        ReturnChangedFiles();
+        await sync.RefreshAsync();
+
+        sync.SendCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that with check marks only the checked files are sent, that sending needs at least one, and that the choice is
     /// forgotten after the send.
     /// </summary>
@@ -323,7 +349,7 @@ public sealed class SyncViewModelTests
 
         sync.ToggleSelectionModeCommand.Execute(null);
         sync.ChangedFiles.Should().OnlyContain(file => file.IsSelectable);
-        sync.CanSend.Should().BeFalse("nothing is checked");
+        sync.HasChosenFiles.Should().BeFalse("nothing is checked");
         sync.SendCommand.CanExecute(null).Should().BeFalse();
         sync.CountText.Should().Be("(выбрано 0 из 3)");
 

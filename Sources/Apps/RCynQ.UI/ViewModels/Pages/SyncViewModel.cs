@@ -77,11 +77,12 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     [NotifyPropertyChangedFor(nameof(HasConflicts))]
     private int _conflictCount;
 
-    /// <summary>Whether the user picks the files to send by check marks; otherwise every changed file is sent.</summary>
+    /// <summary>Whether the user picks the files to send or to save by check marks; otherwise every changed file goes.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(HasChosenFiles))]
     [NotifyPropertyChangedFor(nameof(CountText))]
     [NotifyCanExecuteChangedFor(nameof(SendCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SavePatchCommand))]
     private bool _isSelectionMode;
 
     /// <summary>Whether the changed files are shown as a tree of folders; otherwise as a flat list of paths.</summary>
@@ -143,8 +144,6 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
         {
             OnPropertyChanged(nameof(HasNoChangedFiles));
             OnPropertyChanged(nameof(CountText));
-            OnPropertyChanged(nameof(CanSavePatch));
-            SavePatchCommand.NotifyCanExecuteChanged();
         };
         Rows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMatches));
         History.CollectionChanged += (_, _) =>
@@ -204,11 +203,8 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <summary>Gets the number of files checked to be sent.</summary>
     public int SelectedCount => ChangedFiles.Count(file => file.IsSelected);
 
-    /// <summary>Gets a value indicating whether the send button can be pressed: with check marks at least one file has to be checked.</summary>
-    public bool CanSend => !IsSelectionMode || SelectedCount > 0;
-
-    /// <summary>Gets a value indicating whether a patch can be saved: there has to be a changed file.</summary>
-    public bool CanSavePatch => ChangedFiles.Count > 0;
+    /// <summary>Gets a value indicating whether there is something to send or to save: a changed file, and with check marks a checked one.</summary>
+    public bool HasChosenFiles => ChangedFiles.Count > 0 && (!IsSelectionMode || SelectedCount > 0);
 
     /// <summary>Gets the number of files next to the title of the list, or an empty text when there are none.</summary>
     public string CountText
@@ -376,10 +372,10 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// Sends the changed files: the checked ones in selection mode, all of them otherwise.
     /// </summary>
     /// <returns>A task representing the operation.</returns>
-    [RelayCommand(CanExecute = nameof(CanSend))]
+    [RelayCommand(CanExecute = nameof(HasChosenFiles))]
     private async Task SendAsync()
     {
-        var paths = IsSelectionMode ? ChangedFiles.Where(file => file.IsSelected).Select(file => file.Path).ToArray() : null;
+        var paths = ChosenPaths();
         if (await RunSafeAsync(async () => InfoMessage = (await _api.SendPatchAsync(paths)).Message))
         {
             SetSelected(ChangedFiles, false);
@@ -389,30 +385,31 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     }
 
     /// <summary>
-    /// Opens the dialog that saves the changes to a patch file.
+    /// Asks how to save the changes and saves them to a patch file; the dialog is gone by the time the work starts.
     /// </summary>
-    /// <returns>A task that completes when the dialog is closed.</returns>
-    [RelayCommand(CanExecute = nameof(CanSavePatch))]
-    private Task SavePatchAsync() => _dialogs.ShowSavePatchDialogAsync(new SavePatchDialogViewModel(WritePatchAsync));
+    /// <returns>A task that completes when the patch is saved or the user gave up.</returns>
+    [RelayCommand(CanExecute = nameof(HasChosenFiles))]
+    private async Task SavePatchAsync()
+    {
+        var dialog = new SavePatchDialogViewModel(() => _dialogs.PickPatchToSaveAsync(Localizer.Get("SavePatch.Title"), PATCH_FILE_NAME, Localizer.Get("PatchFile.FileType")));
+        if (await _dialogs.ShowSavePatchDialogAsync(dialog) && dialog.PatchPath is { } file)
+        {
+            await WritePatchAsync(file, dialog.KeepChanges);
+        }
+    }
 
     /// <summary>
-    /// Asks where to save and writes the patch of the checked files, or of all of them when none is checked. The changes
-    /// leave the working branch only after the file is written.
+    /// Writes the patch of the chosen files. The changes leave the working branch only after the file is written.
     /// </summary>
+    /// <param name="file">The file the patch goes to.</param>
     /// <param name="keepChanges">Whether the changes stay in the working branch.</param>
-    /// <returns><see langword="false"/> when the user gave up on the file picker.</returns>
-    private async Task<bool> WritePatchAsync(bool keepChanges)
+    /// <returns>A task representing the operation.</returns>
+    private async Task WritePatchAsync(string file, bool keepChanges)
     {
-        var file = await _dialogs.PickPatchToSaveAsync(Localizer.Get("SavePatch.Title"), PATCH_FILE_NAME, Localizer.Get("PatchFile.FileType"));
-        if (file is null)
-        {
-            return false;
-        }
-
-        var selected = ChangedFiles.Where(item => item.IsSelected).Select(item => item.Path).ToArray();
+        var paths = ChosenPaths();
         var saved = await RunSafeAsync(async () =>
         {
-            var patch = await _api.BuildPatchFileAsync(selected.Length > 0 ? selected : null);
+            var patch = await _api.BuildPatchFileAsync(paths);
             if (patch.Length == 0)
             {
                 InfoMessage = Localizer.Get("SavePatch.Nothing");
@@ -442,8 +439,6 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
             NotifyDataChanged();
             await RefreshAsync();
         }
-
-        return true;
     }
 
     /// <summary>
@@ -653,6 +648,13 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     }
 
     /// <summary>
+    /// Collects the files that go out.
+    /// </summary>
+    /// <returns>The checked files in selection mode; otherwise <see langword="null"/>, which means every changed file.</returns>
+    private string[]? ChosenPaths()
+        => IsSelectionMode ? ChangedFiles.Where(file => file.IsSelected).Select(file => file.Path).ToArray() : null;
+
+    /// <summary>
     /// Updates what depends on the check marks.
     /// </summary>
     private void OnSelectionChanged()
@@ -663,9 +665,10 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
         }
 
         OnPropertyChanged(nameof(SelectedCount));
-        OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(HasChosenFiles));
         OnPropertyChanged(nameof(CountText));
         SendCommand.NotifyCanExecuteChanged();
+        SavePatchCommand.NotifyCanExecuteChanged();
         foreach (var folder in Rows.OfType<ChangedFolderItemViewModel>())
         {
             folder.RefreshSelection();

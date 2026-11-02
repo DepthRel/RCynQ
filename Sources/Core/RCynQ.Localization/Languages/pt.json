@@ -585,7 +585,8 @@
   "Routes.AutoTip": "O nó usa a rota preferida que responde; entre rotas com a mesma prioridade, a mais rápida. Volta a uma rota melhor assim que esta voltar a responder.",
   "Routes.Lower": "Baixar a prioridade",
   "Routes.PinTip": "Usar sempre esta rota, responda ou não",
-  "Routes.Priority": "prioridade {0}",
+  "Routes.PriorityColumn": "Prioridade",
+  "Routes.Usage": "Utilização",
   "Routes.Raise": "Subir a prioridade",
   "Routes.Reachable": "responde",
   "Routes.ReachableIn": "responde, {0} ms",
@@ -679,7 +680,7 @@
   "Sync.SelectAll": "Selecionar tudo",
   "Sync.SelectedOf": "{0} de {1} selecionados",
   "Sync.SelectFiles": "Escolher ficheiros",
-  "Sync.SelectFilesTip": "Mostrar caixas de verificação para enviar apenas alguns ficheiros. Prima novamente para as ocultar: então são enviados todos os ficheiros.",
+  "Sync.SelectFilesTip": "Indica os ficheiros a enviar. Se este modo não estiver ativo, são enviados todos os ficheiros da árvore de trabalho.",
   "Sync.Scan": "Procurar",
   "Sync.ScanTip": "Procurar novamente alterações locais para enviar, sem mudar de separador.",
   "Sync.Search": "Procurar ficheiros",
@@ -1012,12 +1013,11 @@
   "PatchFile.TooLarge": "O ficheiro patch ultrapassa {0} MB.",
   "SavePatch.Description": "As alterações são guardadas num ficheiro .patch. Pode ser aplicado mais tarde no separador Ramos ou com git apply.",
   "SavePatch.KeepChanges": "Manter as alterações no ramo de trabalho",
-  "SavePatch.KeepChangesHint": "Se esta opção estiver desligada, as alterações saem do ramo de trabalho com o patch.",
+  "SavePatch.KeepChangesHint": "Se esta opção estiver desligada, as alterações escolhidas passam por completo para o patch e são retiradas da árvore de trabalho do Git.",
   "SavePatch.Nothing": "Não há alterações para guardar.",
   "SavePatch.Saved": "Patch guardado: {0}",
   "SavePatch.SavedAndRemoved": "Patch guardado: {0}. As alterações foram retiradas do ramo de trabalho.",
   "SavePatch.SavedNotRemoved": "Patch guardado: {0}. As alterações ficaram no ramo de trabalho.\n{1}",
   "SavePatch.Title": "Guardar patch",
-  "Sync.SavePatch": "Guardar",
-  "Sync.SavePatchTip": "Guarda as alterações num ficheiro .patch: os ficheiros assinalados, ou todos se nenhum estiver assinalado."
+  "Sync.SavePatchTip": "Guarda as alterações num ficheiro .patch: todos os ficheiros, ou só os assinalados no modo de seleção."
 }
