@@ -1,4 +1,5 @@
 using System.Text;
+using RCynQ.Localization;
 using RCynQ.Sync.GitChannel;
 
 namespace RCynQ.Cli.Services;
@@ -11,12 +12,17 @@ public sealed class GitCommandService
     /// <summary>The Git channel.</summary>
     private readonly GitChannelService _git;
 
+    /// <summary>The localizer of the output.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitCommandService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the output.</param>
     /// <param name="git">The Git channel.</param>
-    public GitCommandService(GitChannelService git)
+    public GitCommandService(ILocalizer localizer, GitChannelService git)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _git = git;
     }
 
@@ -36,12 +42,11 @@ public sealed class GitCommandService
 
         if (result.Branch is { Branch: { } branch } info)
         {
-            text.Append("Branch ").Append(branch);
             text.Append(info.TrackingRef is null
-                ? " has no counterpart on Origin.\n"
-                : $": {info.Ahead} ahead, {info.Behind} behind {info.TrackingRef}.\n");
+                ? _localizer.Format("Cli.Git.BranchAlone", branch)
+                : _localizer.Format("Cli.Git.BranchDivergence", branch, info.Ahead, info.Behind, info.TrackingRef)).Append('\n');
         }
 
-        return (text.Length == 0 ? "Fetch completed.\n" : text.ToString(), result.Succeeded);
+        return (text.Length == 0 ? _localizer.Get("Cli.Git.FetchDone") + "\n" : text.ToString(), result.Succeeded);
     }
 }

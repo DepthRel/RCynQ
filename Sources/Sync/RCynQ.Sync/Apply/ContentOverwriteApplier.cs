@@ -23,9 +23,15 @@ namespace RCynQ.Sync.Apply;
 /// what it was before the patch.
 /// </para>
 /// <para>
-/// Writing below a symbolic link or creating a symbolic link that points outside the target directory is refused. Unix
-/// file modes of replaced files are kept. The staging directory is removed at the end; one left behind by a process
-/// that died is ignored by every scan (see <see cref="PathUtility.IsApplyStagingName"/>).
+/// Writing below a symbolic link or creating a symbolic link that points outside the target directory or into Git
+/// metadata is refused. Both are checked twice: when the patch is prepared, against the tree as it is, and again while
+/// it is put in place, because a link the same patch creates earlier changes where a later path leads. A link is
+/// checked the way the file system follows it (<see cref="PhysicalPath"/>), not by its text alone, after every change
+/// of the patch is in place; a link that leads out undoes the whole patch.
+/// </para>
+/// <para>
+/// Unix file modes of replaced files are kept. The staging directory is removed at the end; one left behind by a
+/// process that died is ignored by every scan (see <see cref="PathUtility.IsApplyStagingName"/>).
 /// </para>
 /// </remarks>
 public sealed class ContentOverwriteApplier : IPatchApplier
@@ -89,6 +95,13 @@ public sealed class ContentOverwriteApplier : IPatchApplier
                         throw new PatchApplyException(_localizer.Format("Apply.FileFailed", step.Change.Path, _localizer.Describe(ex)), ex);
                     }
                 }
+
+                // Only now is every link of the patch on the disk, so only now does a chain of them lead where it will.
+                var physicalRoot = PhysicalPath.Resolve(root) ?? root;
+                foreach (var step in steps.Where(step => step.LinkTarget is not null))
+                {
+                    EnsureLinkResolvesInside(physicalRoot, step);
+                }
             }
             catch
             {
@@ -125,7 +138,7 @@ public sealed class ContentOverwriteApplier : IPatchApplier
         var full = _paths.ResolveWithinRoot(root, change.Path);
         if (PathUtility.HasLinkedParent(root, full))
         {
-            throw new PatchApplyException($"'{change.Path}' is below a symbolic link; refusing to write through it.");
+            throw new PatchApplyException(_localizer.Format("Apply.BelowLink", change.Path));
         }
 
         var backup = Path.Combine(staging, FormattableString.Invariant($"{index}.old"));
@@ -141,7 +154,7 @@ public sealed class ContentOverwriteApplier : IPatchApplier
                 await using var link = await content.OpenReadAsync(change, cancellationToken);
                 using var reader = new StreamReader(link, System.Text.Encoding.UTF8);
                 var target = await reader.ReadToEndAsync(cancellationToken);
-                EnsureLinkStaysInside(root, full, target);
+                EnsureLinkStaysInside(root, full, change.Path, target);
                 return new Step(change, full, backup, null, target);
             }
 
@@ -167,18 +180,46 @@ public sealed class ContentOverwriteApplier : IPatchApplier
     }
 
     /// <summary>
-    /// Refuses a symbolic link whose target is absolute or leaves the target directory.
+    /// Refuses a symbolic link whose target, read as text, is absolute, leaves the target directory or leads into Git
+    /// metadata.
     /// </summary>
     /// <param name="root">The target directory.</param>
     /// <param name="full">The full path of the link.</param>
+    /// <param name="path">The path of the link in the patch, which the message names.</param>
     /// <param name="target">The link target as stored in the patch.</param>
-    /// <exception cref="PatchApplyException">The link would point outside the target directory.</exception>
-    private void EnsureLinkStaysInside(string root, string full, string target)
+    /// <exception cref="PatchApplyException">The link would point outside the target directory or into Git metadata.</exception>
+    private void EnsureLinkStaysInside(string root, string full, string path, string target)
     {
         var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(full)!, target));
         if (Path.IsPathRooted(target) || !_paths.IsWithinRoot(root, resolved))
         {
-            throw new PatchApplyException(_localizer.Format("Apply.SymlinkOutside", full, target));
+            throw new PatchApplyException(_localizer.Format("Apply.SymlinkOutside", path, target));
+        }
+
+        if (PathUtility.IsInGitMetadata(root, resolved))
+        {
+            throw new PatchApplyException(_localizer.Format("Apply.SymlinkGitMetadata", path, target));
+        }
+    }
+
+    /// <summary>
+    /// Refuses a symbolic link the patch has created when the file system, following it and every link after it,
+    /// ends outside the target directory or in Git metadata.
+    /// </summary>
+    /// <param name="physicalRoot">The target directory with every link on its own way resolved.</param>
+    /// <param name="step">The step that created the link.</param>
+    /// <exception cref="PatchApplyException">The link leads outside the target directory or into Git metadata.</exception>
+    private void EnsureLinkResolvesInside(string physicalRoot, Step step)
+    {
+        var resolved = PhysicalPath.Resolve(step.FullPath);
+        if (resolved is null || !_paths.IsWithinRoot(physicalRoot, resolved))
+        {
+            throw new PatchApplyException(_localizer.Format("Apply.SymlinkOutside", step.Change.Path, step.LinkTarget!));
+        }
+
+        if (PathUtility.IsInGitMetadata(physicalRoot, resolved))
+        {
+            throw new PatchApplyException(_localizer.Format("Apply.SymlinkGitMetadata", step.Change.Path, step.LinkTarget!));
         }
     }
 
@@ -279,8 +320,15 @@ public sealed class ContentOverwriteApplier : IPatchApplier
         /// </summary>
         /// <param name="step">The prepared change.</param>
         /// <exception cref="IOException">The change could not be put in place.</exception>
+        /// <exception cref="PatchApplyException">An earlier change of the patch put a link above the path.</exception>
         public void Commit(Step step)
         {
+            // Checked when the patch was prepared too, but a link the patch itself has just created was not there then.
+            if (PathUtility.HasLinkedParent(_root, step.FullPath))
+            {
+                throw new PatchApplyException(_localizer.Format("Apply.BelowLink", step.Change.Path));
+            }
+
             if (step.Change.Kind != ChangeKind.Deleted)
             {
                 CreateParents(Path.GetDirectoryName(step.FullPath)!);

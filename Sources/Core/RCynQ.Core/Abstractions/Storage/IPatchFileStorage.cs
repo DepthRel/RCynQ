@@ -62,14 +62,16 @@ public interface IPatchFileStorage
     Task SaveUploadAsync(string sha256, Stream content, long expectedSize, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Moves the uploaded content of a patch into the directory of the patch.
+    /// Moves the uploaded content of a patch into the directory of the patch. An upload another patch still needs is
+    /// copied instead, so it stays for that patch.
     /// </summary>
     /// <param name="patchId">The patch identifier.</param>
     /// <param name="sha256Hashes">The hashes the patch needs.</param>
+    /// <param name="sharedHashes">The hashes other patches that are not finished need too; <see langword="null"/> for none.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task that completes when all content is staged.</returns>
     /// <exception cref="SyncBridgeException">Content is missing.</exception>
-    Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, CancellationToken cancellationToken = default);
+    Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, IReadOnlySet<string>? sharedHashes = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Opens the staged content of a patch for reading.

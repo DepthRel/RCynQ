@@ -5,6 +5,7 @@ using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Git.Paths;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Security;
 
 namespace RCynQ.Sync.Maintenance;
 
@@ -20,6 +21,11 @@ namespace RCynQ.Sync.Maintenance;
 /// <para>
 /// The service removes the data older than <see cref="SyncBridgeOptions.RetentionDays"/> on its own. The user can
 /// remove everything that is finished at once; that is the same operation with an age of zero.
+/// </para>
+/// <para>
+/// The record of a patch stays at least as long as its signed envelope is young enough to be accepted
+/// (<see cref="ReplayGuardOptions.MaxAge"/>): the record is what tells a patch sent again from a new one, so removing it
+/// earlier would let the same patch in twice.
 /// </para>
 /// </remarks>
 public sealed class DataRetentionService
@@ -64,6 +70,9 @@ public sealed class DataRetentionService
     /// <summary>The clock.</summary>
     private readonly TimeProvider _timeProvider;
 
+    /// <summary>How long a signed envelope is accepted, and so how long the record of a patch must stay.</summary>
+    private readonly TimeSpan _replayWindow;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DataRetentionService"/> class.
     /// </summary>
@@ -77,6 +86,7 @@ public sealed class DataRetentionService
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="timeProvider">The clock.</param>
     /// <param name="repositories">The repositories of the node; <see langword="null"/> for the one the node started with.</param>
+    /// <param name="replay">The settings of the replay guard; <see langword="null"/> takes the defaults.</param>
     public DataRetentionService(
         IPatchRepository patches,
         IPatchFileStorage storage,
@@ -87,9 +97,11 @@ public sealed class DataRetentionService
         NodeConfig node,
         WorkingTreeLock workingTreeLock,
         TimeProvider timeProvider,
-        IActiveRepository? repositories = null)
+        IActiveRepository? repositories = null,
+        ReplayGuardOptions? replay = null)
     {
         _repositories = repositories;
+        _replayWindow = (replay ?? new ReplayGuardOptions()).MaxAge;
         _patches = patches;
         _storage = storage;
         _history = history;
@@ -114,13 +126,15 @@ public sealed class DataRetentionService
         var now = _timeProvider.GetUtcNow();
         var cutoff = now - olderThan;
         var transferCutoff = Earlier(cutoff, now - TransferGrace);
+        var recordCutoff = Earlier(cutoff, now - _replayWindow);
         var paths = _appData.Create();
         long freed = 0;
 
         // Patches: the finished ones by the age asked for, the unfinished ones only once they cannot finish any more.
-        // Commits that wait to be applied end only by the hand of the user.
+        // Commits that wait to be applied end only by the hand of the user. A finished patch keeps its record while its
+        // envelope could still be accepted: the record is the only proof that the patch was taken already.
         var removed = new List<Guid>();
-        removed.AddRange(await _patches.DeleteOlderThanAsync(cutoff, new[] { PatchStatus.ConflictPending, PatchStatus.Pending, PatchStatus.Waiting }, cancellationToken));
+        removed.AddRange(await _patches.DeleteOlderThanAsync(recordCutoff,new[] { PatchStatus.ConflictPending, PatchStatus.Pending, PatchStatus.Waiting }, cancellationToken));
         removed.AddRange(await _patches.DeleteOlderThanAsync(transferCutoff, new[] { PatchStatus.ConflictPending, PatchStatus.Waiting }, cancellationToken));
         foreach (var id in removed)
         {

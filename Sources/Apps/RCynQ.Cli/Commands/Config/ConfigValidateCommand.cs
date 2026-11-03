@@ -39,9 +39,9 @@ public sealed class ConfigValidateCommand : ICommand
         var errors = await new ConfigCommandService(_localizer).ValidateAsync(path, console.RegisterCancellationHandler());
         if (errors.Count > 0)
         {
-            throw new CommandException($"{path} is invalid:{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}", 2);
+            throw new CommandException($"{_localizer.Format("Cli.Config.Invalid", path)}{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}", 2);
         }
 
-        await console.Output.WriteLineAsync($"{path} is valid.");
+        await console.Output.WriteLineAsync(_localizer.Format("Cli.Config.Valid", path));
     }
 }

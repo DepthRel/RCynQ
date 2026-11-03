@@ -73,6 +73,26 @@ public sealed class WorkingTreeLockTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that only a sharing or lock violation counts as a file held by someone else, as this platform reports
+    /// it; any other failure is reported to the caller instead of waited on.
+    /// </summary>
+    [Fact]
+    public void Only_A_Taken_File_Counts_As_Held_By_Another_Process()
+    {
+        Directory.CreateDirectory(_directory);
+        var file = Path.Combine(_directory, "held.lock");
+        using var holder = new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+        var taken = Record.Exception(() => new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None).Dispose());
+
+        taken.Should().BeAssignableTo<IOException>();
+        WorkingTreeLock.IsHeldByAnotherProcess((IOException)taken!).Should().BeTrue();
+        WorkingTreeLock.IsHeldByAnotherProcess(new IOException("disk failure")).Should().BeFalse();
+        WorkingTreeLock.IsHeldByAnotherProcess(new FileNotFoundException("gone")).Should().BeFalse();
+        WorkingTreeLock.IsHeldByAnotherProcess(new DirectoryNotFoundException("gone")).Should().BeFalse();
+    }
+
+    /// <summary>
     /// Deletes the temporary directory.
     /// </summary>
     public void Dispose()

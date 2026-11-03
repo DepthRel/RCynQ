@@ -113,7 +113,29 @@ public sealed class GitBundleTests : IDisposable
 
         _git.IsWorkTreeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         var noRepository = () => CreateService().CreateAsync(Array.Empty<string>(), Context());
-        await noRepository.Should().ThrowAsync<SyncBridgeException>();
+        (await noRepository.Should().ThrowAsync<SyncBridgeException>())
+            .Which.Message.Should().NotContain(_root, "a neighbour learns names of repositories, never their folders");
+    }
+
+    /// <summary>
+    /// Verifies that a bundle larger than the limit is refused before it is written, and leaves no file.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Client_Refuses_A_Bundle_Larger_Than_The_Limit()
+    {
+        var handler = new FakeHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.UTF8.GetBytes("# v2 git bundle\n")) };
+            response.Content.Headers.ContentLength = ApiLimits.MAX_GIT_BUNDLE_BYTES + 1;
+            return response;
+        });
+
+        var download = () => CreateClient(handler).DownloadAsync(Chain(), Array.Empty<string>(), _root);
+
+        (await download.Should().ThrowAsync<SyncBridgeException>())
+            .Which.Message.Should().Be(TestTexts.English.Format("Git.BundleTooLarge", ApiLimits.MAX_GIT_BUNDLE_BYTES / (1024 * 1024)));
+        Directory.GetFiles(_root, "*.bundle").Should().BeEmpty();
     }
 
     /// <summary>

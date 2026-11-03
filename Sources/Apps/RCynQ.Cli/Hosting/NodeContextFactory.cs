@@ -55,7 +55,7 @@ public sealed class NodeContextFactory : INodeContextFactory
         var errors = SyncBridgeOptionsValidator.Validate(options, _localizer);
         if (errors.Count > 0)
         {
-            throw new CommandException($"Invalid configuration in '{path}':{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}", 2);
+            throw new CommandException($"{_localizer.Format("Cli.Config.Invalid", path)}{Environment.NewLine} - {string.Join(Environment.NewLine + " - ", errors)}", 2);
         }
 
         ConfigLocations.ApplyStorageDefaults(options, path, ConfigLocations.FindPortableRoot());

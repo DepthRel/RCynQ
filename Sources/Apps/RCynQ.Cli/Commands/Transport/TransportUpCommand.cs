@@ -3,6 +3,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Transport;
 
@@ -32,7 +33,7 @@ public sealed class TransportUpCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!usable)
         {
-            throw new CommandException("The link could not be started.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Transport.NotStarted"), 1);
         }
     }
 }

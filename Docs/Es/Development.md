@@ -103,7 +103,7 @@ Variables de entorno:
 |---|---|
 | `RCYNQ_CONFIG` | el archivo de configuración en lugar del `config/syncbridge.json` portátil |
 | `RCYNQ_SERVICE_EXE` | el ejecutable del servicio que inicia la UI (también `--service-exe`) |
-| `RCYNQ_SERVICE_URL`, `RCYNQ_API_TOKEN`, `RCYNQ_API_TOKEN_FILE` | cómo llega la CLI a un servicio en ejecución |
+| `RCYNQ_SERVICE_URL`, `RCYNQ_API_TOKEN`, `RCYNQ_API_TOKEN_FILE` | cómo llega la aplicación de escritorio a un servicio en ejecución (también `--service`, `--token`, `--token-file`); la CLI trabaja sobre el nodo en su propio proceso |
 | `RCYNQ_*` | cualquier ajuste de `syncbridge.json` para el servicio (`RCYNQ_SyncBridge__ListenPort`, …) |
 
 ## Base de datos

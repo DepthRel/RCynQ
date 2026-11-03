@@ -79,7 +79,7 @@ public sealed class IncomingPatchApplier
         ArgumentNullException.ThrowIfNull(envelope);
         try
         {
-            await _storage.StageContentAsync(envelope.Id, envelope.ContentHashes.ToArray(), cancellationToken);
+            await _storage.StageContentAsync(envelope.Id, envelope.ContentHashes.ToArray(), cancellationToken: cancellationToken);
             var content = new StoredPatchContent(envelope.Id, _storage);
             var syncBase = await _syncBase.EnsureAsync(cancellationToken);
             if (!syncBase.IsReady)

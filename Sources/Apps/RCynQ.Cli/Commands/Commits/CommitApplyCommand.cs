@@ -3,6 +3,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Commits;
 
@@ -32,7 +33,7 @@ public sealed class CommitApplyCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!succeeded)
         {
-            throw new CommandException("The commits still wait; deal with the reason and run the command again.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Commits.StillWaiting"), 1);
         }
     }
 }

@@ -3,6 +3,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Git;
 
@@ -28,7 +29,7 @@ public sealed class GitFetchCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!succeeded)
         {
-            throw new CommandException("git fetch failed.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Git.FetchFailed"), 1);
         }
     }
 }

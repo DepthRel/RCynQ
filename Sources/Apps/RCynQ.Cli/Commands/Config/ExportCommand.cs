@@ -2,6 +2,7 @@ using CliFx.Attributes;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Config;
 
@@ -68,10 +69,10 @@ public sealed class ExportCommand : NodeCommandBase
             fingerprint ??= report.HostKeyFingerprints.FirstOrDefault();
             foreach (var warning in report.Warnings)
             {
-                await console.Error.WriteLineAsync($"warning: {warning}");
+                await console.Error.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Export.Warning", warning));
             }
 
-            await console.Error.WriteLineAsync($"Detected host {(hosts.Count == 0 ? "-" : string.Join(", ", hosts))}, user {user ?? "-"}, SSH port {port}, key {report.SshKeyFingerprint ?? "-"}.");
+            await console.Error.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Export.Detected", hosts.Count == 0 ? "-" : string.Join(", ", hosts), user ?? "-", port ?? 22, report.SshKeyFingerprint ?? "-"));
         }
 
         var json = await service.ExportAsync(hosts ?? Array.Empty<string>(), user, port ?? 22, sshKey, fingerprint, cancellationToken);
@@ -82,6 +83,6 @@ public sealed class ExportCommand : NodeCommandBase
         }
 
         await File.WriteAllTextAsync(Output, json, cancellationToken);
-        await console.Output.WriteLineAsync($"Exported to {Path.GetFullPath(Output)}.");
+        await console.Output.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Export.Written", Path.GetFullPath(Output)));
     }
 }

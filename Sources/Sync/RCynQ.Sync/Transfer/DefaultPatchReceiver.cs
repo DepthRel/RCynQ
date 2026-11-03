@@ -236,6 +236,7 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
             // request, and stopping here on that signal would leave a half-written tree and a patch that stays "pending"
             // although files of it are already in place. So the commit runs to its end once it has started.
             var uninterrupted = CancellationToken.None;
+            await StageAsync(envelope, uninterrupted);
             result = envelope.IsCommitDelivery
                 ? await _commits!.ApplyAsync(envelope, retry: false, uninterrupted)
                 : await _incoming.ApplyAsync(envelope, uninterrupted);
@@ -262,6 +263,30 @@ public sealed class DefaultPatchReceiver : IPatchReceiver
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Moves the content of a patch into its own directory before it is applied, copying what another open session needs.
+    /// </summary>
+    /// <param name="envelope">The patch.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the content is staged, or staging is left to the applier.</returns>
+    private async Task StageAsync(PatchEnvelope envelope, CancellationToken cancellationToken)
+    {
+        // An upload is kept by hash. A patch whose session is still open was told it need not send the same content
+        // again, so what it needs too is copied for this patch rather than moved away from it.
+        var shared = (await _patches.GetByStatusAsync(PatchDirection.Incoming, PatchStatus.Pending, cancellationToken))
+            .Where(patch => patch.Id != envelope.Id)
+            .SelectMany(patch => patch.ToEnvelope().ContentHashes)
+            .ToHashSet(StringComparer.Ordinal);
+        try
+        {
+            await _storage.StageContentAsync(envelope.Id, envelope.ContentHashes, shared, cancellationToken);
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
+        {
+            // The applier stages again and reports what is missing as the outcome of the patch.
+        }
     }
 
     /// <summary>

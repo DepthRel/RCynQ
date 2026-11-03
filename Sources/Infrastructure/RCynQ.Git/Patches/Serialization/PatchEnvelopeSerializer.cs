@@ -161,6 +161,17 @@ public sealed class PatchEnvelopeSerializer
                 throw new FormatException(_localizer.Get("Envelope.DuplicatePaths"));
             }
 
+            // An entry that stays is a file or a link, never a directory: a path below it can only be reached through a
+            // link the patch creates, and a write through a link may leave the tree.
+            var kept = manifest.Where(change => change.Kind != ChangeKind.Deleted).Select(change => change.Path).ToHashSet(StringComparer.Ordinal);
+            foreach (var change in manifest)
+            {
+                if (FindKeptAncestor(change.Path, kept) is { } ancestor)
+                {
+                    throw new FormatException(_localizer.Format("Envelope.PathBelowEntry", change.Path, ancestor));
+                }
+            }
+
             return new PatchEnvelope(
                 dto.PatchId,
                 NodeId.Parse(dto.Sender ?? string.Empty),
@@ -177,6 +188,26 @@ public sealed class PatchEnvelopeSerializer
         {
             throw new FormatException(_localizer.Format("Envelope.Invalid", _localizer.Describe(ex)), ex);
         }
+    }
+
+    /// <summary>
+    /// Finds the nearest directory of a canonical path that is itself an entry of the manifest that stays.
+    /// </summary>
+    /// <param name="path">The canonical path of an entry.</param>
+    /// <param name="kept">The paths of the entries that are not deleted.</param>
+    /// <returns>The path of that entry, or <see langword="null"/> when there is none.</returns>
+    private static string? FindKeptAncestor(string path, IReadOnlySet<string> kept)
+    {
+        for (var end = path.LastIndexOf('/'); end > 0; end = path.LastIndexOf('/', end - 1))
+        {
+            var ancestor = path[..end];
+            if (kept.Contains(ancestor))
+            {
+                return ancestor;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

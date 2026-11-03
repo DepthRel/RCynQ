@@ -54,6 +54,7 @@ public sealed class WorkingTreeLock
     /// <param name="cancellationToken">A token to cancel the wait.</param>
     /// <returns>A handle that releases the lock when disposed.</returns>
     /// <exception cref="UnauthorizedAccessException">The lock file cannot be created or opened.</exception>
+    /// <exception cref="IOException">The lock file cannot be opened for a reason other than another holder.</exception>
     public async Task<IDisposable> AcquireAsync(CancellationToken cancellationToken = default)
     {
         await _semaphore.WaitAsync(cancellationToken);
@@ -88,13 +89,37 @@ public sealed class WorkingTreeLock
             {
                 return new FileStream(_lockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, bufferSize: 1, FileOptions.None);
             }
-            catch (IOException)
+            catch (IOException ex) when (IsHeldByAnotherProcess(ex))
             {
-                // Held by another process (a sharing violation is the only I/O failure of opening an existing file of
-                // our own directory). It is asked again shortly; the wait ends when the caller cancels.
+                // It is asked again shortly; the wait ends when the caller cancels. Any other failure is reported at once:
+                // waiting would not change it, and a caller without a token would wait forever.
                 await Task.Delay(_retryDelay, cancellationToken);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks whether opening a file failed only because another handle holds it for exclusive use.
+    /// </summary>
+    /// <param name="exception">The failure of opening the file.</param>
+    /// <returns><see langword="true"/> for a sharing or lock violation; <see langword="false"/> for any other failure.</returns>
+    public static bool IsHeldByAnotherProcess(IOException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        if (exception is FileNotFoundException or DirectoryNotFoundException or PathTooLongException or DriveNotFoundException)
+        {
+            return false;
+        }
+
+        // Windows reports the Win32 error in the low word; on Unix .NET holds the file with flock and reports the errno
+        // of a lock that is taken, EWOULDBLOCK, whose number differs between Linux and the BSDs.
+        const int ERROR_SHARING_VIOLATION = 32;
+        const int ERROR_LOCK_VIOLATION = 33;
+        const int EWOULDBLOCK_LINUX = 11;
+        const int EWOULDBLOCK_BSD = 35;
+        return OperatingSystem.IsWindows()
+            ? (exception.HResult & 0xFFFF) is ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION
+            : exception.HResult == (OperatingSystem.IsLinux() ? EWOULDBLOCK_LINUX : EWOULDBLOCK_BSD);
     }
 
     /// <summary>

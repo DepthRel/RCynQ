@@ -97,7 +97,7 @@ dotnet test Tests/RCynQ.Sync.Tests/RCynQ.Sync.Tests.csproj # один проек
 |---|---|
 | `RCYNQ_CONFIG` | файл конфигурации вместо портативного `config/syncbridge.json` |
 | `RCYNQ_SERVICE_EXE` | исполняемый файл службы, который запускает UI (также `--service-exe`) |
-| `RCYNQ_SERVICE_URL`, `RCYNQ_API_TOKEN`, `RCYNQ_API_TOKEN_FILE` | как CLI находит запущенную службу |
+| `RCYNQ_SERVICE_URL`, `RCYNQ_API_TOKEN`, `RCYNQ_API_TOKEN_FILE` | как настольное приложение находит запущенную службу (также `--service`, `--token`, `--token-file`); CLI работает с узлом в собственном процессе |
 | `RCYNQ_*` | любая настройка `syncbridge.json` для службы (`RCYNQ_SyncBridge__ListenPort`, …) |
 
 ## База данных

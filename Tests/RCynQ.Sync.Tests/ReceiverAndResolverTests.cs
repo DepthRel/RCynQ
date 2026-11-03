@@ -186,6 +186,31 @@ public sealed class ReceiverAndResolverTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a patch committed while another session that counts on the same content is still open leaves that
+    /// content for the other session.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Content_Another_Open_Session_Counts_On_Stays_After_A_Commit()
+    {
+        await _fixture.RegisterWorkstationPeerAsync();
+        var receiver = _fixture.CreateReceiver();
+        var first = await _fixture.BuildSignedEnvelopeAsync();
+        await receiver.OpenSessionAsync(first, Context());
+        await Upload(receiver, first, "a.txt");
+        await Upload(receiver, first, "new/n.txt");
+        var second = await _fixture.BuildSignedEnvelopeAsync();
+        (await receiver.OpenSessionAsync(second, Context())).MissingContent.Should().BeEmpty();
+
+        (await receiver.CommitAsync(first.Id, Context())).Status.Should().Be(PatchStatus.Applied);
+
+        foreach (var hash in second.ContentHashes)
+        {
+            (await _fixture.Storage.HasContentAsync(second.Id, hash)).Should().BeTrue("the second session was told it need not send this content");
+        }
+    }
+
+    /// <summary>
     /// Verifies that content that is not part of the manifest, does not match its hash, or is larger than announced is refused and stored nowhere.
     /// </summary>
     /// <returns>A task representing the test.</returns>

@@ -194,7 +194,7 @@ public sealed class IncomingCommitApplier
         try
         {
             Directory.CreateDirectory(temp);
-            await _storage.StageContentAsync(envelope.Id, envelope.ContentHashes, cancellationToken);
+            await _storage.StageContentAsync(envelope.Id, envelope.ContentHashes, cancellationToken: cancellationToken);
             var bundle = Path.Combine(temp, "commits.bundle");
             await CopyBundleAsync(envelope.Id, commits.BundleSha256, bundle, cancellationToken);
 

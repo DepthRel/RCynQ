@@ -39,10 +39,10 @@ public sealed class ImportCommand : NodeCommandBase
     /// <inheritdoc />
     protected override async ValueTask ExecuteAsync(NodeContext context, IConsole console, CancellationToken cancellationToken)
     {
-        var decision = ExportImportService.ParseDecision(As);
+        var decision = ExportImportService.ParseDecision(As, context.Get<ILocalizer>());
         Guid? linkId = string.IsNullOrWhiteSpace(Link)
             ? null
-            : (await LinkCommandService.FindAsync(context.Get<IChainLinkRepository>(), Link.Trim(), cancellationToken)).Id;
+            : (await LinkCommandService.FindAsync(context.Get<IChainLinkRepository>(), Link.Trim(), context.Get<ILocalizer>(), cancellationToken)).Id;
         await console.Output.WriteAsync(await context.Get<ExportImportService>().ImportAsync(File, decision, linkId, cancellationToken));
         if (context.Services.GetService<PeerAccessService>() is not { } access)
         {
@@ -54,7 +54,7 @@ public sealed class ImportCommand : NodeCommandBase
             var result = await access.ApplyAsync(cancellationToken);
             if (result.RequiresElevation)
             {
-                await console.Output.WriteLineAsync($"To let the neighbours connect, run 'rcynq ssh allow' as administrator ({result.FilePath}).");
+                await console.Output.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Import.RunSshAllow", result.FilePath));
             }
             else if (result.EntryCount > 0)
             {
@@ -63,7 +63,7 @@ public sealed class ImportCommand : NodeCommandBase
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or FormatException)
         {
-            await console.Error.WriteLineAsync($"Neighbour SSH access was not updated: {context.Get<ILocalizer>().Describe(ex)}");
+            await console.Error.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Import.AccessNotUpdated", context.Get<ILocalizer>().Describe(ex)));
         }
     }
 }

@@ -10,8 +10,7 @@ namespace RCynQ.Sync.Configuration.Access;
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item>Origin: a Workstation key may only forward to the local RCynQ endpoint (and, where supported, run <c>git-upload-pack</c>
-/// for the repository).</item>
+/// <item>Origin: a Workstation key may only forward to the local RCynQ endpoint and runs no command.</item>
 /// <item>Workstation: an Origin key may only forward to the local RCynQ endpoint.</item>
 /// <item>Relay: a Workstation key may only forward to the SSH servers of the Origin peers and an Origin key only to the SSH
 /// servers of the Workstation peers. Either key may also forward to the SSH servers of the neighbouring Relays, which is
@@ -46,7 +45,6 @@ public static class PeerAccessPlanner
         foreach (var peer in peers.OrderBy(peer => peer.Id.Value, StringComparer.Ordinal))
         {
             IReadOnlyList<string> targets;
-            string? repoPath = null;
             switch (node.Role)
             {
                 case NodeRole.Origin when peer.Role == NodeRole.Workstation:
@@ -82,7 +80,7 @@ public static class PeerAccessPlanner
                 continue;
             }
 
-            entries.Add(new PlannedAccess(peer, BuildLine(key, targets, repoPath, peer)));
+            entries.Add(new PlannedAccess(peer, AuthorizedKeysManager.BuildForwardLine(key, targets, $"rcynq:{peer.Id.Value}")));
         }
 
         return new PeerAccessPlan(entries, missing, waiting);
@@ -114,32 +112,6 @@ public static class PeerAccessPlanner
     {
         var text = port.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return host.Contains(':') ? $"[{host}]:{text}" : $"{host}:{text}";
-    }
-
-    /// <summary>
-    /// Builds the line, falling back to forward-only access when the repository path cannot be used in a forced command.
-    /// </summary>
-    /// <param name="key">The key.</param>
-    /// <param name="targets">The forward targets.</param>
-    /// <param name="repoPath">The repository for <c>git-upload-pack</c>, or <see langword="null"/>.</param>
-    /// <param name="peer">The neighbour.</param>
-    /// <returns>The line.</returns>
-    private static string BuildLine(SshPublicKey key, IReadOnlyList<string> targets, string? repoPath, PeerDescriptor peer)
-    {
-        var comment = $"rcynq:{peer.Id.Value}";
-        if (repoPath is not null)
-        {
-            try
-            {
-                return AuthorizedKeysManager.BuildForwardLine(key, targets, repoPath, comment);
-            }
-            catch (ArgumentException)
-            {
-                // The repository path contains characters that cannot be quoted safely; branches then stay unavailable.
-            }
-        }
-
-        return AuthorizedKeysManager.BuildForwardLine(key, targets, null, comment);
     }
 
     /// <summary>

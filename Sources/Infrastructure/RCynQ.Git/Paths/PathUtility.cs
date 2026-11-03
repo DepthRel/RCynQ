@@ -126,7 +126,8 @@ public sealed partial class PathUtility : IPathUtility
     }
 
     /// <summary>
-    /// Checks whether any existing directory between the root and the target is a symbolic link or junction.
+    /// Checks whether any directory between the root and the target is a symbolic link or junction, also one whose
+    /// target does not exist (yet).
     /// </summary>
     /// <param name="rootPath">The root directory.</param>
     /// <param name="fullPath">A full path inside the root.</param>
@@ -137,8 +138,7 @@ public sealed partial class PathUtility : IPathUtility
         var current = Path.GetDirectoryName(Path.GetFullPath(fullPath));
         while (!string.IsNullOrEmpty(current) && current.Length > root.Length)
         {
-            var info = new DirectoryInfo(current);
-            if (info.Exists && info.LinkTarget is not null)
+            if (PhysicalPath.LinkTargetOf(current) is not null)
             {
                 return true;
             }
@@ -156,6 +156,17 @@ public sealed partial class PathUtility : IPathUtility
     /// <returns><see langword="true"/> for Git metadata names.</returns>
     public static bool IsGitMetadataName(string segment)
         => segment.Equals(".git", StringComparison.OrdinalIgnoreCase) || ShortGitName().IsMatch(segment);
+
+    /// <summary>
+    /// Checks whether a full path inside a root lies in Git metadata (<c>.git</c> or its short name) at any depth.
+    /// </summary>
+    /// <param name="rootPath">The root directory.</param>
+    /// <param name="fullPath">A full path inside the root.</param>
+    /// <returns><see langword="true"/> when a segment between the root and the path is Git metadata.</returns>
+    public static bool IsInGitMetadata(string rootPath, string fullPath)
+        => Path.GetRelativePath(rootPath, fullPath)
+            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar })
+            .Any(IsGitMetadataName);
 
     /// <summary>
     /// The prefix of the directory in which a patch is prepared inside the tree it is applied to.

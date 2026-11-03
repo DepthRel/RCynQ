@@ -165,23 +165,10 @@ public sealed class ForwardAndKeyTests : IDisposable
         var key = SshPublicKey.Parse(PUBLIC_KEY_LINE);
         var blob = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2mfktackE6lnW8Hp/QiIkF7Dp5hFWxNzR5c9wXgKja";
 
-        AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.GitReadOnly, key, "/srv/repos/app")
-            .Should().Be($"restrict,command=\"git-upload-pack '/srv/repos/app'\",no-pty,no-agent-forwarding,no-port-forwarding,no-x11-forwarding {blob} rcynq:GitReadOnly");
         AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.PatchForward, key, "127.0.0.1:18443")
             .Should().Be($"restrict,port-forwarding,permitopen=\"127.0.0.1:18443\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {blob} rcynq:PatchForward");
         AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.RelayForward, key, "next-hop.internal:22")
-            .Should().Contain("permitopen=\"next-hop.internal:22\"").And.NotContain("git-upload-pack");
-
-        // The line goes into the authorized_keys of this machine, so a drive path is absolute only on Windows.
-        var windowsPath = () => AuthorizedKeysManager.BuildLine(AuthorizedKeyPurpose.GitReadOnly, key, "C:\\repos\\app");
-        if (OperatingSystem.IsWindows())
-        {
-            windowsPath().Should().Contain("git-upload-pack 'C:/repos/app'");
-        }
-        else
-        {
-            windowsPath.Should().Throw<ArgumentException>();
-        }
+            .Should().Be($"restrict,port-forwarding,permitopen=\"next-hop.internal:22\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {blob} rcynq:RelayForward");
     }
 
     /// <summary>
@@ -190,19 +177,17 @@ public sealed class ForwardAndKeyTests : IDisposable
     /// <param name="purpose">The purpose.</param>
     /// <param name="target">The unsafe target.</param>
     [Theory]
-    [InlineData(AuthorizedKeyPurpose.GitReadOnly, "/srv/repo'; rm -rf /; '")]
-    [InlineData(AuthorizedKeyPurpose.GitReadOnly, "relative/repo")]
-    [InlineData(AuthorizedKeyPurpose.GitReadOnly, "/srv/repo\",no-restrict")]
     [InlineData(AuthorizedKeyPurpose.PatchForward, "127.0.0.1")]
     [InlineData(AuthorizedKeyPurpose.PatchForward, "127.0.0.1:99999")]
+    [InlineData(AuthorizedKeyPurpose.PatchForward, "127.0.0.1:22\",command=\"sh")]
     [InlineData(AuthorizedKeyPurpose.RelayForward, "evil\",command=\"sh:22")]
     public void AuthorizedKeys_Rejects_Unsafe_Targets(AuthorizedKeyPurpose purpose, string target)
     {
         var build = () => AuthorizedKeysManager.BuildLine(purpose, SshPublicKey.Parse(PUBLIC_KEY_LINE), target);
         build.Should().Throw<ArgumentException>();
 
-        var gitOnRelay = () => AuthorizedKeysManager.BuildLineForRole(NodeRole.Relay, SshPublicKey.Parse(PUBLIC_KEY_LINE), "/srv/repo", AuthorizedKeyPurpose.GitReadOnly);
-        gitOnRelay.Should().Throw<ArgumentException>();
+        var relayKeyOnOrigin = () => AuthorizedKeysManager.BuildLineForRole(NodeRole.Origin, SshPublicKey.Parse(PUBLIC_KEY_LINE), "10.0.0.1:22", AuthorizedKeyPurpose.RelayForward);
+        relayKeyOnOrigin.Should().Throw<ArgumentException>();
     }
 
     /// <summary>
@@ -219,7 +204,7 @@ public sealed class ForwardAndKeyTests : IDisposable
         var key = SshPublicKey.Parse(PUBLIC_KEY_LINE);
 
         (await manager.AddAsync(AuthorizedKeyPurpose.PatchForward, key, "127.0.0.1:18443")).Should().BeTrue();
-        (await manager.AddAsync(AuthorizedKeyPurpose.GitReadOnly, key, "/srv/repo")).Should().BeFalse("the same key blob is already authorized");
+        (await manager.AddAsync(AuthorizedKeyPurpose.RelayForward, key, "10.0.0.1:22")).Should().BeFalse("the same key blob is already authorized");
 
         var lines = await File.ReadAllLinesAsync(path);
         lines.Should().HaveCount(3);

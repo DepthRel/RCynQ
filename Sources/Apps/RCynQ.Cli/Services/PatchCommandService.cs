@@ -43,7 +43,7 @@ public sealed class PatchCommandService
         var text = new StringBuilder(result.Message).Append('\n');
         if (result.PatchId is { } id)
         {
-            text.Append("Patch: ").Append(id).Append('\n');
+            text.Append(_localizer.Format("Cli.Patch.Id", id)).Append('\n');
         }
 
         if (result.Result is { HasConflicts: true } applyResult)
@@ -66,10 +66,18 @@ public sealed class PatchCommandService
         var patches = await _patches.GetRecentAsync(Math.Clamp(take, 1, 500), cancellationToken);
         if (patches.Count == 0)
         {
-            return "No patches yet.\n";
+            return _localizer.Get("Cli.Patch.NoneYet") + "\n";
         }
 
-        var table = new ConsoleTable("Created", "Direction", "From", "To", "Status", "Files", "Conflicts", "Id");
+        var table = new ConsoleTable(
+            _localizer.Get("Cli.Column.Created"),
+            _localizer.Get("Cli.Column.Direction"),
+            _localizer.Get("Cli.Column.From"),
+            _localizer.Get("Cli.Column.To"),
+            _localizer.Get("Cli.Column.Status"),
+            _localizer.Get("Cli.Column.Files"),
+            _localizer.Get("Cli.Column.Conflicts"),
+            _localizer.Get("Cli.Column.Id"));
         foreach (var patch in patches)
         {
             table.AddRow(
@@ -96,16 +104,14 @@ public sealed class PatchCommandService
     public async Task<(string Text, bool Succeeded)> ResolveAsync(Guid patchId, ConflictPolicy policy, CancellationToken cancellationToken = default)
     {
         var result = await _patches.ResolveAsync(patchId, policy, cancellationToken);
-        var text = new StringBuilder($"Patch {patchId}: {result.Status}");
-        if (result.AppliedFileCount > 0)
-        {
-            text.Append(", ").Append(result.AppliedFileCount).Append(" file(s) written");
-        }
+        var text = new StringBuilder(result.AppliedFileCount > 0
+            ? _localizer.Format("Cli.Patch.ResolvedWritten", patchId, result.Status, result.AppliedFileCount)
+            : _localizer.Format("Cli.Patch.Resolved", patchId, result.Status));
 
         text.Append('\n');
         if (result.Error is not null)
         {
-            text.Append("Error: ").Append(LocalizedText.Render(result.Error, _localizer)).Append('\n');
+            text.Append(_localizer.Format("Cli.Patch.Error", LocalizedText.Render(result.Error, _localizer))).Append('\n');
         }
 
         AppendConflicts(text, result);
@@ -120,7 +126,7 @@ public sealed class PatchCommandService
     public async Task<string> BaselineAsync(CancellationToken cancellationToken = default)
     {
         var snapshot = await _patches.RebuildBaselineAsync(cancellationToken);
-        return $"Sync base rebuilt; state {TextFormat.Hash(snapshot.StateHash)}.\n";
+        return _localizer.Format("Cli.Patch.BaselineRebuilt", TextFormat.Hash(snapshot.StateHash)) + "\n";
     }
 
     /// <summary>
@@ -211,7 +217,7 @@ public sealed class PatchCommandService
             return;
         }
 
-        text.Append("Conflicts:\n");
+        text.Append(_localizer.Get("Cli.Patch.Conflicts")).Append('\n');
         foreach (var conflict in result.Conflicts)
         {
             text.Append("  ").Append(conflict.Path);

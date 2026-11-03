@@ -92,14 +92,14 @@ public sealed class DataRetentionServiceTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies that a cleanup by hand (age zero) removes every finished patch but leaves alone a patch that may still be
-    /// on its way and one that waits for a decision.
+    /// Verifies that a cleanup by hand (age zero) removes every finished patch whose envelope can no longer be accepted,
+    /// but leaves alone a patch that may still be on its way and one that waits for a decision.
     /// </summary>
     /// <returns>A task representing the test.</returns>
     [Fact]
     public async Task Cleanup_Of_Everything_Keeps_What_Is_Not_Finished()
     {
-        var failed = await AddPatchAsync(DateTimeOffset.UtcNow.AddMinutes(-5), PatchStatus.Failed);
+        var failed = await AddPatchAsync(DateTimeOffset.UtcNow.AddDays(-2), PatchStatus.Failed);
         var inTransfer = await AddPatchAsync(DateTimeOffset.UtcNow.AddMinutes(-5), PatchStatus.Pending);
         var abandoned = await AddPatchAsync(DateTimeOffset.UtcNow.AddDays(-3), PatchStatus.Pending);
         var conflict = await AddPatchAsync(DateTimeOffset.UtcNow.AddMinutes(-5), PatchStatus.ConflictPending);
@@ -110,6 +110,23 @@ public sealed class DataRetentionServiceTests : IDisposable
         _patches.Items.Keys.Should().BeEquivalentTo(new[] { inTransfer, conflict });
         (await _storage.ExistsAsync(failed)).Should().BeFalse();
         (await _storage.ExistsAsync(abandoned)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a cleanup by hand keeps the record of a finished patch whose signed envelope would still be
+    /// accepted: without the record the same envelope sent again would be applied a second time.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Cleanup_Keeps_Records_Of_Patches_Whose_Envelope_Is_Still_Accepted()
+    {
+        var applied = await AddPatchAsync(DateTimeOffset.UtcNow.AddMinutes(-5), PatchStatus.Applied);
+        var rejected = await AddPatchAsync(DateTimeOffset.UtcNow.AddHours(-23), PatchStatus.Rejected);
+
+        var report = await _service.CleanAsync(TimeSpan.Zero);
+
+        report.Patches.Should().Be(0);
+        _patches.Items.Keys.Should().BeEquivalentTo(new[] { applied, rejected });
     }
 
     /// <summary>

@@ -58,12 +58,18 @@ public sealed class InMemoryPatchFileStorage : IPatchFileStorage
     }
 
     /// <inheritdoc />
-    public Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, CancellationToken cancellationToken = default)
+    public Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, IReadOnlySet<string>? sharedHashes = null, CancellationToken cancellationToken = default)
     {
         foreach (var hash in sha256Hashes)
         {
             if (Staged.ContainsKey((patchId, hash)))
             {
+                continue;
+            }
+
+            if (sharedHashes?.Contains(hash) == true)
+            {
+                Staged[(patchId, hash)] = Uploads.TryGetValue(hash, out var shared) ? shared : throw new SyncBridgeException("content missing");
                 continue;
             }
 

@@ -164,7 +164,8 @@ public sealed class GitBundleService
         var repository = entry?.Path;
         if (repository is null || !await _git.IsWorkTreeAsync(repository, cancellationToken))
         {
-            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", repository ?? string.Empty));
+            // The answer goes to the neighbour, which learns names of repositories only, never their folders.
+            throw new SyncBridgeException(_localizer.Format("Git.BundleNoRepo", string.IsNullOrEmpty(entry?.Name) ? "-" : entry.Name));
         }
 
         return repository;

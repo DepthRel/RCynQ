@@ -16,7 +16,7 @@ namespace RCynQ.Sync.Tests;
 /// </summary>
 /// <remarks>
 /// Such a link is one manifest entry, like a file. The file system, however, sees a directory, and on Windows a link to a
-/// directory cannot be removed as a file. The tests are skipped on a machine where no link can be created.
+/// directory cannot be removed as a file. Without the privilege for a symbolic link, Windows gets a junction instead.
 /// </remarks>
 public sealed class ContentOverwriteApplierLinkTests : IDisposable
 {
@@ -44,10 +44,7 @@ public sealed class ContentOverwriteApplierLinkTests : IDisposable
     public async Task Deleting_A_Link_To_A_Directory_Removes_Only_The_Link()
     {
         var link = Path.Combine(_tree, "link");
-        if (!TryCreateDirectoryLink(link, Path.Combine(_tree, "real")))
-        {
-            return;
-        }
+        TryCreateDirectoryLink(link, Path.Combine(_tree, "real")).Should().BeTrue("the test needs a link to a directory");
 
         var result = await Apply(new FileChange(ChangeKind.Deleted, "link", null, null, true, new string('a', 64)), string.Empty);
 
@@ -64,10 +61,7 @@ public sealed class ContentOverwriteApplierLinkTests : IDisposable
     public async Task A_File_Replaces_A_Link_To_A_Directory()
     {
         var link = Path.Combine(_tree, "link");
-        if (!TryCreateDirectoryLink(link, Path.Combine(_tree, "real")))
-        {
-            return;
-        }
+        TryCreateDirectoryLink(link, Path.Combine(_tree, "real")).Should().BeTrue("the test needs a link to a directory");
 
         const string CONTENT = "now a file\n";
         var bytes = Encoding.UTF8.GetBytes(CONTENT);

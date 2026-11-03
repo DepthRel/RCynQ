@@ -27,7 +27,7 @@ Full design: `Docs/En/Architecture.md`; setup from scratch: `Docs/En/SetupGuide.
 | `Sync/RCynQ.Sync` | patches, sync base, Git channel, repositories catalog, routes (`Routing/`), diagnostics and auto-fixes |
 | `Apps/RCynQ.Service` | local HTTP API (loopback, token), SignalR events, role pipelines (`WorkstationPipeline`, `OriginPipeline`, `RelayPipeline`) |
 | `Apps/RCynQ.UI` | Avalonia MVVM app; starts and stops the service |
-| `Apps/RCynQ.Cli` | `rcynq` command line (CliFx) over the service API |
+| `Apps/RCynQ.Cli` | `rcynq` command line (CliFx); runs the node services in its own process on the data of the node, taking turns with the service through the working-tree lock file |
 | `Apps/RCynQ.Pages` | static GitHub Pages site (no build step) |
 
 Dependencies point inwards; Core depends on nothing app-level.

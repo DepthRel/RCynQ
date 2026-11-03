@@ -141,7 +141,7 @@ public sealed class PatchFileStorage : IPatchFileStorage
     }
 
     /// <inheritdoc />
-    public Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, CancellationToken cancellationToken = default)
+    public Task StageContentAsync(Guid patchId, IReadOnlyCollection<string> sha256Hashes, IReadOnlySet<string>? sharedHashes = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sha256Hashes);
         var directory = ContentDirectory(patchId);
@@ -162,7 +162,15 @@ public sealed class PatchFileStorage : IPatchFileStorage
                 throw new SyncBridgeException(_localizer.Format("Patch.ContentMissing", hash, patchId));
             }
 
-            File.Move(upload, target, overwrite: true);
+            // Uploads are kept by hash, so a patch whose session opened meanwhile may count on the same one.
+            if (sharedHashes?.Contains(hash) == true)
+            {
+                File.Copy(upload, target, overwrite: true);
+            }
+            else
+            {
+                File.Move(upload, target, overwrite: true);
+            }
         }
 
         return Task.CompletedTask;

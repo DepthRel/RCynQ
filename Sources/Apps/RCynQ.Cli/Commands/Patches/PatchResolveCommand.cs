@@ -4,6 +4,7 @@ using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Patches;
 
@@ -37,7 +38,7 @@ public sealed class PatchResolveCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!succeeded)
         {
-            throw new CommandException("Conflicts remain; resolve them and run the command again.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Patch.ConflictsRemain"), 1);
         }
     }
 }

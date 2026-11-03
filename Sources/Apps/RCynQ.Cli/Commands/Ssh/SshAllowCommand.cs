@@ -2,6 +2,7 @@ using CliFx.Attributes;
 using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration.Access;
 
 namespace RCynQ.Cli.Commands.Ssh;
@@ -33,12 +34,12 @@ public sealed class SshAllowCommand : NodeCommandBase
         await console.Output.WriteLineAsync(result.Message);
         if (result.PeersWithoutKey.Count > 0)
         {
-            await console.Output.WriteLineAsync($"No SSH public key in the export of: {string.Join(", ", result.PeersWithoutKey)}. Import a new export that includes the key.");
+            await console.Output.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Ssh.NoKey", string.Join(", ", result.PeersWithoutKey)));
         }
 
         if (result.PeersWaitingForCounterpart.Count > 0)
         {
-            await console.Output.WriteLineAsync($"Waiting for the opposite endpoint of: {string.Join(", ", result.PeersWaitingForCounterpart)}. Import both the Workstation and the Origin export.");
+            await console.Output.WriteLineAsync(context.Get<ILocalizer>().Format("Cli.Ssh.Waiting", string.Join(", ", result.PeersWaitingForCounterpart)));
         }
     }
 }

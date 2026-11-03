@@ -1,6 +1,7 @@
 using RCynQ.Cli.Output;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.State;
+using RCynQ.Localization;
 using RCynQ.Transports.Abstractions.Management;
 
 namespace RCynQ.Cli.Services;
@@ -16,13 +17,18 @@ public sealed class TransportCommandService
     /// <summary>The link manager.</summary>
     private readonly ILinkManager _manager;
 
+    /// <summary>The localizer of the output.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TransportCommandService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the output.</param>
     /// <param name="links">The link repository.</param>
     /// <param name="manager">The link manager.</param>
-    public TransportCommandService(IChainLinkRepository links, ILinkManager manager)
+    public TransportCommandService(ILocalizer localizer, IChainLinkRepository links, ILinkManager manager)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _links = links;
         _manager = manager;
     }
@@ -36,7 +42,7 @@ public sealed class TransportCommandService
     /// <exception cref="KeyNotFoundException">No link matches.</exception>
     public async Task<(string Text, bool Usable)> UpAsync(string idOrName, CancellationToken cancellationToken = default)
     {
-        var link = await LinkCommandService.FindAsync(_links, idOrName, cancellationToken);
+        var link = await LinkCommandService.FindAsync(_links, idOrName, _localizer, cancellationToken);
         var state = await _manager.StartAsync(link.Id, cancellationToken);
         return (Describe(state), state.IsUsable);
     }
@@ -50,7 +56,7 @@ public sealed class TransportCommandService
     /// <exception cref="KeyNotFoundException">No link matches.</exception>
     public async Task<string> DownAsync(string idOrName, CancellationToken cancellationToken = default)
     {
-        var link = await LinkCommandService.FindAsync(_links, idOrName, cancellationToken);
+        var link = await LinkCommandService.FindAsync(_links, idOrName, _localizer, cancellationToken);
         return Describe(await _manager.StopAsync(link.Id, cancellationToken));
     }
 
@@ -64,10 +70,10 @@ public sealed class TransportCommandService
         var states = await _manager.GetStatusAsync(cancellationToken);
         if (states.Count == 0)
         {
-            return "No links are configured.\n";
+            return _localizer.Get("Cli.Link.None") + "\n";
         }
 
-        var table = new ConsoleTable("Name", "Transport", "Status", "Message");
+        var table = new ConsoleTable(_localizer.Get("Cli.Column.Name"), _localizer.Get("Cli.Column.Transport"), _localizer.Get("Cli.Column.Status"), _localizer.Get("Cli.Column.Message"));
         foreach (var state in states)
         {
             table.AddRow(state.LinkName, state.Kind.ToString(), state.Status.ToString(), state.Message);
@@ -81,5 +87,5 @@ public sealed class TransportCommandService
     /// </summary>
     /// <param name="state">The state.</param>
     /// <returns>The text.</returns>
-    private static string Describe(LinkState state) => $"{state.LinkName}: {state.Status} via {state.Kind}. {state.Message}\n";
+    private string Describe(LinkState state) => _localizer.Format("Cli.Transport.State", state.LinkName, state.Status, state.Kind, state.Message) + "\n";
 }

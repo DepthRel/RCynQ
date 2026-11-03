@@ -17,7 +17,9 @@ namespace RCynQ.Sync.GitChannel;
 /// </summary>
 /// <remarks>
 /// The request names the commits this node already has, so Origin answers with only what is new. The body is streamed to disk;
-/// nothing is held in memory, and the download has no total time limit, only a limit for Origin to build the bundle and answer.
+/// nothing is held in memory, and the download has no total time limit, only a limit for Origin to build the bundle and answer
+/// and a limit for a pause in the middle of the body. A bundle larger than <see cref="ApiLimits.MAX_GIT_BUNDLE_BYTES"/> is
+/// refused, so an Origin that never stops sending cannot fill the disk.
 /// </remarks>
 public sealed class GitBundleClient : IDisposable
 {
@@ -25,6 +27,17 @@ public sealed class GitBundleClient : IDisposable
     /// How long Origin may take to build the bundle and start the answer.
     /// </summary>
     public static readonly TimeSpan ResponseStartTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How long the body of the answer may stand still before the download is given up.
+    /// </summary>
+    public static readonly TimeSpan BodyIdleTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>The size of the buffer the body is copied through.</summary>
+    private const int BUFFER_SIZE = 81920;
+
+    /// <summary>The longest list of branches read from Origin, in bytes; ten thousand branches take a small part of it.</summary>
+    private const int MAX_BRANCH_LIST_BYTES = 16 * 1024 * 1024;
 
     /// <summary>JSON options for requests and responses.</summary>
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
@@ -97,12 +110,18 @@ public sealed class GitBundleClient : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                throw await RefusalAsync(response, cancellationToken);
+                throw Refusal(response.StatusCode, await ReadTextAsync(response.Content, ApiLimits.MAX_REFUSAL_BYTES, cancellationToken));
             }
 
-            await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            if (response.Content.Headers.ContentLength > ApiLimits.MAX_GIT_BUNDLE_BYTES)
             {
-                await response.Content.CopyToAsync(file, cancellationToken);
+                throw new SyncBridgeException(_localizer.Format("Git.BundleTooLarge", ApiLimits.MAX_GIT_BUNDLE_BYTES / (1024 * 1024)));
+            }
+
+            await using (var body = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, BUFFER_SIZE, useAsync: true))
+            {
+                await CopyBundleAsync(body, file, cancellationToken);
             }
 
             var head = response.Headers.TryGetValues(ApiHeaders.GIT_HEAD, out var values) ? values.FirstOrDefault() : null;
@@ -147,10 +166,10 @@ public sealed class GitBundleClient : IDisposable
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(ResponseStartTimeout);
-            using var response = await link.Client.SendAsync(request, timeout.Token);
+            using var response = await link.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
-                var text = await response.Content.ReadAsStringAsync(timeout.Token);
+                var text = await ReadTextAsync(response.Content, ApiLimits.MAX_REFUSAL_BYTES, timeout.Token);
 
                 // An older Origin has no such route: its public port answers 404, its local API 401, neither with a reason.
                 if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized &&
@@ -159,10 +178,11 @@ public sealed class GitBundleClient : IDisposable
                     return null;
                 }
 
-                throw await RefusalAsync(response, cancellationToken);
+                throw Refusal(response.StatusCode, text);
             }
 
-            return await response.Content.ReadFromJsonAsync<GitBranchListResponse>(_jsonOptions, timeout.Token)
+            var list = await ReadTextAsync(response.Content, MAX_BRANCH_LIST_BYTES, timeout.Token);
+            return JsonSerializer.Deserialize<GitBranchListResponse>(list, _jsonOptions)
                 ?? throw new SyncBridgeException(_localizer.Format("Git.BundleRefused", (int)response.StatusCode, string.Empty).Trim());
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
@@ -178,14 +198,82 @@ public sealed class GitBundleClient : IDisposable
     public void Dispose() => _links.Dispose();
 
     /// <summary>
+    /// Copies the bundle from the answer to the file, within <see cref="ApiLimits.MAX_GIT_BUNDLE_BYTES"/> and without a
+    /// pause longer than <see cref="BodyIdleTimeout"/>.
+    /// </summary>
+    /// <param name="body">The body of the answer.</param>
+    /// <param name="file">The bundle file.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the whole bundle is on disk.</returns>
+    /// <exception cref="SyncBridgeException">The bundle is larger than the limit.</exception>
+    /// <exception cref="IOException">The body stood still for too long.</exception>
+    private async Task CopyBundleAsync(Stream body, Stream file, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[BUFFER_SIZE];
+        long total = 0;
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        while (true)
+        {
+            int read;
+            idle.CancelAfter(BodyIdleTimeout);
+            try
+            {
+                read = await body.ReadAsync(buffer, idle.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new IOException(_localizer.Format("Git.BundleStalled", (int)BodyIdleTimeout.TotalSeconds));
+            }
+
+            if (read == 0)
+            {
+                return;
+            }
+
+            total += read;
+            if (total > ApiLimits.MAX_GIT_BUNDLE_BYTES)
+            {
+                throw new SyncBridgeException(_localizer.Format("Git.BundleTooLarge", ApiLimits.MAX_GIT_BUNDLE_BYTES / (1024 * 1024)));
+            }
+
+            await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Reads the text of an answer up to a number of bytes.
+    /// </summary>
+    /// <param name="content">The content of the answer.</param>
+    /// <param name="maxBytes">The most bytes to read.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The text; a longer answer is cut at the limit, which spoils it as JSON.</returns>
+    private static async Task<string> ReadTextAsync(HttpContent content, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var text = new MemoryStream();
+        var buffer = new byte[BUFFER_SIZE];
+        while (text.Length < maxBytes)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, maxBytes - text.Length)), cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+
+            text.Write(buffer, 0, read);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(text.GetBuffer(), 0, (int)text.Length);
+    }
+
+    /// <summary>
     /// Builds the error for a refused request.
     /// </summary>
-    /// <param name="response">The response.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <param name="statusCode">The status of the answer.</param>
+    /// <param name="text">The text of the answer.</param>
     /// <returns>The exception.</returns>
-    private async Task<SyncBridgeException> RefusalAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private SyncBridgeException Refusal(HttpStatusCode statusCode, string text)
     {
-        var text = await response.Content.ReadAsStringAsync(cancellationToken);
         string reason;
         try
         {
@@ -198,12 +286,12 @@ public sealed class GitBundleClient : IDisposable
         }
 
         // An Origin of an older version has no such route and answers with an empty or a generic 404.
-        if (response.StatusCode == HttpStatusCode.NotFound && !text.Contains("\"reason\"", StringComparison.OrdinalIgnoreCase))
+        if (statusCode == HttpStatusCode.NotFound && !text.Contains("\"reason\"", StringComparison.OrdinalIgnoreCase))
         {
             return new SyncBridgeException(_localizer.Get("Git.BundleOlderPeer"));
         }
 
-        return new SyncBridgeException(_localizer.Format("Git.BundleRefused", (int)response.StatusCode, reason).Trim());
+        return new SyncBridgeException(_localizer.Format("Git.BundleRefused", (int)statusCode, reason).Trim());
     }
 
     /// <summary>

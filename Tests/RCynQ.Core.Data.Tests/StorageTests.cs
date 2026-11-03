@@ -162,6 +162,31 @@ public sealed class StorageTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that an upload another patch still needs is copied into the staged patch and stays for the other one.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task PatchFileStorage_Shared_Upload_Is_Copied_And_Stays_For_The_Other_Patch()
+    {
+        var storage = new PatchFileStorage(TestTexts.English, _database.AppData);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var content = "shared\n"u8.ToArray();
+        var hash = Hash(content);
+        await storage.SaveUploadAsync(hash, new MemoryStream(content), content.Length);
+
+        await storage.StageContentAsync(first, new[] { hash }, new HashSet<string> { hash });
+
+        (await storage.HasContentAsync(first, hash)).Should().BeTrue();
+        (await storage.HasContentAsync(second, hash)).Should().BeTrue("the other patch was told it need not send the content again");
+        await storage.StageContentAsync(second, new[] { hash });
+        await using var stream = await storage.OpenContentAsync(second, hash);
+        using var copy = new MemoryStream();
+        await stream.CopyToAsync(copy);
+        copy.ToArray().Should().Equal(content);
+    }
+
+    /// <summary>
     /// Verifies that staging content that was never uploaded fails and that old uploads are pruned.
     /// </summary>
     /// <returns>A task representing the test.</returns>

@@ -19,9 +19,9 @@ public static class TextFormat
     /// Formats a timestamp in local time.
     /// </summary>
     /// <param name="value">The timestamp, or <see langword="null"/>.</param>
-    /// <returns>The formatted value or <c>never</c>.</returns>
+    /// <returns>The formatted value, or <c>-</c> when there is none.</returns>
     public static string Time(DateTimeOffset? value)
-        => value is null ? "never" : value.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        => value is null ? "-" : value.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Formats a change kind as a one-letter marker.

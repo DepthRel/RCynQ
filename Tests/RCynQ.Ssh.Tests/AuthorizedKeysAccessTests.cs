@@ -27,17 +27,14 @@ public sealed class AuthorizedKeysAccessTests : IDisposable
     {
         var key = SshPublicKey.Parse(KEY_LINE);
 
-        var line = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22", "[fd00::5]:22" }, null, "rcynq:workstation-1");
+        var line = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22", "[fd00::5]:22" }, "rcynq:workstation-1");
 
         line.Should().Be($"restrict,port-forwarding,permitopen=\"192.168.10.20:22\",permitopen=\"[fd00::5]:22\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} rcynq:workstation-1");
         AuthorizedKeysManager.Parse(new[] { line }).Entries.Should().ContainSingle().Which.IsRestricted.Should().BeTrue();
-        AuthorizedKeysManager.BuildForwardLine(key, new[] { "127.0.0.1:18443" }, "/srv/repo", "rcynq:workstation-1")
-            .Should().Contain("permitopen=\"127.0.0.1:18443\",command=\"git-upload-pack '/srv/repo'\"");
 
-        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, Array.Empty<string>(), null, "rcynq:x"))).Should().Throw<ArgumentException>();
-        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, new[] { "-oProxyCommand=calc:22" }, null, "rcynq:x"))).Should().Throw<ArgumentException>();
-        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, "/srv/my repo", "rcynq:x"))).Should().Throw<ArgumentException>();
-        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, null, "rcynq:x\" evil"))).Should().Throw<ArgumentException>();
+        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, Array.Empty<string>(), "rcynq:x"))).Should().Throw<ArgumentException>();
+        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, new[] { "-oProxyCommand=calc:22" }, "rcynq:x"))).Should().Throw<ArgumentException>();
+        ((Action)(() => AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, "rcynq:x\" evil"))).Should().Throw<ArgumentException>();
     }
 
     /// <summary>
@@ -49,11 +46,11 @@ public sealed class AuthorizedKeysAccessTests : IDisposable
     {
         var path = Path.Combine(_root, ".ssh", "authorized_keys");
         var key = SshPublicKey.Parse(KEY_LINE);
-        var oldLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, null, "rcynq:workstation-1");
+        var oldLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "10.0.0.1:22" }, "rcynq:workstation-1");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllLinesAsync(path, new[] { "# my keys", OTHER_KEY_LINE, oldLine });
         var manager = new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = path });
-        var newLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22" }, null, "rcynq:workstation-1");
+        var newLine = AuthorizedKeysManager.BuildForwardLine(key, new[] { "192.168.10.20:22" }, "rcynq:workstation-1");
 
         (await manager.UpsertAsync(new[] { newLine })).Should().Be(1);
         (await File.ReadAllLinesAsync(path)).Should().Equal("# my keys", OTHER_KEY_LINE, newLine);

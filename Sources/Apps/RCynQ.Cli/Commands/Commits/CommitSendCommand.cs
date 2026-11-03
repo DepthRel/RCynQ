@@ -3,6 +3,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Commits;
 
@@ -32,7 +33,7 @@ public sealed class CommitSendCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!succeeded)
         {
-            throw new CommandException("The commits were not taken by the Origin.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Commits.NotTaken"), 1);
         }
     }
 }

@@ -2,7 +2,6 @@ using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
-using System.Text.RegularExpressions;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Localization;
@@ -24,7 +23,7 @@ namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 /// to Administrators and SYSTEM, as OpenSSH requires.
 /// </para>
 /// </remarks>
-public sealed partial class AuthorizedKeysManager
+public sealed class AuthorizedKeysManager
 {
     /// <summary>
     /// The start of the comment of a one-time enrollment key; the ticket identifier follows. Lines with it are removed
@@ -90,10 +89,7 @@ public sealed partial class AuthorizedKeysManager
     /// </summary>
     /// <param name="purpose">The key purpose.</param>
     /// <param name="key">The public key.</param>
-    /// <param name="target">
-    /// For <see cref="AuthorizedKeyPurpose.GitReadOnly"/> the absolute repository path; otherwise the
-    /// <c>host:port</c> the key may open.
-    /// </param>
+    /// <param name="target">The <c>host:port</c> the key may open.</param>
     /// <returns>The line.</returns>
     /// <exception cref="ArgumentException">The target is unsafe or has the wrong form.</exception>
     public static string BuildLine(AuthorizedKeyPurpose purpose, SshPublicKey key, string target)
@@ -101,8 +97,6 @@ public sealed partial class AuthorizedKeysManager
         ArgumentNullException.ThrowIfNull(key);
         var options = purpose switch
         {
-            AuthorizedKeyPurpose.GitReadOnly =>
-                $"restrict,command=\"git-upload-pack '{ValidateRepoPath(target)}'\",no-pty,no-agent-forwarding,no-port-forwarding,no-x11-forwarding",
             AuthorizedKeyPurpose.PatchForward or AuthorizedKeyPurpose.RelayForward =>
                 $"restrict,port-forwarding,permitopen=\"{ValidatePermitOpen(target)}\",command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding",
             _ => throw new ArgumentException($"Unknown key purpose {purpose}.", nameof(purpose))
@@ -113,16 +107,14 @@ public sealed partial class AuthorizedKeysManager
     }
 
     /// <summary>
-    /// Builds a restricted line that may only open the listed <c>host:port</c> targets and, optionally, run
-    /// <c>git-upload-pack</c> for one repository.
+    /// Builds a restricted line that may only open the listed <c>host:port</c> targets and runs no command.
     /// </summary>
     /// <param name="key">The public key.</param>
     /// <param name="targets">The <c>host:port</c> targets (IPv6 hosts in brackets).</param>
-    /// <param name="gitRepoPath">The repository for a forced <c>git-upload-pack</c>, or <see langword="null"/> for <c>exit 1</c>.</param>
     /// <param name="comment">The line comment, for example <c>rcynq:workstation-1</c>.</param>
     /// <returns>The line.</returns>
-    /// <exception cref="ArgumentException">A target, the repository path or the comment is unsafe.</exception>
-    public static string BuildForwardLine(SshPublicKey key, IReadOnlyList<string> targets, string? gitRepoPath, string comment)
+    /// <exception cref="ArgumentException">A target or the comment is unsafe.</exception>
+    public static string BuildForwardLine(SshPublicKey key, IReadOnlyList<string> targets, string comment)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(targets);
@@ -137,8 +129,7 @@ public sealed partial class AuthorizedKeysManager
         }
 
         var permits = string.Join(',', targets.Select(target => $"permitopen=\"{ValidatePermitOpen(target)}\""));
-        var command = gitRepoPath is null ? "exit 1" : $"git-upload-pack '{ValidateRepoPath(gitRepoPath)}'";
-        return $"restrict,port-forwarding,{permits},command=\"{command}\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} {comment}";
+        return $"restrict,port-forwarding,{permits},command=\"exit 1\",no-pty,no-agent-forwarding,no-x11-forwarding {key.Type} {key.Blob} {comment}";
     }
 
     /// <summary>
@@ -265,8 +256,7 @@ public sealed partial class AuthorizedKeysManager
         var allowed = localRole switch
         {
             NodeRole.Relay => purpose == AuthorizedKeyPurpose.RelayForward,
-            NodeRole.Origin => purpose is AuthorizedKeyPurpose.GitReadOnly or AuthorizedKeyPurpose.PatchForward,
-            NodeRole.Workstation => purpose == AuthorizedKeyPurpose.PatchForward,
+            NodeRole.Origin or NodeRole.Workstation => purpose == AuthorizedKeyPurpose.PatchForward,
             _ => false
         };
 
@@ -447,22 +437,6 @@ public sealed partial class AuthorizedKeysManager
     }
 
     /// <summary>
-    /// Validates a repository path for a forced <c>git-upload-pack</c> command.
-    /// </summary>
-    /// <param name="target">The path.</param>
-    /// <returns>The path with <c>/</c> separators.</returns>
-    /// <exception cref="ArgumentException">The path is not absolute or contains unsafe characters.</exception>
-    private static string ValidateRepoPath(string target)
-    {
-        if (string.IsNullOrWhiteSpace(target) || !SafeRepoPath().IsMatch(target) || !(target.StartsWith('/') || Path.IsPathFullyQualified(target)))
-        {
-            throw new ArgumentException($"Repository path '{target}' must be absolute and must not contain quotes, spaces or shell metacharacters.", nameof(target));
-        }
-
-        return target.Replace('\\', '/');
-    }
-
-    /// <summary>
     /// Validates a <c>host:port</c> permitopen target.
     /// </summary>
     /// <param name="target">The target.</param>
@@ -545,11 +519,4 @@ public sealed partial class AuthorizedKeysManager
             }
         }
     }
-
-    /// <summary>
-    /// Pattern for repository paths inside forced commands.
-    /// </summary>
-    /// <returns>The compiled regular expression.</returns>
-    [GeneratedRegex(@"^[A-Za-z0-9_./:\\~+-]+$")]
-    private static partial Regex SafeRepoPath();
 }

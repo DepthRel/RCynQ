@@ -9,9 +9,11 @@ namespace RCynQ.Service.Security;
 /// </summary>
 /// <remarks>
 /// The local API is reachable with the local API token and is meant for the UI and the CLI on this computer only.
-/// The direct endpoint is open to the network, so requests arriving on its port may only receive a patch
-/// (the <c>/patch/sessions</c> routes, authenticated by the link token and the manifest signature) or read the health of the node.
-/// Everything else is answered with 404, as if the route did not exist.
+/// The direct endpoint is open to the network, so requests arriving on its port may only use the routes of a neighbour:
+/// the patch session routes (<c>/patch/sessions/...</c>, authenticated by the link token and the manifest signature), the
+/// Git channel (<c>POST /git/bundle</c>, <c>POST /git/branches</c>), the ping and the list of repositories
+/// (<c>GET /peer/ping</c>, <c>GET /peer/repositories</c>), enrollment (<c>POST /peer/enroll</c>, a single-use ticket) and
+/// <c>GET /health</c>. Everything else is answered with 404, as if the route did not exist.
 /// </remarks>
 public sealed class PublicEndpointMiddleware
 {

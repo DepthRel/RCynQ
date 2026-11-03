@@ -1,5 +1,6 @@
 using System.Text;
 using RCynQ.Core.Diagnostics;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Services;
 
@@ -14,13 +15,18 @@ public sealed class DiagnosticsCommandService
     /// <summary>The auto-fixer.</summary>
     private readonly IAutoFixer _fixer;
 
+    /// <summary>The localizer of the output.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DiagnosticsCommandService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the output.</param>
     /// <param name="runner">The diagnostics runner.</param>
     /// <param name="fixer">The auto-fixer.</param>
-    public DiagnosticsCommandService(IDiagnosticsRunner runner, IAutoFixer fixer)
+    public DiagnosticsCommandService(ILocalizer localizer, IDiagnosticsRunner runner, IAutoFixer fixer)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _runner = runner;
         _fixer = fixer;
     }
@@ -36,7 +42,7 @@ public sealed class DiagnosticsCommandService
     {
         var run = await _runner.RunAsync(cancellationToken);
         var width = run.Results.Select(result => result.CheckName.Length).DefaultIfEmpty(0).Max();
-        var text = new StringBuilder($"Diagnostics for {run.Role}:\n");
+        var text = new StringBuilder(_localizer.Format("Cli.Diagnostics.Title", run.Role)).Append('\n');
         foreach (var result in run.Results)
         {
             text.Append(result.Passed ? "[ OK ] " : "[FAIL] ").Append(result.CheckName.PadRight(width)).Append("  ").Append(result.Message).Append('\n');
@@ -47,7 +53,7 @@ public sealed class DiagnosticsCommandService
 
             if (result.SuggestedFix is not null)
             {
-                text.Append("       fix: ").Append(result.SuggestedFix).Append('\n');
+                text.Append("       ").Append(_localizer.Format("Cli.Diagnostics.Fix", result.SuggestedFix)).Append('\n');
             }
 
             if (result.AutoFix is not { } fix)
@@ -57,16 +63,16 @@ public sealed class DiagnosticsCommandService
 
             if (!applyFixes)
             {
-                text.Append("       auto-fix available: ").Append(fix.Description).Append(" (run with --fix --yes)\n");
+                text.Append("       ").Append(_localizer.Format("Cli.Diagnostics.FixAvailable", fix.Description)).Append('\n');
                 continue;
             }
 
             var outcome = await _fixer.ApplyAsync(fix, confirmed, cancellationToken);
-            text.Append("       auto-fix ").Append(outcome.Applied ? "applied: " : "not applied: ").Append(outcome.Message).Append('\n');
+            text.Append("       ").Append(outcome.Applied ? _localizer.Format("Cli.Diagnostics.FixApplied", outcome.Message) : _localizer.Format("Cli.Diagnostics.FixNotApplied", outcome.Message)).Append('\n');
         }
 
         var failed = run.Results.Count(result => !result.Passed);
-        text.Append("Summary: ").Append(run.Results.Count - failed).Append(" passed, ").Append(failed).Append(" failed.\n");
+        text.Append(_localizer.Format("Cli.Diagnostics.Summary", run.Results.Count - failed, failed)).Append('\n');
         return (text.ToString(), failed == 0);
     }
 }

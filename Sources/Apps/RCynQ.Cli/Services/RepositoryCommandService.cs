@@ -1,4 +1,5 @@
 using System.Text;
+using RCynQ.Localization;
 using RCynQ.Sync.Repositories;
 
 namespace RCynQ.Cli.Services;
@@ -12,18 +13,20 @@ namespace RCynQ.Cli.Services;
 /// </remarks>
 public sealed class RepositoryCommandService
 {
-    /// <summary>The note printed after a change.</summary>
-    private const string RESTART_NOTE = "Restart the RCynQ service of this node, if it is running, to apply the change.\n";
-
     /// <summary>The repository operations.</summary>
     private readonly RepositoryService _repositories;
+
+    /// <summary>The localizer of the output.</summary>
+    private readonly ILocalizer _localizer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RepositoryCommandService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the output.</param>
     /// <param name="repositories">The repository operations.</param>
-    public RepositoryCommandService(RepositoryService repositories)
+    public RepositoryCommandService(ILocalizer localizer, RepositoryService repositories)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _repositories = repositories ?? throw new ArgumentNullException(nameof(repositories));
     }
 
@@ -39,21 +42,21 @@ public sealed class RepositoryCommandService
         var text = new StringBuilder();
         if (list.Repositories.Count == 0)
         {
-            text.Append("No repositories.\n");
+            text.Append(_localizer.Get("Cli.Repository.None")).Append('\n');
         }
 
         foreach (var repository in list.Repositories)
         {
             text.Append(repository.IsActive ? "* " : "  ")
-                .Append(repository.Name.Length > 0 ? repository.Name : "(not bound yet)")
+                .Append(repository.Name.Length > 0 ? repository.Name : _localizer.Get("Cli.Repository.NotBound"))
                 .Append("  ")
-                .Append(repository.Path ?? "(not on this computer yet)")
+                .Append(repository.Path ?? _localizer.Get("Cli.Repository.NotHere"))
                 .Append('\n');
         }
 
         if (list.CatalogError is not null)
         {
-            text.Append("The Origin was not asked: ").Append(list.CatalogError).Append('\n');
+            text.Append(_localizer.Format("Cli.Repository.OriginNotAsked", list.CatalogError)).Append('\n');
         }
 
         return text.ToString();
@@ -69,7 +72,7 @@ public sealed class RepositoryCommandService
     public async Task<string> AddAsync(string name, string path, CancellationToken cancellationToken = default)
     {
         var entry = await _repositories.AddAsync(name, path, cancellationToken);
-        return $"Added repository '{entry.Name}' at {entry.Path}.\n{RESTART_NOTE}";
+        return WithRestartNote(_localizer.Format("Cli.Repository.Added", entry.Name, entry.Path ?? string.Empty));
     }
 
     /// <summary>
@@ -81,7 +84,7 @@ public sealed class RepositoryCommandService
     public async Task<string> RemoveAsync(string name, CancellationToken cancellationToken = default)
     {
         await _repositories.RemoveAsync(name, cancellationToken);
-        return $"Removed repository '{name}' from this node. Its folder and files were not touched.\n{RESTART_NOTE}";
+        return WithRestartNote(_localizer.Format("Cli.Repository.Removed", name));
     }
 
     /// <summary>
@@ -93,6 +96,13 @@ public sealed class RepositoryCommandService
     public async Task<string> UseAsync(string name, CancellationToken cancellationToken = default)
     {
         var entry = await _repositories.ActivateAsync(name, cancellationToken);
-        return $"The node works with repository '{entry.Name}' at {entry.Path}.\n{RESTART_NOTE}";
+        return WithRestartNote(_localizer.Format("Cli.Repository.Used", entry.Name, entry.Path ?? string.Empty));
     }
+
+    /// <summary>
+    /// Adds the note that a running service has to be restarted to see the change.
+    /// </summary>
+    /// <param name="message">What was done.</param>
+    /// <returns>The text for the console.</returns>
+    private string WithRestartNote(string message) => $"{message}\n{_localizer.Get("Cli.Repository.Restart")}\n";
 }

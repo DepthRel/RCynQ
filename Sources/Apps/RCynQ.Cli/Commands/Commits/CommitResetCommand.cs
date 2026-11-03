@@ -4,6 +4,7 @@ using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Commits;
 
@@ -37,7 +38,7 @@ public sealed class CommitResetCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!succeeded)
         {
-            throw new CommandException("The commits were not rolled back.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Commits.NotReset"), 1);
         }
     }
 }

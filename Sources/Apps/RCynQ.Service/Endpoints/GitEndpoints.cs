@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Exceptions;
@@ -60,10 +61,11 @@ public static class GitEndpoints
     /// <param name="http">The HTTP context.</param>
     /// <param name="request">The repository asked for.</param>
     /// <param name="bundles">The bundle service.</param>
+    /// <param name="loggers">The logger factory.</param>
     /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The branches, or the rejection.</returns>
-    private static async Task<IResult> BranchesAsync(HttpContext http, GitBranchListRequest request, GitBundleService bundles, ILocalizer localizer, CancellationToken cancellationToken)
+    private static async Task<IResult> BranchesAsync(HttpContext http, GitBranchListRequest request, GitBundleService bundles, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
     {
         var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NODE_ID].FirstOrDefault(), http.Request.Headers[ApiHeaders.LINK_TOKEN].FirstOrDefault());
         try
@@ -73,6 +75,10 @@ public static class GitEndpoints
         catch (PatchRejectedException ex)
         {
             return Results.Json(new PatchRejectionResponse(ex.Reason, localizer.Describe(ex)), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
+        }
+        catch (GitExecutionException ex)
+        {
+            return GitFailed(ex, loggers, localizer);
         }
         catch (SyncBridgeException ex)
         {
@@ -86,10 +92,11 @@ public static class GitEndpoints
     /// <param name="http">The HTTP context.</param>
     /// <param name="request">The commits the Workstation already has.</param>
     /// <param name="bundles">The bundle service.</param>
+    /// <param name="loggers">The logger factory.</param>
     /// <param name="localizer">The localizer that words the answer for the client.</param>
     /// <param name="cancellationToken">The request token.</param>
     /// <returns>The bundle, <c>204</c> when the Workstation has everything, or the rejection.</returns>
-    private static async Task<IResult> BundleAsync(HttpContext http, GitBundleRequest request, GitBundleService bundles, ILocalizer localizer, CancellationToken cancellationToken)
+    private static async Task<IResult> BundleAsync(HttpContext http, GitBundleRequest request, GitBundleService bundles, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
     {
         var context = new PatchReceiveContext(http.Request.Headers[ApiHeaders.NODE_ID].FirstOrDefault(), http.Request.Headers[ApiHeaders.LINK_TOKEN].FirstOrDefault());
         GitBundleFile? bundle;
@@ -100,6 +107,10 @@ public static class GitEndpoints
         catch (PatchRejectedException ex)
         {
             return Results.Json(new PatchRejectionResponse(ex.Reason, localizer.Describe(ex)), statusCode: PatchRejectionStatusCodes.For(ex.Reason));
+        }
+        catch (GitExecutionException ex)
+        {
+            return GitFailed(ex, loggers, localizer);
         }
         catch (SyncBridgeException ex)
         {
@@ -120,5 +131,19 @@ public static class GitEndpoints
         http.Response.OnCompleted(async () => await bundle.DisposeAsync());
         var stream = new FileStream(bundle.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
         return Results.Stream(stream, "application/x-git-bundle");
+    }
+
+    /// <summary>
+    /// Answers a Workstation whose request Git could not serve. What Git said names folders of this node, which a
+    /// neighbour never learns, so it goes to the log of the node and the answer only says where to look.
+    /// </summary>
+    /// <param name="exception">The failure of Git.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <returns>The answer.</returns>
+    private static IResult GitFailed(GitExecutionException exception, ILoggerFactory loggers, ILocalizer localizer)
+    {
+        loggers.CreateLogger(typeof(GitEndpoints)).LogWarning(exception, "Git could not serve a request of the Workstation: {Error}", exception.Message);
+        return Results.BadRequest(new ErrorResponse(localizer.Get("Git.ServeFailed")));
     }
 }

@@ -5,11 +5,19 @@ using RCynQ.Localization;
 namespace RCynQ.Service.Security;
 
 /// <summary>
-/// Requires the local API token on every request except <c>GET /health</c>, the patch session routes (<c>/patch/sessions/...</c>) and <c>POST /git/bundle</c>.
+/// Requires the local API token on every request except the routes of a neighbour, which carry their own proof.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Without the token pass <c>GET /health</c>, <c>GET /peer/ping</c>, <c>GET /peer/repositories</c>,
+/// <c>POST /git/bundle</c>, <c>POST /git/branches</c>, <c>POST /peer/enroll</c> and <c>POST</c>/<c>PUT</c> of the patch
+/// session routes (<c>/patch/sessions/...</c>, deliveries of commits included). Each of them checks the link token and the
+/// known peer itself, the session routes also the signature of the manifest, and enrollment its single-use ticket.
+/// </para>
+/// <para>
 /// The token is read from the <c>X-Api-Token</c> header; SignalR clients may pass it as the <c>access_token</c> query
 /// parameter on the hub route because browsers and some transports cannot set headers.
+/// </para>
 /// </remarks>
 public sealed class ApiTokenMiddleware
 {

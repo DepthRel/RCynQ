@@ -39,7 +39,7 @@ public static class CliHost
             .AddCommandsFromThisAssembly()
             .SetExecutableName(EXECUTABLE_NAME)
             .SetTitle("RCynQ")
-            .SetDescription("Headless management of an RCynQ (SyncBridge) node: role, links, transports, live patches, Git channel and diagnostics.")
+            .SetDescription(localizer.Get("Cli.Description"))
             .UseTypeActivator(type => provider.GetRequiredService(type));
 
         if (console is not null)

@@ -3,6 +3,7 @@ using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Diagnostics;
 
@@ -36,7 +37,7 @@ public sealed class DiagnosticsRunCommand : NodeCommandBase
         await console.Output.WriteAsync(text);
         if (!allPassed)
         {
-            throw new CommandException("Some checks failed.", 1);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Diagnostics.Failed"), 1);
         }
     }
 }

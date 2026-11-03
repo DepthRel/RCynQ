@@ -16,4 +16,13 @@ public static class ApiLimits
 
     /// <summary>The largest patch file the service builds, reads or applies, in bytes.</summary>
     public const long MAX_PATCH_FILE_BYTES = 256L * 1024 * 1024;
+
+    /// <summary>
+    /// The largest Git bundle a Workstation takes from Origin, in bytes: room for the whole history of a large
+    /// repository, yet a bound for an Origin that never stops sending.
+    /// </summary>
+    public const long MAX_GIT_BUNDLE_BYTES = 16L * 1024 * 1024 * 1024;
+
+    /// <summary>The longest answer of a peer that refused a request, in bytes, that is read for its reason.</summary>
+    public const int MAX_REFUSAL_BYTES = 64 * 1024;
 }

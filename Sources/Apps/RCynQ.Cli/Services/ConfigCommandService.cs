@@ -77,19 +77,19 @@ public sealed class ConfigCommandService
         await ConfigurationFileEditor.SetRoleAsync(path, role, repoPath, workdirPath, cancellationToken);
 
         var text = new StringBuilder();
-        text.Append("Saved ").Append(path).Append('\n');
-        text.Append("  Node:    ").Append(effectiveId).Append(" (").Append(role).Append(")\n");
+        text.Append(_localizer.Format("Cli.Config.Saved", path)).Append('\n');
+        text.Append("  ").Append(_localizer.Format("Cli.Config.Node", effectiveId, role)).Append('\n');
         if (repo is not null)
         {
-            text.Append("  Repo:    ").Append(repo).Append('\n');
+            text.Append("  ").Append(_localizer.Format("Cli.Config.Repository", repo)).Append('\n');
         }
 
         if (workdir is not null)
         {
-            text.Append("  Workdir: ").Append(workdir).Append('\n');
+            text.Append("  ").Append(_localizer.Format("Cli.Config.WorkingTree", workdir)).Append('\n');
         }
 
-        text.Append("Restart RCynQ.Service to apply the role.\n");
+        text.Append(_localizer.Get("Cli.Config.Restart")).Append('\n');
         return text.ToString();
     }
 

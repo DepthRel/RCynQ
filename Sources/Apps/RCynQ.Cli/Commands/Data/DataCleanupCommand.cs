@@ -3,6 +3,7 @@ using CliFx.Attributes;
 using CliFx.Exceptions;
 using CliFx.Infrastructure;
 using RCynQ.Cli.Hosting;
+using RCynQ.Localization;
 using RCynQ.Sync.Maintenance;
 
 namespace RCynQ.Cli.Commands.Data;
@@ -33,13 +34,13 @@ public sealed class DataCleanupCommand : NodeCommandBase
     {
         if (OlderThanDays < 0)
         {
-            throw new CommandException("--older-than must not be negative.", 2);
+            throw new CommandException(context.Get<ILocalizer>().Get("Cli.Cleanup.NegativeAge"), 2);
         }
 
         var report = await context.Get<DataRetentionService>().CleanAsync(TimeSpan.FromDays(OlderThanDays), cancellationToken);
         var megabytes = (report.FreedBytes / (1024d * 1024d)).ToString("0.0", CultureInfo.InvariantCulture);
         await console.Output.WriteLineAsync(report.RemovedAnything
-            ? $"Removed {report.Patches} patch(es), {report.HistoryEntries} history entries, {report.DiagnosticRuns} diagnostics run(s), {report.Backups} backup(s), {report.TemporaryItems} temporary item(s); {megabytes} MB freed."
-            : "Nothing to remove.");
+            ? context.Get<ILocalizer>().Format("Cli.Cleanup.Done", report.Patches, report.HistoryEntries, report.DiagnosticRuns, report.Backups, report.TemporaryItems, megabytes)
+            : context.Get<ILocalizer>().Get("Cli.Cleanup.Nothing"));
     }
 }

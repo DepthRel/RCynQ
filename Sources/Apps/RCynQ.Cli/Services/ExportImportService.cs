@@ -1,5 +1,6 @@
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Probing;
 
@@ -16,13 +17,18 @@ public sealed class ExportImportService
     /// <summary>The environment probe.</summary>
     private readonly INodeEnvironmentProbe _probe;
 
+    /// <summary>The localizer of the output.</summary>
+    private readonly ILocalizer _localizer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ExportImportService"/> class.
     /// </summary>
+    /// <param name="localizer">The localizer of the output.</param>
     /// <param name="transfer">The configuration transfer.</param>
     /// <param name="probe">The environment probe.</param>
-    public ExportImportService(NodeConfigurationTransfer transfer, INodeEnvironmentProbe probe)
+    public ExportImportService(ILocalizer localizer, NodeConfigurationTransfer transfer, INodeEnvironmentProbe probe)
     {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _transfer = transfer;
         _probe = probe;
     }
@@ -79,11 +85,11 @@ public sealed class ExportImportService
         if (result.Decision is { } needed)
         {
             // A command cannot ask: it refuses and tells how to say what the file is.
-            var lines = new List<string> { result.Message, "Repeat the import with one of:" };
+            var lines = new List<string> { result.Message, _localizer.Get("Cli.Import.Repeat") };
             lines.AddRange(needed.Options.Select(option => $"  --as {OptionName(option)}"));
             if (!needed.SameNode && needed.Options.Contains(ImportDecision.Replace) && needed.Candidates.Count > 1)
             {
-                lines.Add("With '--as replace' name the link to change with --link:");
+                lines.Add(_localizer.Get("Cli.Import.NameLink"));
                 lines.AddRange(needed.Candidates.Select(candidate => $"  {candidate.LinkName}  ({candidate.PeerId.Value}, {candidate.Host})"));
             }
 
@@ -97,16 +103,17 @@ public sealed class ExportImportService
     /// Reads the value of the <c>--as</c> option.
     /// </summary>
     /// <param name="value">The value, or <see langword="null"/> when the option is not given.</param>
+    /// <param name="localizer">The localizer of the message about an unknown value.</param>
     /// <returns>The decision, or <see langword="null"/>.</returns>
     /// <exception cref="FormatException">The value names no decision.</exception>
-    public static ImportDecision? ParseDecision(string? value)
+    public static ImportDecision? ParseDecision(string? value, ILocalizer localizer)
         => value?.Trim().ToLowerInvariant() switch
         {
             null or "" => null,
             "route" or "alternative" => ImportDecision.AlternativeRoute,
             "replace" => ImportDecision.Replace,
             "hop" or "add" => ImportDecision.AddHop,
-            _ => throw new FormatException($"Unknown value '{value}' of --as; use 'route', 'replace' or 'hop'.")
+            _ => throw new FormatException(localizer.Format("Cli.Import.UnknownDecision", value))
         };
 
     /// <summary>
@@ -114,10 +121,10 @@ public sealed class ExportImportService
     /// </summary>
     /// <param name="decision">The decision.</param>
     /// <returns>The value.</returns>
-    private static string OptionName(ImportDecision decision) => decision switch
+    private string OptionName(ImportDecision decision) => decision switch
     {
-        ImportDecision.AlternativeRoute => "route    (another address of the same node)",
-        ImportDecision.Replace => "replace  (takes the place of a known node or address)",
-        _ => "hop      (one more node next to the known ones)"
+        ImportDecision.AlternativeRoute => "route    " + _localizer.Get("Cli.Import.Route"),
+        ImportDecision.Replace => "replace  " + _localizer.Get("Cli.Import.Replace"),
+        _ => "hop      " + _localizer.Get("Cli.Import.Hop")
     };
 }

@@ -4,6 +4,7 @@ using RCynQ.Cli.Hosting;
 using RCynQ.Cli.Services;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
+using RCynQ.Localization;
 
 namespace RCynQ.Cli.Commands.Links;
 
@@ -98,7 +99,7 @@ public sealed class LinkAddCommand : NodeCommandBase
             var separator = setting.IndexOf('=', StringComparison.Ordinal);
             if (separator <= 0)
             {
-                throw new ArgumentException($"Transport setting '{setting}' must have the form key=value.");
+                throw new ArgumentException(context.Get<ILocalizer>().Format("Cli.Link.SettingForm", setting));
             }
 
             options.TransportSettings[setting[..separator]] = setting[(separator + 1)..];
