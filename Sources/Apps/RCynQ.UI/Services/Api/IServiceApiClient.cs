@@ -185,6 +185,11 @@ public interface IServiceApiClient
     /// <returns>The result; <see cref="PeerAccessResult.RequiresElevation"/> when administrator rights are needed.</returns>
     Task<PeerAccessResult> AllowPeerAccessAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Takes the lines of this node out of the <c>authorized_keys</c> of this computer, before a reset of the node.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>What became of the lines.</returns>
+    Task<AccessRevocationResult> RevokePeerAccessAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Generates the node SSH key when none exists and probes again.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The report.</returns>
@@ -333,4 +338,10 @@ public interface IServiceApiClient
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>A task that completes when the setting is saved.</returns>
     Task SetAcceptCommitsAsync(bool enabled, CancellationToken cancellationToken = default);
+
+    /// <summary>Changes for how many days the node keeps finished data before it removes it by itself.</summary>
+    /// <param name="days">The number of days; <c>0</c> keeps the data until it is cleaned by hand.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>A task that completes when the value is saved.</returns>
+    Task SetRetentionDaysAsync(int days, CancellationToken cancellationToken = default);
 }

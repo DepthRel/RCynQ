@@ -1,3 +1,4 @@
+using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Ids;
 
@@ -15,6 +16,7 @@ namespace RCynQ.Core.Api;
 /// <param name="Capabilities">The capabilities of the role.</param>
 /// <param name="ConfigFilePath">The configuration file the service reads, or <see langword="null"/>.</param>
 /// <param name="AcceptCommits">Whether an Origin takes commits from the Workstation; <see langword="false"/> for other roles.</param>
+/// <param name="RetentionDays">For how many days finished data is kept; <c>0</c> keeps it until it is cleaned by hand.</param>
 public sealed record NodeConfigurationDto(
     NodeId NodeId,
     string Name,
@@ -24,4 +26,5 @@ public sealed record NodeConfigurationDto(
     int ListenPort,
     RoleCapabilities Capabilities,
     string? ConfigFilePath,
-    bool AcceptCommits = false);
+    bool AcceptCommits = false,
+    int RetentionDays = SyncBridgeOptions.DEFAULT_RETENTION_DAYS);

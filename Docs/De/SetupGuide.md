@@ -44,6 +44,8 @@ Installieren Sie auf Workstation und Origin Git und prüfen Sie es: `git --versi
 
 Verwenden Sie für jeden Rechner ein sauberes Paket. Kopieren Sie keinen Ordner, in dem RCynQ schon gelaufen ist: seine Ordner `config` und `data` sind die Identität dieses Knotens.
 
+**Neue Versionen.** Einige Sekunden nach dem Start und danach einmal täglich liest RCynQ die Liste der Veröffentlichungen auf seiner Website. Ist eine neuere Version erschienen, bietet ein Banner im Fenster **Website öffnen** (die Downloads des Projekts) oder **Nicht mehr an diese Version erinnern** an; eine spätere Version wird wieder angeboten. Es wird nichts von selbst heruntergeladen oder installiert, und über Sie oder Ihre Knoten wird nichts gesendet. **Einstellungen → Updates** zeigt das Ergebnis der letzten Prüfung, prüft auf Wunsch und schaltet die Prüfungen aus.
+
 ## 3. Wählen, wie der Knoten Verbindungen annimmt
 
 Das Relay verwendet immer Variante A. Für Workstation und Origin wählen Sie je Rechner.
@@ -251,6 +253,16 @@ Trifft ein eingehender Patch auf lokale Änderungen in denselben Dateien, zeigt 
 Geschrieben wird erst, wenn alle Dateien zusammengeführt sind.
 
 Befehlszeile: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; ein Merge-Tool wird nur aus der Anwendung heraus verwendet.
+
+## 15. Fenster schließen, Rolle ändern, neu beginnen
+
+**Fenster schließen.** Unter Windows und macOS verbirgt das Schließen das Fenster nur: Der Knoten arbeitet weiter, und das RCynQ-Symbol im Infobereich (unter macOS in der Menüleiste) holt das Fenster zurück. **Beenden** im Menü des Symbols beendet RCynQ zusammen mit seinem Dienst. Ein erneuter Start von RCynQ, während es läuft, zeigt dasselbe Fenster. **Einstellungen → Fenster** schaltet das aus. Unter Linux ist es aus, bis Sie es einschalten: Das Symbol erscheint nur auf einem Desktop, der Tray-Symbole anzeigt (unter GNOME mit der Erweiterung AppIndicator).
+
+**Rolle ändern.** **Rolle und Knoten → Rolle des Knotens** ändert Rolle und Pfad des Knotens; der Dienst startet damit neu.
+
+**Neu beginnen.** **Einstellungen → Gefahrenbereich → Knotendaten löschen…** löscht Konfiguration, Schlüssel, Datenbank, Patches, Verlauf und Protokolle des Knotens sowie seine Zeilen in `authorized_keys`, sobald Sie die Kennung des Knotens eingeben. Die Repositorys, die Einstellungen der Anwendung, der SSH-Server und die Firewall-Regel bleiben erhalten. Danach öffnet sich die Ersteinrichtung, in der jede Rolle gewählt werden kann. Die Nachbarn kennen den alten Knoten weiterhin: Entfernen Sie dort seine Verbindung und verbinden Sie erneut.
+
+Befehlszeile, bei geschlossenem RCynQ: `rcynq node reset`. Der Befehl zeigt, was gelöscht wird und was bleibt, und fragt nach der Kennung des Knotens; `--confirm <node-id>` gibt sie für Skripte im Voraus an.
 
 ## Aktualisieren von einer früheren Version
 

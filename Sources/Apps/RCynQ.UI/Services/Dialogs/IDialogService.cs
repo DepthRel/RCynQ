@@ -89,6 +89,13 @@ public interface IDialogService
     Task<bool> ConfirmAsync(string title, string message);
 
     /// <summary>
+    /// Shows the confirmation of a reset of the node, which the user confirms by typing the identifier of the node.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user confirmed the reset.</returns>
+    Task<bool> ShowResetNodeDialogAsync(ResetNodeDialogViewModel dialog);
+
+    /// <summary>
     /// Picks a folder.
     /// </summary>
     /// <param name="title">The picker title.</param>

@@ -57,6 +57,9 @@ public static class ApiRoutes
     /// <summary>Whether this Origin takes commits from the Workstation.</summary>
     public const string CONFIG_ACCEPT_COMMITS = "/config/accept-commits";
 
+    /// <summary>For how many days the node keeps finished data before it removes it by itself.</summary>
+    public const string CONFIG_RETENTION = "/config/retention";
+
     /// <summary>Recent patches, newest first, a page at a time (<c>?skip=&amp;take=</c>).</summary>
     public const string PATCHES = "/patches";
 
@@ -210,7 +213,10 @@ public static class ApiRoutes
     /// <summary>Generate the node SSH key when none exists.</summary>
     public const string CONFIG_SSH_KEY = "/config/ssh-key";
 
-    /// <summary>Allow the imported neighbours in the <c>authorized_keys</c> of the local SSH server.</summary>
+    /// <summary>
+    /// Allow the imported neighbours in the <c>authorized_keys</c> of the local SSH server (POST), or take the lines of
+    /// this node out of it before a reset (DELETE).
+    /// </summary>
     public const string SSH_AUTHORIZED_KEYS = "/ssh/authorized-keys";
 
     /// <summary>Gracefully stop the service (used by the UI that started it).</summary>

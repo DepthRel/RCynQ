@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using RCynQ.UI.Controls;
+using RCynQ.UI.Services.Shell;
 using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Navigation;
 
@@ -26,6 +27,40 @@ public partial class MainWindow : Window
         InitializeComponent();
         AddHandler(OverflowStackPanel.OverflowChangedEvent, OnTabsOverflowChanged);
         Activated += (_, _) => _viewModel?.OnWindowActivated();
+    }
+
+    /// <summary>
+    /// Gets or sets what tells whether the user keeps the application running when the window is closed;
+    /// <see langword="null"/> closes the window as usual.
+    /// </summary>
+    public ITrayPreferences? Tray { get; set; }
+
+    /// <summary>
+    /// Brings the window back from the notification area, or from under other windows, and gives it the focus.
+    /// </summary>
+    public void ShowFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+    }
+
+    /// <inheritdoc />
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        // The user closed the window: the node keeps working, and the icon in the notification area brings it back.
+        if (Tray is not null && CloseToTrayPolicy.ShouldHide(e.CloseReason, e.IsProgrammatic, Tray.CloseToTray))
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+
+        base.OnClosing(e);
     }
 
     /// <inheritdoc />

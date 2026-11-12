@@ -131,6 +131,75 @@ public sealed class PeerAccessService
     }
 
     /// <summary>
+    /// Removes the lines this node wrote for its neighbours and for its invitations, open or closed, as before a reset of
+    /// the node. Lines of other keys stay, those another RCynQ node of this account wrote too.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The result; when the file needs administrator rights nothing is written and the result says so.</returns>
+    /// <exception cref="IOException">The file could not be read or written.</exception>
+    public async Task<AccessRevocationResult> RevokeAsync(CancellationToken cancellationToken = default)
+    {
+        var blobs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var peer in await _peers.GetAllAsync(cancellationToken))
+        {
+            AddBlob(blobs, peer.SshPublicKey);
+        }
+
+        if (_tickets is not null)
+        {
+            foreach (var ticket in await _tickets.GetAllAsync(cancellationToken))
+            {
+                AddBlob(blobs, ticket.EnrollmentKey);
+            }
+        }
+
+        int present;
+        try
+        {
+            present = await _keys.CountKeysAsync(blobs, cancellationToken);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new AccessRevocationResult(_keys.FilePath, 0, NeedsElevation: true);
+        }
+
+        if (present == 0)
+        {
+            return new AccessRevocationResult(_keys.FilePath, 0, NeedsElevation: false);
+        }
+
+        if (!_keys.CanWrite)
+        {
+            return new AccessRevocationResult(_keys.FilePath, 0, NeedsElevation: true);
+        }
+
+        var removed = await _keys.RemoveKeysAsync(blobs, cancellationToken);
+        return new AccessRevocationResult(_keys.FilePath, removed, NeedsElevation: false);
+    }
+
+    /// <summary>
+    /// Adds the blob of a public key line to a set; a missing or unreadable key adds nothing.
+    /// </summary>
+    /// <param name="blobs">The set.</param>
+    /// <param name="publicKey">The OpenSSH public key line, or <see langword="null"/>.</param>
+    private static void AddBlob(HashSet<string> blobs, string? publicKey)
+    {
+        if (string.IsNullOrWhiteSpace(publicKey))
+        {
+            return;
+        }
+
+        try
+        {
+            blobs.Add(SshPublicKey.Parse(publicKey).Blob);
+        }
+        catch (FormatException)
+        {
+            // A key that cannot be read was never written into the file by this node either.
+        }
+    }
+
+    /// <summary>
     /// Builds the lines of the one-time keys of the open invitations.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>

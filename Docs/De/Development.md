@@ -26,7 +26,7 @@ Projektverweise.
 | Projekt | Was es prüft |
 |---|---|
 | RCynQ.Conventions.Tests | die Regeln aus AGENTS.md, die Analyzer nicht prüfen können, an den mit Roslyn geparsten Quellen: ein Typ je Datei, private verschachtelte Typen, XML-Kommentare, Enums in `Enums`-Ordnern, logische Operatoren am Zeilenende, die Reihenfolge der usings, Zeit nur über `TimeProvider`, das Schema nur über Migrationen, Projekte in ihren Projektmappenordnern |
-| RCynQ.Core.Tests | Knotenrollen, Datensätze, Speicherorte der Konfiguration (portable Installation), der Installationsstempel, Prüfung und Umwandlung früherer Konfigurationsdateien, Repositories in der Konfiguration |
+| RCynQ.Core.Tests | Knotenrollen, Datensätze, Speicherorte der Konfiguration (portable Installation), der Installationsstempel, Prüfung und Umwandlung früherer Konfigurationsdateien, Repositories in der Konfiguration, das Zurücksetzen eines Knotens |
 | RCynQ.Localization.Tests | Sprachpakete: Lesen, der Katalog, Wahl einer Sprache nach Kultur, der Rückfall auf Englisch, dieselben Schlüssel und Platzhalter in jeder Sprache, jeder angeforderte Schlüssel existiert (Code und Bildschirme), kein russischer Text im Code, Knoten nur nach ihren Rollen benannt |
 | RCynQ.Core.Data.Tests | Migrationen, Repositories, Speicher, Dateirechte des Datenordners |
 | RCynQ.Git.Tests | Git-Befehle, Bundles, Erstellung von Patches, Patch-Dateien, Commits zur Zustellung, Hashes, `.gitignore`, der Export eines Repositorys, das Remote der Arbeitskopie, Integration mit einem echten Git |
@@ -36,7 +36,7 @@ Projektverweise.
 | RCynQ.Sync.Tests | Patches (Signatur, Wiederholung, Zustellung, Anwenden ganz oder gar nicht, Konflikte, Git-Merge und Merge-Sitzungen für ein Merge-Tool), Patch-Dateien, die Zustellung von Commits, die Synchronisationsbasis, der Git-Kanal, Repositories, Routen und ihre Auswahl, Diagnose, Übertragung der Konfiguration, Aufbewahrung der Daten |
 | RCynQ.Service.Tests | die lokale HTTP-API, ihr Token und öffentliche Endpunkte, die Startreihenfolge, Pull, Senden und Ping zwischen zwei Diensten von Ende zu Ende, Repositories und die Zustellung von Commits von Ende zu Ende, die Endpunkte für Patch-Dateien |
 | RCynQ.Cli.Tests | die Befehle von `rcynq` und ihre Ausgabe |
-| RCynQ.UI.Tests | View-Models, Dialoge, das Fenster „Über RCynQ“ und der Problembrief, der Controller des Dienstprozesses, der API-Client, die Speicher für Sprache und Einstellungen, das Zusammenführen in einem Merge-Tool und die Wahl des Tools |
+| RCynQ.UI.Tests | View-Models, Dialoge, das Fenster „Über RCynQ“ und der Problembrief, der Controller des Dienstprozesses, der API-Client, die Speicher für Sprache und Einstellungen, das Zusammenführen in einem Merge-Tool und die Wahl des Tools, das Symbol im Infobereich und eine Kopie der Anwendung je Knoten, das Zurücksetzen des Knotens aus den Einstellungen, die Suche nach neuen Versionen |
 | RCynQ.UI.Headless.Tests | das Hauptfenster und das Fenster „Über RCynQ“ in Avalonia Headless: jeder Text ändert sich mit der Sprache sofort |
 
 Ein Test nennt die Sprache, in der seine Erwartungen geschrieben sind: `TestTexts.English` oder `TestTexts.Russian`
@@ -178,3 +178,5 @@ Archiv erhalten. Das so gebaute macOS-Paket ist nicht signiert; siehe die Notize
 
 Ein Release: `<Version>` erhöhen, den Tag pushen (`git tag 0.2.0; git push origin 0.2.0`), die Notizen des
 Release-Entwurfs schreiben, die Dateien prüfen, veröffentlichen und erst dann `updates.json` der Projektseite füllen.
+
+Auch die Anwendungen lesen `updates.json`: Einige Sekunden nach ihrem Start und danach einmal täglich vergleichen sie die Version ihres Systems mit der eigenen und bieten die Website an. Füllen Sie die Datei nur für eine veröffentlichte Version.

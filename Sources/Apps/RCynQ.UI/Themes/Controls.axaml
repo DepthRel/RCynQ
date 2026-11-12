@@ -69,6 +69,10 @@
     <Setter Property="CornerRadius" Value="{StaticResource CardRadius}" />
     <Setter Property="ClipToBounds" Value="True" />
   </Style>
+  <!-- The card of actions that cannot be undone (the danger zone of the settings) -->
+  <Style Selector="Border.card.danger-zone">
+    <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
+  </Style>
   <Style Selector="Border.padded">
     <Setter Property="Padding" Value="16,14" />
   </Style>
@@ -177,6 +181,12 @@
     <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
     <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <!-- A box whose value cannot be used: framed in red whatever the pointer or the focus does. Must follow the styles above. -->
+  <Style Selector="TextBox.invalid /template/ Border#PART_BorderElement,
+                   TextBox.invalid:pointerover /template/ Border#PART_BorderElement,
+                   TextBox.invalid:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
   </Style>
   <Style Selector="ComboBox:pointerover /template/ Border#Background">
     <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />

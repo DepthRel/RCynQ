@@ -234,7 +234,7 @@ public sealed partial class LanguageRefreshTests
             new DiagnosticsViewModel(AppLocalizer, api, dialogs),
             new BranchViewModel(AppLocalizer, api, dialogs),
             new LogsViewModel(AppLocalizer, api, dialogs),
-            new SettingsViewModel(AppLocalizer, language, api, dialogs, configFile));
+            new SettingsViewModel(AppLocalizer, language, api, dialogs));
         await main.InitializeAsync();
 
         // A finished check with a failed result fills the diagnostics tab and the problems of the overview.

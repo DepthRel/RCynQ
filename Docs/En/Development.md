@@ -26,7 +26,7 @@ references.
 | Project | What it checks |
 |---|---|
 | RCynQ.Conventions.Tests | the rules of AGENTS.md that analyzers cannot check, on the sources parsed with Roslyn: one type per file, private nested types, XML comments, enums in `Enums` folders, logical operators at the end of a line, the order of usings, time only through `TimeProvider`, the schema only through migrations, projects in their solution folders |
-| RCynQ.Core.Tests | node roles, records, configuration locations (portable installation), the installation stamp, the validation and the conversion of earlier configuration files, repositories in the configuration |
+| RCynQ.Core.Tests | node roles, records, configuration locations (portable installation), the installation stamp, the validation and the conversion of earlier configuration files, repositories in the configuration, the reset of a node |
 | RCynQ.Localization.Tests | language packs: reading, the catalog, choosing a language by culture, the English fallback, the same keys and placeholders in every language, every requested key exists (code and screens), no Russian text in the code, nodes named only by their roles |
 | RCynQ.Core.Data.Tests | migrations, repositories, storage, file permissions of the data folder |
 | RCynQ.Git.Tests | Git commands, bundles, patch building, patch files, commits to deliver, hashes, `.gitignore`, the export of a repository, the remote of the working copy, integration with a real Git |
@@ -36,7 +36,7 @@ references.
 | RCynQ.Sync.Tests | patches (signature, replay, delivery, all-or-nothing apply, conflicts, Git merge and merge sessions for a merge tool), patch files, the delivery of commits, the sync base, the Git channel, repositories, routes and their choice, diagnostics, configuration transfer, data retention |
 | RCynQ.Service.Tests | the local HTTP API, its token and public endpoints, the startup order, end-to-end Pull, send and ping between two services, repositories and the delivery of commits end to end, the endpoints of patch files |
 | RCynQ.Cli.Tests | the `rcynq` commands and their output |
-| RCynQ.UI.Tests | view models, dialogs, the window "About RCynQ" and the letter about a problem, the service process controller, the API client, the language and settings stores, the merge in a merge tool and the choice of the tool |
+| RCynQ.UI.Tests | view models, dialogs, the window "About RCynQ" and the letter about a problem, the service process controller, the API client, the language and settings stores, the merge in a merge tool and the choice of the tool, the icon in the notification area and one copy of the application per node, the reset of the node from the settings, the check for new versions |
 | RCynQ.UI.Headless.Tests | the main window and the window "About RCynQ" in Avalonia Headless: every text changes on the fly with the language |
 
 A test names the language its expectations are written in: `TestTexts.English` or `TestTexts.Russian`
@@ -175,3 +175,5 @@ archive. The macOS package built this way is not signed; see the notes inside it
 
 A release: bump `<Version>`, push the tag (`git tag 0.2.0; git push origin 0.2.0`), write the notes of the draft
 release, check the files, publish it, and only then fill in `updates.json` of the project page.
+
+The applications read `updates.json` too: a few seconds after their start and then once a day they compare the version of their system with their own and offer the website. Fill it in only for a published release.

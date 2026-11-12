@@ -71,6 +71,32 @@ public sealed class ApiTokenHandlerTests : IDisposable
         inner.Tokens.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies that a token file worked out from the configuration follows a configuration written while the application
+    /// runs (the first setup, a reset), while a token file named by an argument stays where it was named.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Derived_Token_File_Follows_The_New_Configuration()
+    {
+        var config = Path.Combine(_root, "syncbridge.json");
+        var before = ServiceConnectionResolver.DefaultTokenFile(null, config);
+        File.WriteAllText(config, "{ \"SyncBridge\": { \"NodeId\": \"node-2\", \"DataRoot\": \"data-2\" } }");
+        var after = Path.Combine(_root, "data-2", "keys", "api.token");
+        Directory.CreateDirectory(Path.GetDirectoryName(after)!);
+        File.WriteAllText(after, "new-token");
+
+        var derived = new ApiTokenProvider(new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, before, config) { IsTokenFileDerived = true });
+        var named = new ApiTokenProvider(new ServiceConnectionSettings(new Uri("http://127.0.0.1:1/"), string.Empty, before, config));
+        var inner = new RecordingHttpHandler();
+        using var client = new HttpClient(new ApiTokenHandler(TestTexts.Russian, derived, inner)) { BaseAddress = new Uri("http://127.0.0.1:1/") };
+
+        await client.GetAsync("state");
+
+        inner.Tokens.Should().Equal("new-token");
+        named.GetToken().Should().BeEmpty("a named file is read where it was named");
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

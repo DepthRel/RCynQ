@@ -44,6 +44,8 @@ En la Workstation y el Origin instala Git y compruébalo: `git --version`.
 
 Usa un paquete limpio para cada equipo. No copies una carpeta en la que RCynQ ya se haya ejecutado: sus carpetas `config` y `data` son la identidad de ese nodo.
 
+**Versiones nuevas.** Unos segundos después del inicio y luego una vez al día, RCynQ lee la lista de versiones publicadas en su sitio web. Cuando sale una versión más reciente, un aviso en la ventana ofrece **Abrir el sitio web** (las descargas del proyecto) o **No recordarme esta versión**; una versión posterior se vuelve a ofrecer. Nada se descarga ni se instala por sí solo, y no se envía nada sobre usted ni sobre sus nodos. **Ajustes → Actualizaciones** muestra el resultado de la última comprobación, comprueba a petición y desactiva las comprobaciones.
+
 ## 3. Elige cómo acepta conexiones el nodo
 
 El Relay usa siempre la variante A. Para la Workstation y el Origin elige en cada equipo.
@@ -251,6 +253,16 @@ Cuando un parche entrante se encuentra con cambios locales en los mismos archivo
 No se escribe nada hasta que todos los archivos estén fusionados.
 
 Línea de comandos: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; una herramienta de fusión solo se usa desde la aplicación.
+
+## 15. Cerrar la ventana, cambiar el rol, empezar de nuevo
+
+**Cerrar la ventana.** En Windows y macOS, cerrar la ventana solo la oculta: el nodo sigue funcionando, y el icono de RCynQ en el área de notificación (en la barra de menús en macOS) devuelve la ventana. **Salir** en el menú del icono cierra RCynQ junto con su servicio. Volver a iniciar RCynQ mientras funciona muestra la misma ventana. **Ajustes → Ventana** lo desactiva. En Linux está desactivado hasta que lo active: el icono solo aparece en un escritorio que muestre iconos de bandeja (en GNOME, con la extensión AppIndicator).
+
+**Cambiar el rol.** **Rol y nodos → Rol del nodo** cambia el rol y la ruta del nodo; el servicio se reinicia con ellos.
+
+**Empezar de nuevo.** **Ajustes → Zona de peligro → Eliminar datos del nodo…** elimina la configuración, las claves, la base de datos, los parches, el historial y los registros del nodo, y sus líneas en `authorized_keys`, en cuanto escriba el identificador del nodo. Se conservan los repositorios, los ajustes de la aplicación, el servidor SSH y la regla del cortafuegos. Después se abre la configuración inicial, donde se puede elegir cualquier rol. Los vecinos siguen conociendo el nodo antiguo: elimine allí su enlace y vuelva a conectar.
+
+Línea de comandos, con RCynQ cerrado: `rcynq node reset`. Muestra qué se elimina y qué se conserva, y pide el identificador del nodo; `--confirm <node-id>` lo da por adelantado, para scripts.
 
 ## Actualizar desde una versión anterior
 

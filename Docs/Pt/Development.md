@@ -25,7 +25,7 @@ referências a projetos.
 | Projeto | O que verifica |
 |---|---|
 | RCynQ.Conventions.Tests | as regras do AGENTS.md que os analisadores não conseguem verificar, nas fontes analisadas com o Roslyn: um tipo por ficheiro, tipos aninhados privados, comentários XML, enumerações em pastas `Enums`, operadores lógicos no fim da linha, a ordem dos using, a hora só através de `TimeProvider`, o esquema só através de migrações, os projetos nas suas pastas da solução |
-| RCynQ.Core.Tests | papéis dos nós, registos, localização da configuração (instalação portátil), a marca da instalação, a validação e a conversão de configurações anteriores, os repositórios na configuração |
+| RCynQ.Core.Tests | papéis dos nós, registos, localização da configuração (instalação portátil), a marca da instalação, a validação e a conversão de configurações anteriores, os repositórios na configuração, a reposição de um nó |
 | RCynQ.Localization.Tests | pacotes de idioma: leitura, o catálogo, a escolha do idioma pela cultura, o recurso ao inglês, as mesmas chaves e marcadores em todos os idiomas, existência de cada chave pedida (código e ecrãs), nenhum texto russo no código, nós nomeados só pelo papel |
 | RCynQ.Core.Data.Tests | migrações, repositórios de dados, armazenamento, permissões dos ficheiros da pasta de dados |
 | RCynQ.Git.Tests | comandos do Git, pacotes, construção de patches, ficheiros de patch, commits a entregar, hashes, `.gitignore`, a exportação de um repositório, o remote da cópia de trabalho, integração com um Git real |
@@ -35,7 +35,7 @@ referências a projetos.
 | RCynQ.Sync.Tests | patches (assinatura, repetição, entrega, aplicação tudo ou nada, conflitos, fusão do Git e sessões de fusão para uma ferramenta de fusão), ficheiros de patch, a entrega de commits, a base de sincronização, o canal Git, repositórios, rotas e a sua escolha, diagnóstico, transferência de configuração, retenção de dados |
 | RCynQ.Service.Tests | a API HTTP local, o seu token e os pontos públicos, a ordem de arranque, Pull, envio e ping de ponta a ponta entre dois serviços, repositórios e entrega de commits de ponta a ponta, os pontos dos ficheiros de patch |
 | RCynQ.Cli.Tests | os comandos do `rcynq` e a sua saída |
-| RCynQ.UI.Tests | modelos de vista, diálogos, a janela «Sobre o RCynQ» e a mensagem sobre um problema, o controlador do processo do serviço, o cliente da API, os armazenamentos do idioma e das definições, a fusão numa ferramenta de fusão e a escolha da ferramenta |
+| RCynQ.UI.Tests | modelos de vista, diálogos, a janela «Sobre o RCynQ» e a mensagem sobre um problema, o controlador do processo do serviço, o cliente da API, os armazenamentos do idioma e das definições, a fusão numa ferramenta de fusão e a escolha da ferramenta, o ícone da área de notificação e uma só cópia da aplicação por nó, a reposição do nó a partir das definições, a procura de versões novas |
 | RCynQ.UI.Headless.Tests | a janela principal e a janela «Sobre o RCynQ» no Avalonia Headless: cada texto muda de imediato com o idioma |
 
 Um teste indica o idioma em que as suas expectativas estão escritas: `TestTexts.English` ou `TestTexts.Russian`
@@ -175,3 +175,5 @@ no arquivo. O pacote para macOS compilado assim não está assinado; veja as not
 
 Uma versão: suba `<Version>`, envie a etiqueta (`git tag 0.2.0; git push origin 0.2.0`), escreva as notas do rascunho
 da versão, verifique os ficheiros, publique-a e só depois preencha o `updates.json` da página do projeto.
+
+As aplicações também leem o `updates.json`: alguns segundos depois de arrancarem e depois uma vez por dia comparam a versão do seu sistema com a própria e oferecem o site. Preencha-o só para uma versão publicada.

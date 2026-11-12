@@ -12,6 +12,16 @@ public static class ProjectSite
     public const string BASE_URL = "https://depthrel.github.io/RCynQ/";
 
     /// <summary>
+    /// The part of the project page with the downloads of the latest release.
+    /// </summary>
+    public const string DOWNLOAD_URL = BASE_URL + "#download";
+
+    /// <summary>
+    /// The list of the latest releases the project page publishes, one version per operating system.
+    /// </summary>
+    public const string UPDATES_URL = BASE_URL + "updates.json";
+
+    /// <summary>
     /// The address of the source code.
     /// </summary>
     public const string SOURCE_URL = "https://github.com/DepthRel/RCynQ";

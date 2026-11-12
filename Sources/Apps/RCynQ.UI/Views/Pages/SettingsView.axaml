@@ -18,8 +18,17 @@
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.LanguageHint}" />
             <TextBlock Classes="danger" TextWrapping="Wrap"
                        IsVisible="{Binding Language.HasError}" Text="{Binding Language.Error}" />
-            <TextBlock Classes="muted mono" FontSize="12" TextWrapping="Wrap"
-                       IsVisible="{Binding HasSettingsPath}" Text="{Binding StoredInText}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- What closing the window does: end the application, or hide it in the notification area while the node works. -->
+      <StackPanel IsVisible="{Binding HasTray}">
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Window.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10">
+            <CheckBox IsChecked="{Binding CloseToTray}" Content="{loc:Loc Settings.Window.CloseToTray}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Window.CloseToTrayHint}" />
           </StackPanel>
         </Border>
       </StackPanel>
@@ -57,7 +66,8 @@
             </StackPanel>
 
             <TextBlock Classes="danger" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SavedText}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SavedText}"
+                       IsVisible="{Binding SavedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.Hint}" />
           </StackPanel>
         </Border>
@@ -79,9 +89,43 @@
         <TextBlock Classes="section" Text="{loc:Loc Settings.Data.Title}" />
         <Border Classes="card">
           <StackPanel Margin="16,14" Spacing="10">
-            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Data.Hint}" />
+            <!-- The automatic cleanup: on by default; the box of the days shows only while it is on and takes digits only. -->
+            <CheckBox IsChecked="{Binding AutoClean}" Content="{loc:Loc Settings.Data.Auto}" />
+            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding AutoClean}">
+              <TextBlock VerticalAlignment="Center" Text="{loc:Loc Settings.Data.Days}" />
+              <TextBox x:Name="RetentionDaysBox" Width="64" MaxLength="4"
+                       Classes.invalid="{Binding HasRetentionError}"
+                       Text="{Binding RetentionDaysText, Delay=600}" />
+            </StackPanel>
+            <!-- What happens to the data changes with the switch; what is always kept stays the last line, so nothing jumps. -->
+            <StackPanel Spacing="4">
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding DataHintText}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Data.HintKept}" />
+            </StackPanel>
             <Button Classes="outline" HorizontalAlignment="Left" IsEnabled="{Binding !IsBusy}"
                     Content="{loc:Loc Settings.Data.Clean}" Command="{Binding CleanDataCommand}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- New versions: a check on demand with what it found (green when up to date, red when a newer one is out) and,
+           below, the switch of the automatic checks. -->
+      <StackPanel IsVisible="{Binding HasUpdates}">
+        <TextBlock Classes="section" Text="{loc:Loc Settings.Updates.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="12" DataContext="{Binding Updates}" x:DataType="vm:UpdateViewModel">
+            <WrapPanel>
+              <Button Classes="outline" Margin="0,0,12,0" Content="{loc:Loc Update.CheckNow}" IsEnabled="{Binding !IsChecking}"
+                      Command="{Binding CheckNowCommand}" />
+              <Button Classes="accent" Margin="0,0,12,0" Content="{loc:Loc Update.OpenSite}" IsVisible="{Binding IsAvailable}"
+                      Command="{Binding OpenSiteCommand}" />
+              <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
+                         Classes.success="{Binding IsUpToDate}" Classes.danger="{Binding IsOutdated}"
+                         Text="{Binding StatusText}" />
+            </WrapPanel>
+            <CheckBox HorizontalAlignment="Left" IsChecked="{Binding CheckEnabled}" Content="{loc:Loc Update.CheckEnabled}"
+                      ToolTip.Tip="{loc:Loc Update.CheckTip}" />
+            <TextBlock Classes="danger" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
           </StackPanel>
         </Border>
       </StackPanel>
@@ -108,6 +152,22 @@
               </WrapPanel>
             </StackPanel>
           </DockPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Danger zone, as on GitHub: what cannot be undone, apart from everything else and framed in red. -->
+      <StackPanel IsVisible="{Binding HasReset}">
+        <TextBlock Classes="section danger" Text="{loc:Loc Settings.Danger.Title}" />
+        <Border Classes="card danger-zone">
+          <Grid Margin="16,14" ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="6" Margin="0,0,16,0">
+              <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{loc:Loc Reset.Title}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.Danger.Hint}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !CanReset}" Text="{loc:Loc Settings.Danger.NotManaged}" />
+            </StackPanel>
+            <Button Grid.Column="1" Classes="danger" VerticalAlignment="Center" Content="{loc:Loc Reset.Button}"
+                    IsEnabled="{Binding CanReset}" Command="{Binding ResetNodeCommand}" />
+          </Grid>
         </Border>
       </StackPanel>
 

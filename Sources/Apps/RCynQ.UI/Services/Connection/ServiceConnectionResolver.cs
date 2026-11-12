@@ -51,8 +51,9 @@ public static class ServiceConnectionResolver
             return new ServiceConnectionSettings(new Uri(service), token.Trim(), ApiTokenProvider.ARGUMENT_SOURCE, configPath);
         }
 
-        var tokenFile = Argument(args, "--token-file") ?? environment("RCYNQ_API_TOKEN_FILE") ?? DefaultTokenFile(options, configPath);
-        return new ServiceConnectionSettings(new Uri(service), ReadToken(tokenFile), tokenFile, configPath);
+        var namedTokenFile = Argument(args, "--token-file") ?? environment("RCYNQ_API_TOKEN_FILE");
+        var tokenFile = namedTokenFile ?? DefaultTokenFile(options, configPath);
+        return new ServiceConnectionSettings(new Uri(service), ReadToken(tokenFile), tokenFile, configPath) { IsTokenFileDerived = namedTokenFile is null };
     }
 
     /// <summary>

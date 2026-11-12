@@ -1,3 +1,5 @@
+using RCynQ.UI.Services.Configuration;
+
 namespace RCynQ.UI.Services.Connection;
 
 /// <summary>
@@ -46,7 +48,7 @@ public sealed class ApiTokenProvider
         {
             if (string.IsNullOrEmpty(_token) && IsFileBacked)
             {
-                _token = TryReadFile(_settings.TokenSource);
+                _token = TryReadFile(CurrentTokenFile());
             }
 
             return _token ?? string.Empty;
@@ -68,6 +70,16 @@ public sealed class ApiTokenProvider
             _token = null;
         }
     }
+
+    /// <summary>
+    /// Gets the token file as it is now: a file worked out from the configuration follows the data directory the current
+    /// configuration names (the first setup and a reset write a new one while the application runs).
+    /// </summary>
+    /// <returns>The path of the token file.</returns>
+    private string CurrentTokenFile()
+        => _settings.IsTokenFileDerived
+            ? ServiceConnectionResolver.DefaultTokenFile(LocalConfigFile.TryLoad(_settings.ConfigPath), _settings.ConfigPath)
+            : _settings.TokenSource;
 
     /// <summary>
     /// Reads a token file.

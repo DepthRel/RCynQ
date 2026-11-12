@@ -44,6 +44,8 @@ Sur la Workstation et l'Origin, installez Git et vérifiez-le : `git --version`.
 
 Utilisez un paquet propre pour chaque ordinateur. Ne copiez pas un dossier dans lequel RCynQ a déjà tourné : ses dossiers `config` et `data` sont l'identité de ce nœud.
 
+**Nouvelles versions.** Quelques secondes après le démarrage, puis une fois par jour, RCynQ lit la liste des versions publiées sur son site. Quand une version plus récente sort, un bandeau dans la fenêtre propose **Ouvrir le site** (les téléchargements du projet) ou **Ne plus me rappeler cette version** ; une version ultérieure est de nouveau proposée. Rien n'est téléchargé ni installé de lui-même, et rien sur vous ni sur vos nœuds n'est envoyé. **Réglages → Mises à jour** montre le résultat de la dernière vérification, vérifie à la demande et désactive les vérifications.
+
 ## 3. Choisir comment le nœud accepte les connexions
 
 Le Relay utilise toujours la variante A. Pour la Workstation et l'Origin, choisissez pour chaque ordinateur.
@@ -251,6 +253,16 @@ Quand un patch entrant rencontre des modifications locales dans les mêmes fichi
 Rien n'est écrit tant que tous les fichiers ne sont pas fusionnés.
 
 Ligne de commande : `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit` ; un outil de fusion ne s'utilise que depuis l'application.
+
+## 15. Fermer la fenêtre, changer de rôle, repartir de zéro
+
+**Fermer la fenêtre.** Sous Windows et macOS, fermer la fenêtre ne fait que la masquer : le nœud continue de fonctionner, et l'icône RCynQ de la zone de notification (de la barre des menus sous macOS) rouvre la fenêtre. **Quitter** dans le menu de l'icône ferme RCynQ avec son service. Relancer RCynQ pendant qu'il tourne affiche la même fenêtre. **Réglages → Fenêtre** désactive ce comportement. Sous Linux, il est désactivé tant que vous ne l'activez pas : l'icône n'apparaît que sur un bureau qui affiche les icônes de la zone de notification (sous GNOME, avec l'extension AppIndicator).
+
+**Changer de rôle.** **Rôle et nœuds → Rôle du nœud** change le rôle et le chemin du nœud ; le service redémarre avec eux.
+
+**Repartir de zéro.** **Réglages → Zone de danger → Supprimer les données du nœud…** supprime la configuration, les clés, la base de données, les patchs, l'historique et les journaux du nœud, ainsi que ses lignes dans `authorized_keys`, dès que vous saisissez l'identifiant du nœud. Les dépôts, les réglages de l'application, le serveur SSH et la règle de pare-feu sont conservés. La configuration initiale s'ouvre ensuite, où n'importe quel rôle peut être choisi. Les voisins connaissent toujours l'ancien nœud : supprimez-y sa liaison et reconnectez-vous.
+
+En ligne de commande, RCynQ fermé : `rcynq node reset`. La commande montre ce qui est supprimé et ce qui reste, et demande l'identifiant du nœud ; `--confirm <node-id>` le donne d'avance, pour les scripts.
 
 ## Mise à jour depuis une version antérieure
 

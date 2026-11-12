@@ -191,6 +191,73 @@ public sealed class PeerAccessTests : IDisposable
         File.Exists(adminPath).Should().BeFalse();
     }
 
+    /// <summary>
+    /// Verifies that a revocation takes out exactly the lines this node wrote for its neighbours and its invitations: a
+    /// line the user wrote by hand, a line of the same key without the RCynQ comment and a line another node wrote stay.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Revocation_Removes_Only_The_Lines_Of_This_Node()
+    {
+        var origin = new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, "/srv/repo", null);
+        var peers = Substitute.For<IPeerRepository>();
+        peers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { Peer("workstation-1", NodeRole.Workstation, "10.8.1.3", WORKSTATION_KEY) });
+        var tickets = Substitute.For<IEnrollmentTicketRepository>();
+        var enrollmentKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ9nV8m1fV6Hc0Wq0b6ZpYkqQx2m5S1y0C0kQm0zQ2Yd";
+        tickets.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new EnrollmentTicket(Guid.NewGuid(), NodeRole.Workstation, new byte[32], DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddHours(1), enrollmentKey),
+        });
+        var path = Path.Combine(_root, "authorized_keys");
+        var workstationBlob = WORKSTATION_KEY.Split(' ')[1];
+        var lines = new[]
+        {
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHandWrittenKeyOfTheUserxxxxxxxxxxxxxxxxxxx user@laptop",
+            $"restrict,port-forwarding,permitopen=\"127.0.0.1:18443\",command=\"exit 1\" ssh-ed25519 {workstationBlob} rcynq:workstation-1",
+            $"ssh-ed25519 {workstationBlob} the same key, written by hand",
+            $"restrict,command=\"enroll\" {enrollmentKey} rcynq:enroll-0123",
+            $"restrict,port-forwarding,permitopen=\"127.0.0.1:18500\",command=\"exit 1\" {ORIGIN_KEY}",
+        };
+        await File.WriteAllLinesAsync(path, lines);
+        var service = new PeerAccessService(TestTexts.English, origin, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new SshClientOptions { AuthorizedKeysPath = path }), tickets: tickets);
+
+        var result = await service.RevokeAsync();
+
+        result.Removed.Should().Be(2);
+        result.NeedsElevation.Should().BeFalse();
+        result.FilePath.Should().Be(path);
+        (await File.ReadAllLinesAsync(path)).Should().Equal(lines[0], lines[2], lines[4]);
+        (await service.RevokeAsync()).Removed.Should().Be(0, "nothing of this node is left");
+    }
+
+    /// <summary>
+    /// Verifies that lines of this node in the file of the Administrators group are left as they are without
+    /// administrator rights, and that the result says so only when such lines are there.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Revocation_In_The_Administrators_File_Needs_Elevation_Only_When_Lines_Are_There()
+    {
+        var origin = new NodeConfig(new NodeId("origin-1"), "Origin", NodeRole.Origin, "/srv/repo", null);
+        var peers = Substitute.For<IPeerRepository>();
+        peers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { Peer("workstation-1", NodeRole.Workstation, "10.8.1.3", WORKSTATION_KEY) });
+        var adminPath = Path.Combine(_root, "admin", AuthorizedKeysLocation.ADMINISTRATORS_FILE_NAME);
+        var service = new PeerAccessService(TestTexts.English, origin, new SyncBridgeOptions(), peers, new AuthorizedKeysManager(new AuthorizedKeysTarget(adminPath, true), () => false));
+
+        var nothing = await service.RevokeAsync();
+        nothing.NeedsElevation.Should().BeFalse("there is no file, so nothing is left behind");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(adminPath)!);
+        var line = $"restrict,port-forwarding,permitopen=\"127.0.0.1:18443\",command=\"exit 1\" {WORKSTATION_KEY}";
+        await File.WriteAllLinesAsync(adminPath, new[] { line });
+
+        var denied = await service.RevokeAsync();
+
+        denied.NeedsElevation.Should().BeTrue();
+        denied.Removed.Should().Be(0);
+        (await File.ReadAllLinesAsync(adminPath)).Should().Equal(line);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

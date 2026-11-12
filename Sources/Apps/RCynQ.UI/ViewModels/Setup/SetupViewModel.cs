@@ -59,12 +59,23 @@ public sealed partial class SetupViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasError))]
     private string? _error;
 
+    /// <summary>What happened before the setup opened (the reset of the node that ran here), or <see langword="null"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNotice))]
+    private string? _notice;
+
     /// <summary>Whether the configuration is being written.</summary>
     [ObservableProperty]
     private bool _isBusy;
 
+    /// <summary>The port of the local service a node gets when nothing else says otherwise.</summary>
+    private const int DEFAULT_LISTEN_PORT = 18443;
+
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
+
+    /// <summary>The port of the local service offered to a new node.</summary>
+    private readonly int _defaultListenPort;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SetupViewModel"/> class.
@@ -73,7 +84,11 @@ public sealed partial class SetupViewModel : ObservableObject
     /// <param name="configPath">The configuration file to create or update.</param>
     /// <param name="dialogs">The dialog service.</param>
     /// <param name="language">The language selector shown in the corner of the setup, or <see langword="null"/>.</param>
-    public SetupViewModel(ILocalizer localizer, string configPath, IDialogService dialogs, LanguageViewModel? language = null)
+    /// <param name="defaultListenPort">
+    /// The port of the local service offered to a new node: the one the application already talks to, so a node set up
+    /// again after a reset answers where the application looks for it.
+    /// </param>
+    public SetupViewModel(ILocalizer localizer, string configPath, IDialogService dialogs, LanguageViewModel? language = null, int defaultListenPort = DEFAULT_LISTEN_PORT)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         EndpointModes = EndpointModeOption.CreateAll(localizer);
@@ -81,6 +96,7 @@ public sealed partial class SetupViewModel : ObservableObject
         ConfigPath = configPath ?? throw new ArgumentNullException(nameof(configPath));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         Language = language;
+        _defaultListenPort = defaultListenPort is >= 1 and <= 65535 ? defaultListenPort : DEFAULT_LISTEN_PORT;
     }
 
     /// <summary>
@@ -126,6 +142,9 @@ public sealed partial class SetupViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether a problem is shown.</summary>
     public bool HasError => !string.IsNullOrEmpty(Error);
+
+    /// <summary>Gets a value indicating whether a notice is shown.</summary>
+    public bool HasNotice => !string.IsNullOrEmpty(Notice);
 
     /// <summary>Gets the description of the selected role.</summary>
     public string RoleHint => _localizer.Get($"Setup.RoleHint.{SelectedRole}");
@@ -177,7 +196,7 @@ public sealed partial class SetupViewModel : ObservableObject
             Name = Environment.MachineName;
             SelectedRole = NodeRole.Workstation;
             Path = string.Empty;
-            ListenPort = 18443;
+            ListenPort = _defaultListenPort;
             LinkToken = CreateToken();
             SelectedEndpointMode = EndpointModes[0];
             EndpointPort = 18444;
@@ -195,6 +214,7 @@ public sealed partial class SetupViewModel : ObservableObject
         }
 
         Error = error;
+        Notice = null;
     }
 
     /// <summary>

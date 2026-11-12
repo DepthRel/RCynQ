@@ -11,6 +11,11 @@ namespace RCynQ.Core.Config;
 public sealed record AppDataPaths
 {
     /// <summary>
+    /// The name of the lock file in the data directory that keeps two operations from changing the working tree at once.
+    /// </summary>
+    public const string WORKING_TREE_LOCK_FILE_NAME = "working-tree.lock";
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AppDataPaths"/> record.
     /// </summary>
     /// <param name="root">The root application data directory.</param>
@@ -121,6 +126,33 @@ public sealed record AppDataPaths
     /// live outside <see cref="TempDirectory"/>, whose cleanup would remove them in the middle of a long merge.
     /// </summary>
     public string MergeSessionsDirectory => Path.Combine(Root, "merges");
+
+    /// <summary>
+    /// Gets the lock file that keeps two operations from changing the working tree at once.
+    /// </summary>
+    public string WorkingTreeLockPath => Path.Combine(Root, WORKING_TREE_LOCK_FILE_NAME);
+
+    /// <summary>
+    /// Gets every file and folder RCynQ keeps directly in <see cref="Root"/>: the database with the files SQLite keeps
+    /// next to it, the folders of patches, backups, keys, logs, snapshots, temporary files and merge sessions, the
+    /// installation stamp and the working tree lock. Anything else in the folder is not RCynQ's.
+    /// </summary>
+    public IReadOnlyList<string> NodeEntries => new[]
+    {
+        DatabasePath,
+        DatabasePath + "-wal",
+        DatabasePath + "-shm",
+        DatabasePath + "-journal",
+        PatchesDirectory,
+        BackupsDirectory,
+        KeysDirectory,
+        LogsDirectory,
+        SnapshotsDirectory,
+        TempDirectory,
+        MergeSessionsDirectory,
+        Path.Combine(Root, InstallationStamp.FILE_NAME),
+        WorkingTreeLockPath,
+    };
 
     /// <summary>
     /// Gets the SQLite connection string for <see cref="DatabasePath"/>.

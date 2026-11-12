@@ -22,6 +22,11 @@
           </Panel>
         </Grid>
 
+        <!-- What the reset of the node that ran here did, shown above the setup that starts it again. -->
+        <Border Classes="banner success" IsVisible="{Binding HasNotice}">
+          <SelectableTextBlock Text="{Binding Notice}" TextWrapping="Wrap" />
+        </Border>
+
         <Grid ColumnDefinitions="*,14,*">
           <StackPanel>
             <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />

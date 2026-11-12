@@ -189,6 +189,14 @@ public static class ConfigurationFileEditor
     public static void SetProperty(JsonObject node, string name, bool value) => SetValue(node, name, JsonValue.Create(value));
 
     /// <summary>
+    /// Sets a number of a configuration object, whatever the case its name is written in.
+    /// </summary>
+    /// <param name="node">The configuration object.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The new value.</param>
+    public static void SetProperty(JsonObject node, string name, int value) => SetValue(node, name, JsonValue.Create(value));
+
+    /// <summary>
     /// Sets or removes a property of a configuration object, keeping the spelling of its name found in the file.
     /// </summary>
     /// <param name="node">The configuration object.</param>

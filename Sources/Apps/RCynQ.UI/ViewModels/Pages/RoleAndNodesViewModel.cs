@@ -168,9 +168,6 @@ public sealed partial class RoleAndNodesViewModel : PageViewModelBase
     /// <summary>Gets the caption of the reveal button.</summary>
     public string RevealTokenText => Localizer.Get(IsTokenRevealed ? "Common.Hide" : "Common.Show");
 
-    /// <summary>Gets the path of the configuration file, shown under the settings.</summary>
-    public string ConfigPath => _settings?.ConfigPath ?? string.Empty;
-
     /// <summary>Gets a value indicating whether the connect wizard can open: the running node is loaded.</summary>
     public bool CanConnect => _loaded is not null;
 

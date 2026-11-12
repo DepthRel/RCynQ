@@ -97,6 +97,13 @@ public sealed class AvaloniaDialogService : IDialogService
         => ShowAsync(new TextDialog { DataContext = new TextDialogViewModel(title, text) });
 
     /// <inheritdoc />
+    public Task<bool> ShowResetNodeDialogAsync(ResetNodeDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new ResetNodeDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
     public Task<bool> ConfirmAsync(string title, string message)
         => ShowAsync(new ConfirmDialog { DataContext = new ConfirmDialogViewModel(title, message) });
 

@@ -1,3 +1,5 @@
+using RCynQ.Core.Config;
+
 namespace RCynQ.Sync.Locking;
 
 /// <summary>
@@ -19,7 +21,7 @@ public sealed class WorkingTreeLock
     /// <summary>
     /// The name of the lock file in the data directory of a node.
     /// </summary>
-    public const string LOCK_FILE_NAME = "working-tree.lock";
+    public const string LOCK_FILE_NAME = AppDataPaths.WORKING_TREE_LOCK_FILE_NAME;
 
     /// <summary>
     /// How long to wait before asking again for a lock file another process holds.

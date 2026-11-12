@@ -8,7 +8,7 @@
         x:Class="RCynQ.UI.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding NodeTitle}"
-        Width="1000" Height="700" MinWidth="520" MinHeight="460"
+        Width="1200" Height="720" MinWidth="520" MinHeight="460"
         Icon="avares://RCynQ.UI/Assets/rcynq.ico"
         WindowStartupLocation="CenterScreen">
 
@@ -118,6 +118,17 @@
 
     <!-- Messages: service start problems and messages of the current page -->
     <StackPanel Grid.Row="1" IsVisible="{Binding !IsSetupVisible}">
+      <!-- A new version is published: the website of the project, or no reminders about this version. -->
+      <Border Classes="banner info" Margin="28,14,28,0" IsVisible="{Binding Updates.IsBannerVisible, FallbackValue=False}">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+          <controls:IconView IconKey="Icon.Download" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{Binding Updates.BannerText, FallbackValue=''}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="accent" Margin="8,0,0,0" Padding="10,4" MinHeight="28" VerticalAlignment="Center"
+                  Content="{loc:Loc Update.OpenSite}" Command="{Binding Updates.OpenSiteCommand, FallbackValue={x:Null}}" />
+          <Button Grid.Column="3" Classes="outline" Margin="8,0,0,0" Padding="10,4" MinHeight="28" VerticalAlignment="Center"
+                  Content="{loc:Loc Update.Skip}" Command="{Binding Updates.SkipCommand, FallbackValue={x:Null}}" />
+        </Grid>
+      </Border>
       <Border Classes="banner warning" Margin="28,14,28,0" IsVisible="{Binding HasInstallationWarning}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <controls:IconView IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" Margin="0,0,10,0" VerticalAlignment="Top" />

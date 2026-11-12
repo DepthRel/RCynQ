@@ -3,11 +3,13 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using RCynQ.Core.Config;
 using RCynQ.Git.Processes;
 using RCynQ.Localization;
 using RCynQ.MergeTools;
 using RCynQ.Ssh.Server;
 using RCynQ.UI.Localization;
+using RCynQ.UI.Services.About;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Connection;
@@ -17,6 +19,9 @@ using RCynQ.UI.Services.Events;
 using RCynQ.UI.Services.Hosting;
 using RCynQ.UI.Services.Localization;
 using RCynQ.UI.Services.Merging;
+using RCynQ.UI.Services.Reset;
+using RCynQ.UI.Services.Shell;
+using RCynQ.UI.Services.Updates;
 using RCynQ.UI.ViewModels;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Navigation;
@@ -41,6 +46,12 @@ public sealed class App : Application
     private static readonly TimeSpan _exitStopTimeout = TimeSpan.FromSeconds(20);
 
     /// <summary>
+    /// The guard that keeps one copy of the application per node, or <see langword="null"/> when nothing guards it (the
+    /// previewer, the tests).
+    /// </summary>
+    private readonly SingleInstanceGuard? _guard;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="App"/> class.
     /// </summary>
     /// <remarks>
@@ -51,6 +62,17 @@ public sealed class App : Application
     {
         Localizer = new Localizer(LanguageCatalog.LoadEmbedded());
         Localization = new LocalizationSource(Localizer);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="App"/> class that takes the requests of later copies to show the
+    /// window.
+    /// </summary>
+    /// <param name="guard">The guard this copy owns.</param>
+    public App(SingleInstanceGuard guard)
+        : this()
+    {
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
     }
 
     /// <summary>
@@ -121,7 +143,9 @@ public sealed class App : Application
             var api = new ServiceApiClient(Localizer, settings, tokens);
             var events = new SignalRNodeEventStream(settings, tokens);
             var controller = Compose(args, settings, api, out var cli);
-            var (main, owner) = CreateViewModel(settings, uiSettings, language, api, events, controller, cli);
+            var tray = new TrayPreferences(uiSettings);
+            var feed = new HttpUpdateFeed();
+            var (main, owner) = CreateViewModel(settings, uiSettings, language, tray, feed, api, events, controller, cli);
 
             // The service is started and the configuration is read before the window appears.
             splash.ShowStep(Localizer.Get("Splash.StartingService"));
@@ -135,15 +159,33 @@ public sealed class App : Application
             }
 
             splash.ShowStep(Localizer.Get("Splash.OpeningWindow"));
-            var window = new MainWindow { DataContext = main };
+            var window = new MainWindow { DataContext = main, Tray = tray };
             owner.Value = window;
 
             // The window is drawn by now: the splash goes away without a gap.
             window.Opened += (_, _) => splash.Close();
             desktop.MainWindow = window;
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+            // Closing the window may only hide it: the icon brings it back, and its menu is the way to end the application.
+            var trayIcon = new TrayIconHost(this, Localizer, window.ShowFromTray, () => desktop.Shutdown());
+            _guard?.Listen(() => Dispatcher.UIThread.Post(window.ShowFromTray));
+
+            // A new version is told by a banner, in the settings and in the hint of the icon.
+            var updates = main.Updates!;
+            updates.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(UpdateViewModel.TrayToolTip) or null or "")
+                {
+                    trayIcon.SetToolTip(updates.TrayToolTip);
+                }
+            };
+            updates.Start();
             desktop.Exit += (_, _) =>
             {
+                updates.Dispose();
+                feed.Dispose();
+                trayIcon.Dispose();
                 Task.Run(() => events.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(3));
 
                 // The service started by the UI is stopped with it; it closes its tunnels and SSH forwards on shutdown.
@@ -189,6 +231,8 @@ public sealed class App : Application
     /// <param name="settings">How the UI reaches the service.</param>
     /// <param name="uiSettings">The local settings of the UI.</param>
     /// <param name="language">The language service, already initialized.</param>
+    /// <param name="tray">Whether closing the window keeps the application running.</param>
+    /// <param name="feed">The list of the latest releases on the project page.</param>
     /// <param name="api">The API client.</param>
     /// <param name="events">The live event stream.</param>
     /// <param name="controller">The controller of the local service.</param>
@@ -198,6 +242,8 @@ public sealed class App : Application
         ServiceConnectionSettings settings,
         JsonUiSettingsStore uiSettings,
         ILanguageService language,
+        ITrayPreferences tray,
+        IUpdateFeed feed,
         IServiceApiClient api,
         INodeEventStream events,
         IServiceController controller,
@@ -212,14 +258,19 @@ public sealed class App : Application
         var machine = new SystemMergeToolEnvironment();
         var mergeTools = new MergeToolPreferences(new MergeToolLocator(machine, processes), uiSettings, machine);
         var merges = new ExternalMergeCoordinator(Localizer, api, new MergeToolLauncher(Localizer, new SystemMergeToolProcessStarter(Localizer), machine));
+
+        // New versions: the list of releases on the project page, compared with the version that runs.
+        var dispatcher = new AvaloniaUiDispatcher();
+        var checker = new UpdateChecker(Localizer, feed, Version.Parse(AppInfo.Version), UpdateManifest.CurrentPlatform());
+        var updates = new UpdateViewModel(Localizer, checker, new UpdatePreferences(uiSettings), dialogs, dispatcher);
         var main = new MainViewModel(
             Localizer,
             api,
             events,
-            new AvaloniaUiDispatcher(),
+            dispatcher,
             new RoleAdapter(),
             controller,
-            new SetupViewModel(Localizer, settings.ConfigPath, dialogs, languageSelector),
+            new SetupViewModel(Localizer, settings.ConfigPath, dialogs, languageSelector, settings.ServiceUri.Port),
             new OverviewViewModel(Localizer, api),
             new RoleAndNodesViewModel(
                 Localizer,
@@ -233,8 +284,17 @@ public sealed class App : Application
             new DiagnosticsViewModel(Localizer, api, dialogs),
             new BranchViewModel(Localizer, api, dialogs, uiSettings),
             new LogsViewModel(Localizer, api, dialogs),
-            new SettingsViewModel(Localizer, languageSelector, api, dialogs, uiSettings.FilePath, new MergeToolSettingsViewModel(Localizer, mergeTools, dialogs)),
-            new RepositoriesViewModel(Localizer, api, dialogs));
+            new SettingsViewModel(
+                Localizer,
+                languageSelector,
+                api,
+                dialogs,
+                new MergeToolSettingsViewModel(Localizer, mergeTools, dialogs),
+                tray,
+                new NodeResetCoordinator(Localizer, api, controller, new NodeDataEraser()),
+                updates),
+            new RepositoriesViewModel(Localizer, api, dialogs),
+            updates);
         return (main, owner);
     }
 

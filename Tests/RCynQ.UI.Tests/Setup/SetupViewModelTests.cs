@@ -87,6 +87,39 @@ public sealed class SetupViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a new node is offered the port the application already talks to, so a node set up again after a
+    /// reset answers where the application looks for it, and that a port out of range falls back to the usual one.
+    /// </summary>
+    [Fact]
+    public void New_Node_Gets_The_Port_The_Application_Uses()
+    {
+        var path = Path.Combine(_root, "syncbridge.json");
+
+        var setup = new SetupViewModel(TestTexts.Russian, path, Substitute.For<IDialogService>(), defaultListenPort: 18500);
+        setup.Load(null, null);
+        setup.ListenPort.Should().Be(18500);
+
+        var fallback = new SetupViewModel(TestTexts.Russian, path, Substitute.For<IDialogService>(), defaultListenPort: 0);
+        fallback.Load(null, null);
+        fallback.ListenPort.Should().Be(18443);
+    }
+
+    /// <summary>
+    /// Verifies that the notice of a reset is cleared when the setup is filled again.
+    /// </summary>
+    [Fact]
+    public void Notice_Is_Cleared_By_A_New_Load()
+    {
+        var setup = new SetupViewModel(TestTexts.Russian, Path.Combine(_root, "syncbridge.json"), Substitute.For<IDialogService>());
+        setup.Notice = "reset";
+        setup.HasNotice.Should().BeTrue();
+
+        setup.Load(null, null);
+
+        setup.HasNotice.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Verifies that the connection mode chosen in the setup reaches the configuration file and comes back.
     /// </summary>
     /// <returns>A task representing the test.</returns>

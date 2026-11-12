@@ -26,10 +26,15 @@ namespace RCynQ.Ssh.Keys.AuthorizedKeys;
 public sealed class AuthorizedKeysManager
 {
     /// <summary>
+    /// The start of the comment of every line RCynQ writes; a line without it is never changed or removed by RCynQ.
+    /// </summary>
+    public const string COMMENT_PREFIX = "rcynq:";
+
+    /// <summary>
     /// The start of the comment of a one-time enrollment key; the ticket identifier follows. Lines with it are removed
     /// once their ticket is no longer open.
     /// </summary>
-    public const string ENROLLMENT_COMMENT_PREFIX = "rcynq:enroll-";
+    public const string ENROLLMENT_COMMENT_PREFIX = COMMENT_PREFIX + "enroll-";
 
     /// <summary>
     /// The characters <c>cmd.exe</c> expands even inside quotes (variables, delayed expansion): a word of the enrollment
@@ -102,7 +107,7 @@ public sealed class AuthorizedKeysManager
             _ => throw new ArgumentException($"Unknown key purpose {purpose}.", nameof(purpose))
         };
 
-        var comment = $"rcynq:{purpose}";
+        var comment = $"{COMMENT_PREFIX}{purpose}";
         return $"{options} {key.Type} {key.Blob} {comment}";
     }
 
@@ -213,6 +218,78 @@ public sealed class AuthorizedKeysManager
 
         await WriteLinesAsync(kept, cancellationToken);
         return existing.Length - kept.Length;
+    }
+
+    /// <summary>
+    /// Counts the lines RCynQ wrote for the given keys, without changing the file.
+    /// </summary>
+    /// <param name="blobs">The key blobs.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of lines <see cref="RemoveKeysAsync"/> would remove.</returns>
+    /// <exception cref="UnauthorizedAccessException">The file cannot be read without administrator rights.</exception>
+    public async Task<int> CountKeysAsync(IReadOnlySet<string> blobs, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(blobs);
+        if (blobs.Count == 0 || !File.Exists(FilePath))
+        {
+            return 0;
+        }
+
+        var existing = await File.ReadAllLinesAsync(FilePath, cancellationToken);
+        return existing.Count(line => IsOwnLineOf(line.Trim(), blobs));
+    }
+
+    /// <summary>
+    /// Removes the lines RCynQ wrote for the given keys. Every other line stays, a line of the same key the user wrote
+    /// without the RCynQ comment too.
+    /// </summary>
+    /// <param name="blobs">The key blobs.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The number of lines removed; the file is not rewritten when it is 0.</returns>
+    /// <exception cref="UnauthorizedAccessException">The file cannot be read or written without administrator rights.</exception>
+    public async Task<int> RemoveKeysAsync(IReadOnlySet<string> blobs, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(blobs);
+        if (blobs.Count == 0 || !File.Exists(FilePath))
+        {
+            return 0;
+        }
+
+        var existing = await File.ReadAllLinesAsync(FilePath, cancellationToken);
+        var kept = existing.Where(line => !IsOwnLineOf(line.Trim(), blobs)).ToArray();
+        if (kept.Length == existing.Length)
+        {
+            return 0;
+        }
+
+        await WriteLinesAsync(kept, cancellationToken);
+        return existing.Length - kept.Length;
+    }
+
+    /// <summary>
+    /// Tells whether a line is a line RCynQ wrote for one of the given keys.
+    /// </summary>
+    /// <param name="line">The trimmed line.</param>
+    /// <param name="blobs">The key blobs.</param>
+    /// <returns><see langword="true"/> for a valid line with the RCynQ comment and one of the keys.</returns>
+    private static bool IsOwnLineOf(string line, IReadOnlySet<string> blobs)
+    {
+        if (line.Length == 0 || line.StartsWith('#'))
+        {
+            return false;
+        }
+
+        try
+        {
+            var entry = ParseLine(line, 0);
+            return entry.Key.Comment is { } comment &&
+                comment.StartsWith(COMMENT_PREFIX, StringComparison.Ordinal) &&
+                blobs.Contains(entry.Key.Blob);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

@@ -220,6 +220,13 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         => PostAsync<PeerAccessResult>(ApiRoutes.SSH_AUTHORIZED_KEYS, null, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<AccessRevocationResult> RevokePeerAccessAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync(ApiRoutes.SSH_AUTHORIZED_KEYS, cancellationToken);
+        return await ReadAsync<AccessRevocationResult>(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<NodeEnvironmentReport> GenerateSshKeyAsync(CancellationToken cancellationToken = default)
         => PostAsync<NodeEnvironmentReport>(ApiRoutes.CONFIG_SSH_KEY, null, cancellationToken);
 
@@ -330,6 +337,13 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public async Task SetAcceptCommitsAsync(bool enabled, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PutAsJsonAsync(ApiRoutes.CONFIG_ACCEPT_COMMITS, new AcceptCommitsRequest(enabled), _json, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SetRetentionDaysAsync(int days, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync(ApiRoutes.CONFIG_RETENTION, new RetentionRequest(days), _json, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
 

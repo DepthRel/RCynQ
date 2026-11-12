@@ -20,6 +20,7 @@ using RCynQ.Core.Ids;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Patches.Serialization;
+using RCynQ.Service.Maintenance;
 using RCynQ.Service.Tests.Support;
 using RCynQ.Sync.Configuration;
 using RCynQ.Sync.Configuration.Probing;
@@ -459,6 +460,69 @@ public sealed class ServiceApiTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         (await response.Content.ReadFromJsonAsync<DataCleanupReport>(_json))!.Patches.Should().Be(1);
         (await patches.ExistsAsync(finished.Id)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that taking the lines of the node out of authorized_keys needs the local API token and answers with the
+    /// file it looked at.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Access_Revocation_Requires_Token_And_Names_The_File()
+    {
+        var authorizedKeys = Path.Combine(Path.GetTempPath(), "rcynq-revoke-" + Guid.NewGuid().ToString("N"), "authorized_keys");
+        await using var host = await ServiceTestHost.StartAsync(
+            NodeRole.Workstation,
+            extraSettings: new Dictionary<string, string?> { ["SyncBridge:Ssh:AuthorizedKeysPath"] = authorizedKeys });
+
+        (await host.CreateClient(withApiToken: false).DeleteAsync(ApiRoutes.SSH_AUTHORIZED_KEYS)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var response = await host.CreateClient().DeleteAsync(ApiRoutes.SSH_AUTHORIZED_KEYS);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = (await response.Content.ReadFromJsonAsync<AccessRevocationResult>(_json))!;
+        result.FilePath.Should().Be(authorizedKeys);
+        result.Removed.Should().Be(0);
+        result.NeedsElevation.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that the number of days finished data is kept needs the local API token, is used at once, is written into
+    /// the configuration file, and that a negative number is refused.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Retention_Days_Are_Saved_In_The_File_And_Used_At_Once()
+    {
+        await using var host = await ServiceTestHost.StartAsync(NodeRole.Workstation);
+        var client = host.CreateClient();
+        (await client.GetFromJsonAsync<NodeConfigurationDto>(ApiRoutes.CONFIG, _json))!.RetentionDays.Should().Be(SyncBridgeOptions.DEFAULT_RETENTION_DAYS);
+
+        (await host.CreateClient(withApiToken: false).PutAsJsonAsync(ApiRoutes.CONFIG_RETENTION, new RetentionRequest(3), _json)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await client.PutAsJsonAsync(ApiRoutes.CONFIG_RETENTION, new RetentionRequest(-1), _json)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await client.PutAsJsonAsync(ApiRoutes.CONFIG_RETENTION, new RetentionRequest(3), _json)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await client.GetFromJsonAsync<NodeConfigurationDto>(ApiRoutes.CONFIG, _json))!.RetentionDays.Should().Be(3);
+        host.Services.GetRequiredService<SyncBridgeOptions>().RetentionDays.Should().Be(3);
+        using var file = JsonDocument.Parse(await File.ReadAllTextAsync(host.ConfigPath));
+        file.RootElement.GetProperty(SyncBridgeOptions.SECTION_NAME).GetProperty(nameof(SyncBridgeOptions.RetentionDays)).GetInt32().Should().Be(3);
+    }
+
+    /// <summary>
+    /// Verifies when the daily cleanup runs: never while the data is kept, at once for the first time and for a changed
+    /// number of days, and otherwise once a day.
+    /// </summary>
+    [Fact]
+    public void Retention_Cleanup_Runs_When_Due()
+    {
+        var now = new DateTimeOffset(2026, 11, 12, 10, 0, 0, TimeSpan.Zero);
+
+        DataRetentionBackgroundService.IsDue(0, null, null, now).Should().BeFalse("0 keeps the data");
+        DataRetentionBackgroundService.IsDue(10, null, null, now).Should().BeTrue("the first check cleans");
+        DataRetentionBackgroundService.IsDue(10, 10, now.AddHours(-23), now).Should().BeFalse();
+        DataRetentionBackgroundService.IsDue(10, 10, now.AddHours(-24), now).Should().BeTrue();
+        DataRetentionBackgroundService.IsDue(3, 10, now.AddHours(-1), now).Should().BeTrue("the user changed the number of days");
     }
 
     /// <summary>

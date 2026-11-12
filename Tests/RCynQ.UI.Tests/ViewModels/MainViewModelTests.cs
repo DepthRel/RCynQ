@@ -4,6 +4,7 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Diagnostics;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Events;
+using RCynQ.Core.State;
 using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Api;
 using RCynQ.UI.Services.Dialogs;
@@ -67,6 +68,33 @@ public sealed class MainViewModelTests : IDisposable
         main.CurrentPage.Should().BeSameAs(main.Overview);
         await _controller.Received(1).EnsureRunningAsync(Arg.Any<CancellationToken>());
         await _events.Received(1).ConnectAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Verifies that the start waits for the data of the page on screen, so the window never opens on an empty overview,
+    /// and that the page is asked for its data only once.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Start_Waits_For_The_Overview_Data()
+    {
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
+        _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkDto>());
+        _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LinkState>());
+        var summary = new TaskCompletionSource<NodeSyncStatus>();
+        _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(summary.Task);
+        var main = Create();
+
+        var start = main.InitializeAsync();
+        await Task.Yield();
+        start.IsCompleted.Should().BeFalse("the overview still waits for its data");
+
+        summary.SetResult(TestData.Status());
+        await start;
+
+        main.CurrentPage.Should().BeSameAs(main.Overview);
+        main.Overview.NodeName.Should().Contain("node-1");
+        await _api.Received(1).GetStateSummaryAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>

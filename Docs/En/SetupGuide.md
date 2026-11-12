@@ -44,6 +44,8 @@ On the Workstation and the Origin, install Git and check it: `git --version`.
 
 Use a clean package for every computer. Do not copy a folder in which RCynQ has already run: its `config` and `data` folders are the identity of that node.
 
+**New versions.** A few seconds after the start and then once a day RCynQ reads the list of releases on its website. When a newer version is out, a banner in the window offers **Open the website** (the downloads of the project) or **Do not remind me about this version**; a later version is offered again. Nothing is downloaded or installed by itself, and nothing about you or your nodes is sent. **Settings → Updates** shows what the last check found, checks on demand and turns the checks off.
+
 ## 3. Choose how the node accepts connections
 
 The Relay always uses variant A. For the Workstation and the Origin choose per computer.
@@ -251,6 +253,16 @@ When an incoming patch meets local changes in the same files, RCynQ shows them f
 Nothing is written until every file is merged.
 
 Command line: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; a merge tool is used only from the application.
+
+## 15. Closing the window, changing the role, starting over
+
+**Closing the window.** On Windows and macOS closing the window only hides it: the node keeps working, and the RCynQ icon in the notification area (the menu bar on macOS) brings the window back. **Exit** in the menu of the icon ends RCynQ together with its service. Starting RCynQ again while it runs shows the same window. **Settings → Window** turns this off. On Linux it is off until you turn it on: the icon shows only on a desktop that shows tray icons (on GNOME, with the AppIndicator extension).
+
+**Changing the role.** **Role and nodes → Node role** changes the role and the path of the node; the service restarts with them.
+
+**Starting over.** **Settings → Danger zone → Delete node data…** deletes the configuration, keys, database, patches, history and logs of the node and its lines in `authorized_keys`, once you type the identifier of the node. The repositories, the settings of the application, the SSH server and the firewall rule stay. Then the first setup opens, where any role can be chosen. The neighbours still know the old node: remove its link there and connect again.
+
+Command line, with RCynQ closed: `rcynq node reset`. It shows what goes and what stays and asks for the identifier of the node; `--confirm <node-id>` gives it in advance, for scripts.
 
 ## Updating from an earlier version
 

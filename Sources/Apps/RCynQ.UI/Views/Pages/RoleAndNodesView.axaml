@@ -34,7 +34,9 @@
         <StackPanel IsVisible="{Binding AreSettingsVisible}">
           <TextBlock Classes="section" Text="{loc:Loc Roles.NodeParameters}" />
           <Border Classes="card">
-            <StackPanel Margin="16,14" Spacing="14">
+            <!-- Each parameter is a group (label, field, hint); the groups stand apart the same way, so a hint never seems
+                 to belong to the label under it. -->
+            <StackPanel Margin="16,14" Spacing="24">
 
               <StackPanel>
                 <TextBlock Classes="field-label" Text="{loc:Loc Field.NodeId}" />
@@ -90,8 +92,6 @@
                           Command="{Binding SaveSettingsCommand}" />
                 </Grid>
               </Border>
-
-              <TextBlock Classes="muted mono" TextWrapping="Wrap" Text="{Binding ConfigPath}" />
             </StackPanel>
           </Border>
         </StackPanel>

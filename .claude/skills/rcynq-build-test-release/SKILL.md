@@ -39,7 +39,8 @@ dotnet run --project Sources/Apps/RCynQ.UI -- --config .vscode/dev/syncbridge.js
    **Packages** workflow builds every package (Windows, Linux, macOS arm64/x64 on macOS) and `SHA256SUMS-<version>.txt`
    into a **draft** release. Locally the same packages come from `Scripts/build-release.ps1`.
 3. Write the notes, check the files, publish the release; only then fill in `Sources/Apps/RCynQ.Pages/updates.json`
-   (the download buttons of the page read it; an early update sends visitors to a 404).
+   (the download buttons of the page read it, and so do the running applications, which offer the new version once a
+   day; an early update sends visitors and users to a 404).
 
 CI (`.github/workflows/ci.yml`) builds and tests every push to `main` and every PR on Windows and Linux; code signing
 belongs in the Windows job of `packages.yml`.

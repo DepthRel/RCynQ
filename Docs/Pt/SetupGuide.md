@@ -44,6 +44,8 @@ Na Workstation e no Origin, instale o Git e verifique-o: `git --version`.
 
 Use um pacote limpo para cada computador. Não copie uma pasta onde o RCynQ já foi executado: as suas pastas `config` e `data` são a identidade desse nó.
 
+**Versões novas.** Alguns segundos depois do arranque e depois uma vez por dia, o RCynQ lê a lista de versões publicadas no seu site. Quando sai uma versão mais recente, um aviso na janela oferece **Abrir o site** (as transferências do projeto) ou **Não lembrar esta versão**; uma versão posterior volta a ser oferecida. Nada é transferido nem instalado sozinho, e nada sobre si ou os seus nós é enviado. **Definições → Atualizações** mostra o resultado da última verificação, verifica a pedido e desliga as verificações.
+
 ## 3. Escolher como o nó aceita ligações
 
 O Relay usa sempre a variante A. Para a Workstation e o Origin, escolha em cada computador.
@@ -251,6 +253,16 @@ Quando um patch recebido encontra alterações locais nos mesmos ficheiros, o RC
 Nada é escrito até todos os ficheiros estarem fundidos.
 
 Linha de comandos: `rcynq patch list`, `rcynq patch resolve <id> --policy KeepLocal|ApplyIncomingOverLocal|UseGit`; uma ferramenta de fusão só se usa a partir da aplicação.
+
+## 15. Fechar a janela, mudar o papel, recomeçar
+
+**Fechar a janela.** No Windows e no macOS, fechar a janela apenas a oculta: o nó continua a funcionar, e o ícone do RCynQ na área de notificação (na barra de menus no macOS) devolve a janela. **Sair** no menu do ícone termina o RCynQ juntamente com o seu serviço. Voltar a iniciar o RCynQ enquanto está a funcionar mostra a mesma janela. **Definições → Janela** desliga isto. No Linux está desligado até o ligar: o ícone só aparece num ambiente de trabalho que mostre ícones da bandeja (no GNOME, com a extensão AppIndicator).
+
+**Mudar o papel.** **Papel e nós → Papel do nó** muda o papel e o caminho do nó; o serviço reinicia com eles.
+
+**Recomeçar.** **Definições → Zona de perigo → Eliminar dados do nó…** elimina a configuração, as chaves, a base de dados, os patches, o histórico e os registos do nó, e as suas linhas no `authorized_keys`, assim que escrever o identificador do nó. Os repositórios, as definições da aplicação, o servidor SSH e a regra da firewall mantêm-se. Depois abre-se a configuração inicial, onde se pode escolher qualquer papel. Os vizinhos continuam a conhecer o nó antigo: remova lá a sua ligação e volte a ligar.
+
+Linha de comandos, com o RCynQ fechado: `rcynq node reset`. Mostra o que é eliminado e o que se mantém, e pede o identificador do nó; `--confirm <node-id>` dá-o antecipadamente, para scripts.
 
 ## Atualizar a partir de uma versão anterior
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
@@ -33,16 +34,62 @@ public static class ConfigEndpoints
             var capabilities = RoleCapabilities.For(node.Role);
             return Results.Ok(new NodeConfigurationDto(
                 node.Id, node.Name, node.Role, current.RepoPath, current.WorkdirPath, options.ListenPort, capabilities, runtime.ConfigFilePath,
-                capabilities.ReceivesCommits && acceptance.IsEnabled));
+                capabilities.ReceivesCommits && acceptance.IsEnabled, options.RetentionDays));
         });
         app.MapGet(ApiRoutes.CONFIG_EXPORT_PROBE, async (INodeEnvironmentProbe probe, CancellationToken cancellationToken) =>
             Results.Ok(await probe.ProbeAsync(cancellationToken)));
         app.MapPost(ApiRoutes.CONFIG_SSH_KEY, GenerateSshKeyAsync);
         app.MapPost(ApiRoutes.SSH_AUTHORIZED_KEYS, AllowPeerAccessAsync);
+        app.MapDelete(ApiRoutes.SSH_AUTHORIZED_KEYS, RevokePeerAccessAsync);
         app.MapGet(ApiRoutes.CONFIG_EXPORT, ExportAsync);
         app.MapPost(ApiRoutes.CONFIG_IMPORT, ImportAsync);
         app.MapPut(ApiRoutes.CONFIG_ROLE, SetRoleAsync);
+        app.MapPut(ApiRoutes.CONFIG_RETENTION, SetRetentionAsync);
         return app;
+    }
+
+    /// <summary>
+    /// Handles <c>PUT /config/retention</c>: changes for how many days finished data is kept, now and in the configuration
+    /// file.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="options">The node options; the daily cleanup reads the new value from them.</param>
+    /// <param name="runtime">The runtime information.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>204, or the reason the value could not be saved.</returns>
+    private static async Task<IResult> SetRetentionAsync(
+        RetentionRequest request,
+        SyncBridgeOptions options,
+        ServiceRuntimeInfo runtime,
+        ILoggerFactory loggers,
+        ILocalizer localizer,
+        CancellationToken cancellationToken)
+    {
+        if (request.Days < 0)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Get("Config.RetentionDays")));
+        }
+
+        try
+        {
+            if (runtime.ConfigFilePath is { } path)
+            {
+                await ConfigurationFileEditor.UpdateAsync(
+                    path,
+                    section => ConfigurationFileEditor.SetProperty(section, nameof(SyncBridgeOptions.RetentionDays), request.Days),
+                    cancellationToken);
+            }
+
+            options.RetentionDays = request.Days;
+            loggers.CreateLogger(typeof(ConfigEndpoints)).LogInformation("Finished data is now kept for {Days} day(s); 0 keeps it", request.Days);
+            return Results.NoContent();
+        }
+        catch (Exception ex) when (ex is ArgumentException or SyncBridgeException or IOException or UnauthorizedAccessException)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
     }
 
     /// <summary>
@@ -79,6 +126,31 @@ public static class ConfigEndpoints
             return Results.Ok(await access.ApplyAsync(cancellationToken));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or FormatException)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>DELETE /ssh/authorized-keys</c>: removes the lines of this node from the local <c>authorized_keys</c>
+    /// before the node is reset.
+    /// </summary>
+    /// <param name="access">The neighbour access service.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>What became of the lines.</returns>
+    private static async Task<IResult> RevokePeerAccessAsync(PeerAccessService access, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await access.RevokeAsync(cancellationToken);
+            loggers.CreateLogger(typeof(ConfigEndpoints)).LogInformation(
+                "Access of the neighbours revoked through the local API: {Removed} line(s) removed from {File}; administrator rights needed: {NeedsElevation}.",
+                result.Removed, result.FilePath, result.NeedsElevation);
+            return Results.Ok(result);
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
         {
             return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
         }

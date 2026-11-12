@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Config;
@@ -11,6 +12,7 @@ using RCynQ.UI.Services.Configuration;
 using RCynQ.UI.Services.Dispatching;
 using RCynQ.UI.Services.Events;
 using RCynQ.UI.Services.Hosting;
+using RCynQ.UI.Services.Reset;
 using RCynQ.UI.ViewModels.Formatting;
 using RCynQ.UI.ViewModels.Navigation;
 using RCynQ.UI.ViewModels.Pages;
@@ -107,6 +109,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="logs">The logs page.</param>
     /// <param name="settings">The settings page.</param>
     /// <param name="repositories">The repositories of the node; <see langword="null"/> shows no switcher.</param>
+    /// <param name="updates">Tells about a new version; <see langword="null"/> shows no banner of it.</param>
     public MainViewModel(
         ILocalizer localizer,
         IServiceApiClient api,
@@ -123,9 +126,11 @@ public sealed partial class MainViewModel : ObservableObject
         BranchViewModel branches,
         LogsViewModel logs,
         SettingsViewModel settings,
-        RepositoriesViewModel? repositories = null)
+        RepositoriesViewModel? repositories = null,
+        UpdateViewModel? updates = null)
     {
         Repositories = repositories;
+        Updates = updates;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _connectionText = () => _localizer.Get("Main.Connecting");
         _api = api;
@@ -167,6 +172,7 @@ public sealed partial class MainViewModel : ObservableObject
         overview.NavigationRequested += (_, key) => Navigate(key);
         roleAndNodes.RestartRequested += (_, _) => _ = RestartServiceAsync();
         setup.Completed += (_, _) => _ = CompleteSetupAsync();
+        settings.ResetCompleted += (_, outcome) => _ = OnResetCompletedAsync(outcome);
         _controller.StatusChanged += (_, status) => _dispatcher.Post(() =>
         {
             _serviceStatus = status;
@@ -216,6 +222,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Gets the repositories of the node and the switcher between them, or <see langword="null"/>.</summary>
     public RepositoriesViewModel? Repositories { get; }
+
+    /// <summary>Gets what tells about a new version of the application, or <see langword="null"/>.</summary>
+    public UpdateViewModel? Updates { get; }
 
     /// <summary>Gets the connection status text.</summary>
     public string ConnectionText => _connectionText();
@@ -296,21 +305,30 @@ public sealed partial class MainViewModel : ObservableObject
         // The service was started or restarted: whatever the pages show belongs to the service that ran before.
         InvalidatePages(except: null);
         var tab = _roleAdapter.Apply(_allTabs, role);
-        if (ReferenceEquals(tab, SelectedTab))
-        {
-            if (_initialized)
-            {
-                _ = tab?.Page.EnsureLoadedAsync();
-            }
-        }
-        else
-        {
-            SelectedTab = tab;
-        }
 
+        // The tab is selected without the load a selection starts: the load is awaited below instead, once.
+        var ready = _initialized;
+        _initialized = false;
+        SelectedTab = tab;
+        _initialized = ready;
         if (!_initialized)
         {
             return;
+        }
+
+        // The page on screen is filled before this returns, so behind the splash the window gets its data and never
+        // shows the empty page of a node that is still loading.
+        // A page that fails to load says so itself; the start goes on, as it did when the page loaded in the background.
+        if (SelectedTab is { } current)
+        {
+            try
+            {
+                await current.Page.EnsureLoadedAsync();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Debug.WriteLine($"The first page did not load: {ex}");
+            }
         }
 
         // In the background: what the Origin offers is asked through the link, which may take a while.
@@ -405,6 +423,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(string.Empty);
         Setup.RefreshTexts();
         Repositories?.RefreshTexts();
+        Updates?.RefreshTexts();
         foreach (var tab in _allTabs)
         {
             tab.RefreshTexts();
@@ -542,6 +561,26 @@ public sealed partial class MainViewModel : ObservableObject
         _initialized = false;
         await InitializeAsync();
         await OfferConnectionAsync();
+    }
+
+    /// <summary>
+    /// Shows the first setup after the node was reset, with what the reset did; when data of the node was left, the
+    /// configuration stayed, so the node starts again and the settings tell what is left.
+    /// </summary>
+    /// <param name="outcome">What the reset did.</param>
+    /// <returns>A task representing the operation.</returns>
+    private async Task OnResetCompletedAsync(NodeResetOutcome outcome)
+    {
+        _initialized = false;
+        if (!outcome.Report.IsComplete)
+        {
+            await InitializeAsync();
+            return;
+        }
+
+        ShowSetup(null);
+        var done = _localizer.Get("Reset.Done");
+        Setup.Notice = outcome.AccessText is null ? done : done + Environment.NewLine + outcome.AccessText;
     }
 
     /// <summary>
