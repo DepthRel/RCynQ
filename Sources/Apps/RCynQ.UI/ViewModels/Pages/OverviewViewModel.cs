@@ -24,6 +24,9 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     /// <summary>The failed checks of the last diagnostics run.</summary>
     private readonly List<string> _diagnosticFailures = new();
 
+    /// <summary>The last known state of every link, so a reload shows it until the check of the link answers again.</summary>
+    private readonly Dictionary<Guid, LinkState> _linkStates = new();
+
     /// <summary>The last synchronization status.</summary>
     private NodeSyncStatus? _status;
 
@@ -87,14 +90,18 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Only what the service knows at once is awaited: the configuration, the summary of the state (which never walks the
+    /// working tree) and the configured links. The state of the links is a check over the network, see
+    /// <see cref="LoadLinkStatesAsync"/>; the page does not wait for it.
+    /// </remarks>
     protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
-        // The requests do not depend on each other; the status is the light one, without a walk over the working tree.
+        // The requests do not depend on each other.
         var configuration = _configuration is null ? _api.GetConfigAsync() : Task.FromResult(_configuration);
         var summary = _api.GetStateSummaryAsync();
         var configured = _api.GetLinksAsync();
-        var states = _api.GetLinkStatusAsync();
-        await Task.WhenAll(configuration, summary, configured, states);
+        await Task.WhenAll(configuration, summary, configured);
 
         Configure(await configuration);
         _status = await summary;
@@ -106,15 +113,17 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         Links.Clear();
         foreach (var link in links)
         {
-            Links.Add(new TunnelLinkItemViewModel(Localizer, link));
-        }
+            var item = new TunnelLinkItemViewModel(Localizer, link);
+            if (_linkStates.TryGetValue(link.Id, out var known))
+            {
+                item.ApplyState(known);
+            }
 
-        foreach (var state in await states)
-        {
-            ApplyLinkState(state);
+            Links.Add(item);
         }
 
         RebuildProblems();
+        _ = LoadLinkStatesAsync();
     });
 
     /// <inheritdoc />
@@ -136,9 +145,27 @@ public sealed partial class OverviewViewModel : PageViewModelBase
     public void ApplyLinkState(LinkState state)
     {
         ArgumentNullException.ThrowIfNull(state);
+        _linkStates[state.LinkId] = state;
         Links.FirstOrDefault(link => link.LinkId == state.LinkId)?.ApplyState(state);
         RebuildProblems();
     }
+
+    /// <summary>
+    /// Asks the service for the state of every link and shows each as it comes; meanwhile the links show their last
+    /// known state, or that they are waiting for the check.
+    /// </summary>
+    /// <remarks>
+    /// The service checks the links over the network for this answer (a connection to a neighbour, up to a few seconds
+    /// for one that does not answer), which is why the load of the page does not wait for it.
+    /// </remarks>
+    /// <returns>A task that completes when the states are shown, or the failure is.</returns>
+    private Task LoadLinkStatesAsync() => RunQuietAsync(async () =>
+    {
+        foreach (var state in await _api.GetLinkStatusAsync())
+        {
+            ApplyLinkState(state);
+        }
+    });
 
     /// <summary>
     /// Applies a diagnostics run pushed by the service.
@@ -160,7 +187,8 @@ public sealed partial class OverviewViewModel : PageViewModelBase
         Problems.Clear();
         if (_status is { Role: not NodeRole.Relay })
         {
-            if (!_status.SyncBase.IsReady)
+            // A preliminary summary has not looked at the sync base yet: no base is not a problem until the look says so.
+            if (!_status.IsPreliminary && !_status.SyncBase.IsReady)
             {
                 var problem = _status.SyncBase.Problem is { Length: > 0 } reason
                     ? Localizer.Format("Overview.Problem.NoSyncBase", reason)

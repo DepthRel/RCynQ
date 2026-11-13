@@ -34,4 +34,9 @@ public static class NodeEventNames
     /// Published when a stage of joining with an invitation started or ended.
     /// </summary>
     public const string JOIN_PROGRESS = "JoinProgress";
+
+    /// <summary>
+    /// Published when the node has looked at its working tree and its sync base.
+    /// </summary>
+    public const string STATE_CAPTURED = "StateCaptured";
 }

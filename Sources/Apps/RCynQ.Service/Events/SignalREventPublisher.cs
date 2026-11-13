@@ -75,6 +75,11 @@ public sealed class SignalREventPublisher : IEventPublisher
         return SendAsync(NodeEventNames.JOIN_PROGRESS, progressEvent, cancellationToken);
     }
 
+    /// <inheritdoc />
+    /// <remarks>Not logged: the node looks at its working tree whenever a page asks for its changes.</remarks>
+    public Task PublishStateCapturedAsync(StateCapturedEvent stateEvent, CancellationToken cancellationToken = default)
+        => SendAsync(NodeEventNames.STATE_CAPTURED, stateEvent, cancellationToken);
+
     /// <summary>
     /// Broadcasts an event, logging delivery failures instead of throwing.
     /// </summary>

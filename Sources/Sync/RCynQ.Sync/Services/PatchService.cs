@@ -131,14 +131,26 @@ public sealed class PatchService : IPatchService
     /// <inheritdoc />
     public async Task<NodeSyncStatus> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
-        if (_tracker.Latest is not { } latest)
+        var latest = _tracker.Latest;
+        if (latest is null && !_node.ParticipatesInPatchChannel)
         {
+            // A node without a working tree has nothing to walk: its look reads the stored state only.
             return await GetStateAsync(cancellationToken);
         }
 
         var state = await _tracker.GetAsync(cancellationToken);
         var conflicts = await CountConflictsAsync(cancellationToken);
-        return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, state, latest.SyncBase, latest.PendingChanges, conflicts, latest.ChangedFiles);
+
+        if (latest is not null)
+        {
+            return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, state, latest.SyncBase, latest.PendingChanges, conflicts, latest.ChangedFiles);
+        }
+
+        // Before the first look at the working tree (after the start, or after a switch to another repository) the summary
+        // does not walk the tree itself, which on a large tree takes minutes: it waits for nothing and tells what is stored.
+        // The look runs in the background, and the tracker tells the clients when it is done.
+        _tracker.RequestCapture();
+        return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, state, SyncBaseStatus.NotChecked, Array.Empty<FileChange>(), conflicts, Array.Empty<ChangedFile>(), IsPreliminary: true);
     }
 
     /// <inheritdoc />

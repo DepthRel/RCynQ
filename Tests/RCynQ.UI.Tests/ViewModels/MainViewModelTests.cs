@@ -98,6 +98,75 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that the start does not wait for the check of the links, which goes over the network: the overview shows
+    /// the links at once and their state when the check answers.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Start_Does_Not_Wait_For_The_Check_Of_The_Links()
+    {
+        var link = TestData.Link("relay", "relay-1", NodeRole.Relay, "203.0.113.4");
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
+        _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(TestData.Status());
+        _api.GetLinksAsync(Arg.Any<CancellationToken>()).Returns(new[] { link });
+        var check = new TaskCompletionSource<IReadOnlyList<LinkState>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _api.GetLinkStatusAsync(Arg.Any<CancellationToken>()).Returns(check.Task);
+        var main = Create();
+
+        var start = main.InitializeAsync();
+        (await Task.WhenAny(start, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(start, "the start does not wait for the network");
+        main.Overview.Links.Should().ContainSingle().Which.IsOnline.Should().BeFalse("the check has not answered yet");
+
+        check.SetResult(new[] { TestData.State(link, LinkStatus.Ready) });
+
+        (await WaitUntilAsync(() => main.Overview.Links.Single().IsOnline)).Should().BeTrue("the state is shown when the check answers");
+    }
+
+    /// <summary>
+    /// Verifies that the window listens to the live events before the first page asks for its data, so what the service
+    /// tells meanwhile (the end of the look at the working tree, the state of a link) is not lost.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Start_Listens_To_Events_Before_The_First_Page_Loads()
+    {
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
+        var listening = false;
+        _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            listening = _events.ReceivedCalls().Any(call => call.GetMethodInfo().Name == nameof(INodeEventStream.ConnectAsync));
+            return Task.FromResult(TestData.Status());
+        });
+        var main = Create();
+
+        await main.InitializeAsync();
+
+        listening.Should().BeTrue("the events were connected before the overview asked for its data");
+    }
+
+    /// <summary>
+    /// Verifies that the overview of the start, made before the node looked at its working tree, shows no missing sync
+    /// base, and that the end of the look brings the full summary.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task End_Of_The_Look_At_The_Working_Tree_Completes_The_Overview()
+    {
+        _api.GetConfigAsync(Arg.Any<CancellationToken>()).Returns(TestData.Config(NodeRole.Workstation));
+        _api.GetStateSummaryAsync(Arg.Any<CancellationToken>()).Returns(
+            TestData.Status() with { SyncBase = SyncBaseStatus.NotChecked, IsPreliminary = true },
+            TestData.Status() with { SyncBase = SyncBaseStatus.NotReady("no commit", canCreateManual: false) });
+        var main = Create();
+        await main.InitializeAsync();
+        main.Overview.Problems.Should().BeEmpty("the sync base has not been looked at yet");
+
+        _events.StateCaptured += Raise.Event<EventHandler<StateCapturedEvent>>(new object(), new StateCapturedEvent(DateTimeOffset.UtcNow));
+
+        (await WaitUntilAsync(() => main.Overview.Problems.Count > 0)).Should().BeTrue("the full summary tells the sync base is missing");
+        await _api.Received(2).GetStateSummaryAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Verifies that coming back to the window reads the changed files again: an edit made in another program raises no
     /// event, and the buttons of the tab depend on the list. Another tab in view leaves the reading until the tab is opened.
     /// </summary>
@@ -348,6 +417,23 @@ public sealed class MainViewModelTests : IDisposable
         {
             // Best effort cleanup.
         }
+    }
+
+    /// <summary>
+    /// Waits until a condition holds, for a work that goes on in the background.
+    /// </summary>
+    /// <param name="condition">The condition.</param>
+    /// <returns><see langword="true"/> when the condition held within ten seconds.</returns>
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition)
+    {
+        const int ATTEMPTS = 200;
+
+        for (var attempt = 0; attempt < ATTEMPTS && !condition(); attempt++)
+        {
+            await Task.Delay(50);
+        }
+
+        return condition();
     }
 
     /// <summary>

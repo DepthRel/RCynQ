@@ -523,6 +523,34 @@ public sealed class PatchServiceTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a summary asked before the first look at the working tree answers at once from what is stored, even
+    /// while the working tree is busy (the look of the start holds it for as long as a large tree takes), and that the
+    /// summary is complete once the tree was looked at.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Summary_Before_The_First_Look_Does_Not_Wait_For_The_Working_Tree()
+    {
+        var service = _fixture.CreateWorkstationService(_sender, _chain);
+        SyncFixture.Write(_fixture.WorkstationWork, "a.txt", "v2\n");
+        NodeSyncStatus summary;
+
+        using (await _fixture.WorkstationLock.AcquireAsync())
+        {
+            var asked = service.GetSummaryAsync();
+            (await Task.WhenAny(asked, Task.Delay(TimeSpan.FromSeconds(10)))).Should().BeSameAs(asked, "the summary does not wait for the working tree");
+            summary = await asked;
+        }
+
+        summary.IsPreliminary.Should().BeTrue("the working tree has not been looked at yet");
+        summary.PendingChanges.Should().BeEmpty();
+        summary.ChangedFiles.Should().BeEmpty();
+
+        await service.GetStateAsync();
+        (await service.GetSummaryAsync()).IsPreliminary.Should().BeFalse("the working tree was looked at");
+    }
+
+    /// <summary>
     /// Verifies that with several repositories a page counts only the patches of the repository the node works with, so
     /// the pages follow one another even when the patches of the repositories are mixed.
     /// </summary>

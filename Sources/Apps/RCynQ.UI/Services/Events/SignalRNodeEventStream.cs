@@ -53,6 +53,9 @@ public sealed class SignalRNodeEventStream : INodeEventStream
     public event EventHandler<JoinProgressEvent>? JoinProgress;
 
     /// <inheritdoc />
+    public event EventHandler<StateCapturedEvent>? StateCaptured;
+
+    /// <inheritdoc />
     public event EventHandler<bool>? ConnectionChanged;
 
     /// <inheritdoc />
@@ -107,6 +110,7 @@ public sealed class SignalRNodeEventStream : INodeEventStream
         connection.On<RepositoryEvent>(NodeEventNames.REPOSITORY_EVENT, evt => RepositoryChanged?.Invoke(this, evt));
         connection.On<LinkRoutesChangedEvent>(NodeEventNames.LINK_ROUTES_CHANGED, evt => LinkRoutesChanged?.Invoke(this, evt));
         connection.On<JoinProgressEvent>(NodeEventNames.JOIN_PROGRESS, evt => JoinProgress?.Invoke(this, evt));
+        connection.On<StateCapturedEvent>(NodeEventNames.STATE_CAPTURED, evt => StateCaptured?.Invoke(this, evt));
         connection.Reconnecting += _ => Notify(false);
         connection.Reconnected += _ => Notify(true);
         connection.Closed += _ => Notify(false);

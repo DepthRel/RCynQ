@@ -84,12 +84,13 @@ public interface IPatchService
     Task<NodeSyncStatus> GetStateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the synchronization status of the local node without walking the working tree again.
+    /// Gets the synchronization status of the local node without walking the working tree and without waiting for it.
     /// </summary>
     /// <remarks>
     /// The sync base and the changed files are those of the last full look (<see cref="GetStateAsync"/>, a sent or a
-    /// received patch, a Pull); the times of the last exchange and the number of conflicts are current. The first call
-    /// after the start does the full look.
+    /// received patch, a Pull); the times of the last exchange and the number of conflicts are current. Before the first
+    /// look after the start the status is <see cref="NodeSyncStatus.IsPreliminary"/>: the look runs in the background and
+    /// is announced with a state event when it is done.
     /// </remarks>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The status.</returns>

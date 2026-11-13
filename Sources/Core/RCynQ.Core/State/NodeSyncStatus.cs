@@ -18,6 +18,11 @@ namespace RCynQ.Core.State;
 /// Every file that differs from the Git commit, including those the peer already has; <see langword="null"/> when the service is of
 /// an older version that reports only <paramref name="PendingChanges"/>.
 /// </param>
+/// <param name="IsPreliminary">
+/// <see langword="true"/> when the working tree has not been looked at since the service started: the stored state and the
+/// conflicts are known, but <paramref name="SyncBase"/>, <paramref name="PendingChanges"/> and
+/// <paramref name="ChangedFiles"/> are not yet. The service tells when the look is done with a state event.
+/// </param>
 public sealed record NodeSyncStatus(
     NodeId NodeId,
     string Name,
@@ -26,4 +31,5 @@ public sealed record NodeSyncStatus(
     SyncBaseStatus SyncBase,
     IReadOnlyList<FileChange> PendingChanges,
     int ConflictPendingCount,
-    IReadOnlyList<ChangedFile>? ChangedFiles = null);
+    IReadOnlyList<ChangedFile>? ChangedFiles = null,
+    bool IsPreliminary = false);

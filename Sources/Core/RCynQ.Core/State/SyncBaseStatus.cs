@@ -41,4 +41,9 @@ public sealed record SyncBaseStatus(SyncBaseMode Mode, string? Branch, string? C
     /// Gets the status of a node that does not take part in the patch channel.
     /// </summary>
     public static SyncBaseStatus NotApplicable { get; } = new(SyncBaseMode.None, null, null, null, false);
+
+    /// <summary>
+    /// Gets the status of a sync base that has not been looked at yet, see <see cref="NodeSyncStatus.IsPreliminary"/>.
+    /// </summary>
+    public static SyncBaseStatus NotChecked { get; } = new(SyncBaseMode.None, null, null, null, false);
 }

@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
+using RCynQ.Core.Abstractions.Events;
 using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Repositories;
 using RCynQ.Core.Config;
+using RCynQ.Core.Events;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Manifest;
@@ -64,6 +67,18 @@ public sealed class StateTracker
     /// </summary>
     private readonly SemaphoreSlim _stateGate = new(1, 1);
 
+    /// <summary>Tells the clients that a capture is done, or <see langword="null"/> to tell nobody.</summary>
+    private readonly IEventPublisher? _events;
+
+    /// <summary>The number of captures that run now, by the repository they look at.</summary>
+    private readonly ConcurrentDictionary<Guid, int> _running = new();
+
+    /// <summary>Guards <see cref="_requested"/>.</summary>
+    private readonly object _requestSync = new();
+
+    /// <summary>The capture started by <see cref="RequestCapture"/>, or <see langword="null"/> before the first request.</summary>
+    private Task? _requested;
+
     /// <summary>The result of the last capture, see <see cref="Latest"/>.</summary>
     private volatile LatestSnapshot? _latest;
 
@@ -78,6 +93,7 @@ public sealed class StateTracker
     /// <param name="timeProvider">The clock.</param>
     /// <param name="syncBase">The sync base manager.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
+    /// <param name="events">Tells the clients that a capture is done; <see langword="null"/> tells nobody.</param>
     public StateTracker(
         INodeStateStore store,
         IFileManifestBuilder manifest,
@@ -86,7 +102,8 @@ public sealed class StateTracker
         NodeConfig node,
         TimeProvider timeProvider,
         SyncBaseManager syncBase,
-        WorkingTreeLock workingTreeLock)
+        WorkingTreeLock workingTreeLock,
+        IEventPublisher? events = null)
     {
         _store = store;
         _manifest = manifest;
@@ -96,6 +113,7 @@ public sealed class StateTracker
         _timeProvider = timeProvider;
         _base = syncBase;
         _lock = workingTreeLock;
+        _events = events;
     }
 
     /// <summary>
@@ -136,11 +154,78 @@ public sealed class StateTracker
     private sealed record LatestSnapshot(Guid RepositoryId, SyncSnapshot Snapshot);
 
     /// <summary>
-    /// Brings the sync base up to date, recomputes the state hashes, stores them and finds the pending changes.
+    /// Brings the sync base up to date, recomputes the state hashes, stores them and finds the pending changes, then tells
+    /// the clients that the summary of the state is complete.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The state, the sync base status and the changes the peer does not have yet.</returns>
     public async Task<SyncSnapshot> CaptureAsync(CancellationToken cancellationToken = default)
+    {
+        var repositoryId = CurrentRepositoryId;
+        _running.AddOrUpdate(repositoryId, 1, (_, count) => count + 1);
+        SyncSnapshot snapshot;
+        try
+        {
+            snapshot = await CaptureCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _running.AddOrUpdate(repositoryId, 0, (_, count) => count - 1);
+        }
+
+        if (_events is not null)
+        {
+            await _events.PublishStateCapturedAsync(new StateCapturedEvent(_timeProvider.GetUtcNow()), cancellationToken);
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>
+    /// Has the working tree of the current repository looked at in the background, unless a look at it already runs;
+    /// its end is told to the clients like that of every capture.
+    /// </summary>
+    /// <remarks>
+    /// For whoever needs the full state but must not wait for it: the summary asked before the first look after the start
+    /// (then the look of the start runs already, and nothing more is started) or after a switch to another repository.
+    /// </remarks>
+    public void RequestCapture()
+    {
+        lock (_requestSync)
+        {
+            var looking = _running.TryGetValue(CurrentRepositoryId, out var count) && count > 0;
+            if (looking || _requested is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _requested = Task.Run(CaptureQuietlyAsync);
+        }
+    }
+
+    /// <summary>
+    /// Captures the state for <see cref="RequestCapture"/>, where nobody waits for the outcome.
+    /// </summary>
+    /// <returns>A task that completes when the capture is done or failed.</returns>
+    private async Task CaptureQuietlyAsync()
+    {
+        try
+        {
+            await CaptureAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Nobody waits for this look: a working tree that cannot be read is reported when a page asks for the full
+            // state, which looks again.
+        }
+    }
+
+    /// <summary>
+    /// Brings the sync base up to date, recomputes the state hashes, stores them and finds the pending changes.
+    /// </summary>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The state, the sync base status and the changes the peer does not have yet.</returns>
+    private async Task<SyncSnapshot> CaptureCoreAsync(CancellationToken cancellationToken)
     {
         if (!_node.ParticipatesInPatchChannel)
         {

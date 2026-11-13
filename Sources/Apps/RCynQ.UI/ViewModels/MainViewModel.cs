@@ -186,6 +186,9 @@ public sealed partial class MainViewModel : ObservableObject
         _events.RepositoryChanged += (_, evt) => _dispatcher.Post(() => Repositories?.ApplyEvent(evt));
         _events.LinkRoutesChanged += (_, evt) => _dispatcher.Post(() => RoleAndNodes.ApplyRoutes(evt.Routes));
         _events.JoinProgress += (_, evt) => _dispatcher.Post(() => RoleAndNodes.ApplyJoinProgress(evt));
+
+        // The overview shows a summary of the state; the full one comes once the node has looked at its working tree.
+        _events.StateCaptured += (_, _) => _dispatcher.Post(() => RefreshOrInvalidate(Overview));
         branches.Repositories = repositories;
         if (repositories is not null)
         {
@@ -316,8 +319,20 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        // The live events first: what the service tells while the first page loads (the state of a link, the end of the
+        // look at the working tree) must reach the page, not be lost before the window listens.
+        try
+        {
+            await _events.ConnectAsync();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
+        {
+            SetConnected(false);
+        }
+
         // The page on screen is filled before this returns, so behind the splash the window gets its data and never
-        // shows the empty page of a node that is still loading.
+        // shows the empty page of a node that is still loading. A page asks there only what the service knows at once;
+        // what takes the network or a walk over the working tree comes in the background.
         // A page that fails to load says so itself; the start goes on, as it did when the page loaded in the background.
         if (SelectedTab is { } current)
         {
@@ -333,15 +348,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         // In the background: what the Origin offers is asked through the link, which may take a while.
         _ = Repositories?.LoadAsync();
-
-        try
-        {
-            await _events.ConnectAsync();
-        }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or IOException)
-        {
-            SetConnected(false);
-        }
     }
 
     /// <summary>
