@@ -1,17 +1,17 @@
 {
   "windows": {
-    "version": "0.2.2",
-    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-setup.exe",
-    "zip": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-win-x64.zip"
+    "version": "0.2.3",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-setup.exe",
+    "zip": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-win-x64.zip"
   },
   "linux": {
-    "version": "0.2.2",
-    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-linux-x64.tar.gz",
-    "deb": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-linux-x64.deb"
+    "version": "0.2.3",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-linux-x64.tar.gz",
+    "deb": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-linux-x64.deb"
   },
   "macos": {
-    "version": "0.2.2",
-    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-osx-arm64.tar.gz",
-    "intel": "https://github.com/DepthRel/RCynQ/releases/download/0.2.2/RCynQ-0.2.2-osx-x64.tar.gz"
+    "version": "0.2.3",
+    "url": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-osx-arm64.tar.gz",
+    "intel": "https://github.com/DepthRel/RCynQ/releases/download/0.2.3/RCynQ-0.2.3-osx-x64.tar.gz"
   }
 }

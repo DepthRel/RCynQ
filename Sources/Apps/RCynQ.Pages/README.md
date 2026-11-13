@@ -42,9 +42,11 @@ remote machine without a commit, directly or through Relays.
   script from `cloud.umami.is` and its reports to `gateway.umami.is`. Besides visits it counts the `download` event of
   the download links (`data-umami-event-package`: `windows`, `windows-zip`, `linux-deb`, `linux-archive`, `macos`,
   `macos-intel`; `data-umami-event-place`: `card` or `hero`, the button at the top, which `site.js` marks for the
-  system of the visitor). It counts only on `depthrel.github.io`, keeps the part of the address after `#` and `?` out
-  of its reports and skips browsers that ask not to be tracked. The page pins what it may load with a
-  `Content-Security-Policy`; there are no inline scripts or styles either.
+  system of the visitor) and the `video` event of the "Video guides" links, which lead to the YouTube channel
+  <https://www.youtube.com/@RCynQ> (`data-umami-event-place`: `header`, hidden on a phone, or `footer`). It counts
+  only on `depthrel.github.io`, keeps the part of the address after `#` and `?` out of its reports and skips browsers
+  that ask not to be tracked. The page pins what it may load with a `Content-Security-Policy`; there are no inline
+  scripts or styles either.
 - The English text is written right in the HTML (the page reads fine without scripts); the other languages (Deutsch,
   Español, Français, Português, Русский) are tables in `assets/site.js`. A table must have every `data-t` key the
   English page has. Without scripts the language picker is hidden.
@@ -52,7 +54,7 @@ remote machine without a commit, directly or through Relays.
   otherwise the first language of the browser the page speaks, otherwise English.
 - The documentation links in the footer lead to the documents in the chosen language by the `docs` table of
   `assets/languages.js`.
-- The "Why RCynQ" section stays three cards by three: a new feature takes the place of a card or joins one, and carries
+- The "Benefits of RCynQ" section stays three cards by three: a new feature takes the place of a card or joins one, and carries
   the "New!" mark (`<span class="new" data-t="why.new">`) until the next features replace it.
 - A new language: one more entry in `list` of `assets/languages.js`, its flag in `assets/flags/<code>.svg` (3:2), one
   more table in `assets/site.js`.

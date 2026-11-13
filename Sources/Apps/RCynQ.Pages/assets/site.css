@@ -66,6 +66,26 @@ code {
 .top nav { margin-left: auto; display: flex; align-items: center; gap: 20px; font-size: 15px; }
 .top nav a { color: var(--muted); }
 .top nav a:hover { color: var(--text); text-decoration: none; }
+/*
+  The video guides: the one filled link of the header, a pill in the colours of the logo with a play mark. A light
+  glint runs over it from time to time, like over the "New!" mark; reduced motion leaves the plain gradient.
+*/
+.top nav a.video {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  color: #FFFFFF; font-weight: 600; border-radius: 999px; padding: 6px 14px 6px 12px;
+  background:
+    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.32) 50%, transparent 65%) 100% 0 / 300% 100% no-repeat,
+    linear-gradient(135deg, var(--blue-deep), var(--mix));
+  box-shadow: 0 4px 16px rgba(74, 143, 247, 0.25);
+  animation: sheen 3.2s ease-in-out infinite;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.top nav a.video::before {
+  content: ""; width: 0; height: 0; flex: none;
+  border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent #FFFFFF;
+}
+.top nav a.video:hover { color: #FFFFFF; transform: translateY(-1px); box-shadow: 0 6px 22px rgba(147, 51, 234, 0.4); }
+.top nav a.video:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
 
 /* The language picker: the flag and the code of the language in use; a click opens the list of languages. */
 .lang { position: relative; }
@@ -199,7 +219,8 @@ section { padding: 72px 0; }
 section.alt { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .eyebrow { font: 700 14px/1.2 var(--mono); letter-spacing: 2px; color: var(--violet-light); text-transform: uppercase; margin: 0 0 14px; }
 h2 { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.2; margin: 0 0 12px; letter-spacing: -0.3px; }
-.sub { color: var(--muted); max-width: 720px; margin: 0 0 34px; }
+/* A lead of a section fits one line where it can; a longer one never leaves a single word on its last line. */
+.sub { color: var(--muted); max-width: 800px; margin: 0 0 34px; text-wrap: pretty; }
 
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; counter-reset: step; list-style: none; padding: 0; margin: 0; }
 .steps li {
@@ -234,6 +255,8 @@ section.alt .steps li { background: var(--bg); }
   content: ""; position: absolute; left: 2px; top: 6px; width: 14px; height: 14px; border-radius: 4px;
   background: linear-gradient(135deg, var(--sky), var(--violet-light));
 }
+/* The road of a chain stands on a line of its own and is not broken in the middle. */
+.checks code.route { white-space: nowrap; }
 .hops { display: flex; flex-direction: column; align-items: stretch; }
 .hop {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -289,7 +312,15 @@ section.alt .steps li { background: var(--bg); }
 .download .other { text-align: center; font-size: 13px; color: var(--muted); margin-top: 4px; }
 
 footer { padding: 36px 0 48px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
-footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
+footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; }
+/* The license and, under it, the video guides: an ordinary outlined button with the play mark of the header. */
+.foot-main { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.btn.small { padding: 7px 14px; font-size: 14px; gap: 8px; }
+footer .btn.video { color: var(--text); }
+footer .btn.video::before {
+  content: ""; width: 0; height: 0; flex: none;
+  border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent var(--sky);
+}
 [hidden] { display: none !important; }
 
 @keyframes breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
@@ -298,6 +329,7 @@ footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space
   10%, 20% { color: var(--sky); text-shadow: 0 0 14px rgba(96, 165, 250, 0.7); }
 }
 @keyframes glint { 0%, 30% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+@keyframes sheen { 0%, 30% { background-position: 100% 0, 0 0; } 100% { background-position: 0 0, 0 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
 @keyframes out { from { left: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { left: calc(100% - 12px); opacity: 0; } }
 @keyframes back { from { right: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { right: calc(100% - 12px); opacity: 0; } }
@@ -320,6 +352,10 @@ footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space
     background: repeating-linear-gradient(180deg, var(--border) 0 8px, transparent 8px 14px); }
   .packet { display: none; }
   .node { width: 220px; }
+  .top nav a.hide-phone { display: none; }
+}
+@media (max-width: 420px) {
+  .checks code.route { white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
