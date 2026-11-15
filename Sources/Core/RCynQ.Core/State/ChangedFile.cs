@@ -11,4 +11,5 @@ namespace RCynQ.Core.State;
 /// <see langword="true"/> when the peer already has this version of the file, so it is not among the pending changes; the file
 /// stays in the list until the change is committed, and can still be sent again.
 /// </param>
-public sealed record ChangedFile(ChangeKind Kind, string Path, bool AlreadySent);
+/// <param name="Partial">Whether only a part of the changes of the file goes to the peer.</param>
+public sealed record ChangedFile(ChangeKind Kind, string Path, bool AlreadySent, PartialChangeState Partial = PartialChangeState.None);

@@ -48,4 +48,24 @@ public sealed class MergeToolLauncher : IMergeToolLauncher
         // The folder of the result is the working folder: a tool that writes anything next to its files writes it there.
         return _processes.Start(new ProcessSpec(tool.ExecutablePath, arguments, Path.GetDirectoryName(files.Result), null, null));
     }
+
+    /// <inheritdoc />
+    public IRunningProcess StartDiff(MergeTool tool, DiffToolFiles files, DiffToolLabels labels)
+    {
+        ArgumentNullException.ThrowIfNull(tool);
+        ArgumentNullException.ThrowIfNull(files);
+        ArgumentNullException.ThrowIfNull(labels);
+        if (tool.DiffArguments is not { Count: > 0 } template)
+        {
+            throw new SyncBridgeException(_localizer.Format("MergeTool.NoDiff", tool.Name));
+        }
+
+        if (!_environment.FileExists(tool.ExecutablePath))
+        {
+            throw new SyncBridgeException(_localizer.Format("MergeTool.Missing", tool.Name, tool.ExecutablePath));
+        }
+
+        var arguments = MergeToolArguments.ExpandDiff(template, files, labels);
+        return _processes.Start(new ProcessSpec(tool.ExecutablePath, arguments, Path.GetDirectoryName(files.Left), null, null));
+    }
 }

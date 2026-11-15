@@ -1,10 +1,12 @@
 using System.Text;
+using RCynQ.Core.Abstractions.Patches;
 using RCynQ.Core.Abstractions.Paths;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 using RCynQ.Git.Hashing;
 using RCynQ.Localization;
 using RCynQ.Sync.Content;
+using RCynQ.Sync.Partial;
 
 namespace RCynQ.Sync.Apply;
 
@@ -62,14 +64,35 @@ public sealed class SyncBaseUpdater
     /// <param name="syncBase">The sync base to update.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The entries written into the sync base; the others were left unchanged because the working tree changed after the manifest was built.</returns>
-    public async Task<IReadOnlyList<FileChange>> UpdateAsync(PatchEnvelope envelope, string workdir, string syncBase, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<FileChange>> UpdateAsync(PatchEnvelope envelope, string workdir, string syncBase, CancellationToken cancellationToken = default)
+        => UpdateAsync(envelope, workdir, syncBase, null, cancellationToken);
+
+    /// <summary>
+    /// Copies the files of a delivered patch into the sync base: the chosen version of a file sent with a part of its
+    /// changes, the working file of every other one.
+    /// </summary>
+    /// <param name="envelope">The delivered patch.</param>
+    /// <param name="workdir">The working tree the files were sent from.</param>
+    /// <param name="syncBase">The sync base to update.</param>
+    /// <param name="partials">The chosen versions the patch carried, by path, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The entries written into the sync base; the others were left unchanged because the working tree changed after the manifest was built.</returns>
+    public async Task<IReadOnlyList<FileChange>> UpdateAsync(
+        PatchEnvelope envelope,
+        string workdir,
+        string syncBase,
+        IReadOnlyDictionary<string, PartialChange>? partials,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         var stable = new List<FileChange>();
         foreach (var change in envelope.Manifest)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (change.Kind == ChangeKind.Deleted || await StillMatchesAsync(change, workdir, cancellationToken))
+
+            // The chosen version was sent from memory, so the peer has exactly it, whatever the working file holds now.
+            var sentFromChoice = partials is not null && partials.ContainsKey(change.Path);
+            if (change.Kind == ChangeKind.Deleted || sentFromChoice || await StillMatchesAsync(change, workdir, cancellationToken))
             {
                 stable.Add(change);
             }
@@ -77,7 +100,13 @@ public sealed class SyncBaseUpdater
 
         var accepted = new PatchEnvelope(
             envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, envelope.BaseStateHash, envelope.IncomingStateHash, stable, envelope.Signature, envelope.Repository);
-        await _applier.ApplyAsync(accepted, new WorkdirPatchContent(_localizer, workdir, _paths), syncBase, cancellationToken);
+        IPatchContent content = new WorkdirPatchContent(_localizer, workdir, _paths);
+        if (partials is { Count: > 0 })
+        {
+            content = new PartialPatchContent(content, partials);
+        }
+
+        await _applier.ApplyAsync(accepted, content, syncBase, cancellationToken);
         return stable;
     }
 

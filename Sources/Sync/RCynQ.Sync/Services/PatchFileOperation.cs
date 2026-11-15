@@ -5,13 +5,16 @@ using RCynQ.Core.Api;
 using RCynQ.Core.Config;
 using RCynQ.Core.Enums;
 using RCynQ.Core.Exceptions;
+using RCynQ.Core.Patches;
 using RCynQ.Core.State;
+using RCynQ.Git.Hashing;
 using RCynQ.Git.Patches.Diff;
 using RCynQ.Git.Patches.Files;
 using RCynQ.Git.Repository;
 using RCynQ.Localization;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Partial;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.State;
 using RCynQ.Sync.SyncBase;
@@ -61,6 +64,9 @@ public sealed class PatchFileOperation
     /// <summary>The node data directories.</summary>
     private readonly IAppDataFactory _appData;
 
+    /// <summary>The choices of a part of the changes of files, or <see langword="null"/> when the node keeps none.</summary>
+    private readonly PartialChangeStore? _partials;
+
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
@@ -79,6 +85,7 @@ public sealed class PatchFileOperation
     /// <param name="tracker">The state tracker.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="appData">The node data directories.</param>
+    /// <param name="partials">The choices of a part of the changes of files; <see langword="null"/> when the node keeps none.</param>
     public PatchFileOperation(
         ILocalizer localizer,
         NodeConfig node,
@@ -91,7 +98,8 @@ public sealed class PatchFileOperation
         IGitRepositoryService git,
         StateTracker tracker,
         WorkingTreeLock workingTreeLock,
-        IAppDataFactory appData)
+        IAppDataFactory appData,
+        PartialChangeStore? partials = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
@@ -105,6 +113,7 @@ public sealed class PatchFileOperation
         _tracker = tracker;
         _lock = workingTreeLock;
         _appData = appData;
+        _partials = partials;
     }
 
     /// <summary>
@@ -132,15 +141,48 @@ public sealed class PatchFileOperation
                 var changed = await _syncBase.ListChangedAsync(Array.Empty<Core.Patches.FileChange>(), syncBase, cancellationToken);
                 var wanted = paths is null ? null : new HashSet<string>(paths, SyncBaseManager.PathComparer);
                 var files = changed.Select(file => file.Path).Where(path => wanted is null || wanted.Contains(path)).ToArray();
-                return await _files.BuildAsync(_paths.Workdir, syncBase.ChangesSince ?? commit, files, cancellationToken);
+                var chosen = _partials is null ? new Dictionary<string, PartialChange>() : await _partials.GetFittingAsync(files, cancellationToken);
+                var whole = files.Where(path => !chosen.ContainsKey(path)).ToArray();
+                var patch = chosen.Count > 0 && whole.Length == 0
+                    ? Array.Empty<byte>()
+                    : await _files.BuildAsync(_paths.Workdir, syncBase.ChangesSince ?? commit, whole, cancellationToken);
+                return chosen.Count == 0 ? patch : [.. patch, .. await BuildChosenAsync(chosen, cancellationToken)];
             }
 
             var envelope = await _builder.BuildAsync(_node.Id, _node.Id, _paths.SyncBase, _paths.Workdir, cancellationToken);
             var pending = await _syncBase.SelectPendingAsync(envelope.Manifest, syncBase, cancellationToken);
             var selected = await _syncBase.SelectForSendAsync(pending, syncBase, paths, cancellationToken);
-            var content = new WorkdirPatchContent(_localizer, _paths.Workdir, _pathUtility);
+            IPatchContent content = new WorkdirPatchContent(_localizer, _paths.Workdir, _pathUtility);
+            if (_partials is not null)
+            {
+                var partials = PartialPatchContent.Of(selected, await _partials.GetFittingAsync(selected.Select(change => change.Path), cancellationToken));
+                selected = PartialPatchContent.Substitute(selected, partials);
+                content = new PartialPatchContent(content, partials);
+            }
+
             return await _diffs.BuildAsync(selected, _paths.SyncBase, content, PatchDiffLimits.Full, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Builds the patch of the files sent with a part of their changes: the chosen version against the version of the peer.
+    /// </summary>
+    /// <param name="chosen">The choices by path.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The bytes of the patch.</returns>
+    private async Task<byte[]> BuildChosenAsync(IReadOnlyDictionary<string, PartialChange> chosen, CancellationToken cancellationToken)
+    {
+        var changes = chosen.Values
+            .OrderBy(change => change.Path, StringComparer.Ordinal)
+            .Select(change => new FileChange(
+                change.BaseSha256 is null ? ChangeKind.Added : ChangeKind.Modified,
+                change.Path,
+                DefaultStateHasher.Sha256Hex(change.Content),
+                change.Content.Length,
+                false))
+            .ToArray();
+        var content = new PartialPatchContent(new WorkdirPatchContent(_localizer, _paths.Workdir, _pathUtility), chosen);
+        return await _diffs.BuildAsync(changes, _paths.SyncBase, content, PatchDiffLimits.Full, cancellationToken);
     }
 
     /// <summary>

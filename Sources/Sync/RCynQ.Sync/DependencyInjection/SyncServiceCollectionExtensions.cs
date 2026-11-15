@@ -102,6 +102,9 @@ public static class SyncServiceCollectionExtensions
         services.TryAddSingleton<PatchSendOperation>();
         services.TryAddSingleton<PatchResolveOperation>();
         services.TryAddSingleton<PatchFileOperation>();
+        services.TryAddSingleton<Partial.PartialChangeStore>();
+        services.TryAddSingleton<Partial.PartialChangeService>();
+        services.TryAddSingleton<Partial.ChangeRevertOperation>();
         services.TryAddSingleton<Merging.MergeSessionStore>();
         services.TryAddSingleton<MergeSessionOperation>();
         services.TryAddSingleton<IPatchService, PatchService>();

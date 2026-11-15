@@ -1,0 +1,23 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     x:Class="RCynQ.UI.Views.Dialogs.DangerConfirmDialog"
+                     x:DataType="vm:DangerConfirmDialogViewModel"
+                     Title="{Binding Title}"
+                     Width="480" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <TextBlock Classes="page-title danger" Text="{Binding Title}" TextWrapping="Wrap" />
+    <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />
+    <TextBlock Classes="danger" Text="{Binding Warning}" TextWrapping="Wrap" FontWeight="SemiBold" />
+
+    <!-- Cancel is the main button: it has the focus, Enter presses it, and the action needs a deliberate click. -->
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button x:Name="CancelButton" Classes="accent" Content="{loc:Loc Common.Cancel}" IsDefault="True" IsCancel="True"
+              Command="{Binding CancelCommand}" />
+      <Button Classes="danger" Content="{Binding ConfirmText}" Command="{Binding ConfirmCommand}" />
+    </StackPanel>
+  </StackPanel>
+</dialogs:DialogWindow>

@@ -15,6 +15,10 @@ namespace RCynQ.MergeTools;
 /// Whether a non-zero exit code means that the user gave up the merge, as Git's <c>mergetool.&lt;tool&gt;.trustExitCode</c>.
 /// </param>
 /// <param name="GitNames">The names under which <c>git config merge.tool</c> chooses the tool.</param>
+/// <param name="DiffArguments">
+/// The template of its arguments for a diff of two files (see <see cref="MergeToolArguments.ValidateDiff"/>): the left one
+/// read-only where the tool can say so, the right one the tool may change.
+/// </param>
 public sealed record MergeToolProfile(
     string Id,
     string Name,
@@ -23,4 +27,5 @@ public sealed record MergeToolProfile(
     IReadOnlyList<MergeToolCandidate> Candidates,
     IReadOnlyList<string> Arguments,
     bool TrustExitCode,
-    IReadOnlyList<string> GitNames);
+    IReadOnlyList<string> GitNames,
+    IReadOnlyList<string> DiffArguments);

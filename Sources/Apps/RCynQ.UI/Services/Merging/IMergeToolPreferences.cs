@@ -35,6 +35,10 @@ public interface IMergeToolPreferences
     /// </summary>
     /// <param name="path">The executable.</param>
     /// <param name="arguments">The template of its arguments, as typed.</param>
+    /// <param name="diffArguments">
+    /// The template of its arguments for a diff of two files, as typed; <see langword="null"/>, empty or unusable leaves
+    /// the tool without a diff.
+    /// </param>
     /// <returns>The tool, or <see langword="null"/> when the executable is missing or the template cannot be used.</returns>
-    MergeTool? CreateCustom(string? path, string? arguments);
+    MergeTool? CreateCustom(string? path, string? arguments, string? diffArguments = null);
 }

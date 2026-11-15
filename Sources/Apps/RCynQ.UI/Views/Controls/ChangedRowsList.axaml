@@ -34,17 +34,54 @@
       </DataTemplate>
 
       <!-- A file: its path in the flat list, its name under its folder in the tree -->
+      <!-- A double click shows the diff; the menu chooses the changes that go. A file of which only a part goes is marked. -->
       <DataTemplate DataType="items:ChangedFileItemViewModel">
-        <Border Classes="row" Classes.selected="{Binding IsSelected}" Padding="16,6">
+        <Border Classes="row file-row" Classes.selected="{Binding IsSelected}" Classes.partial="{Binding IsPartial}" Padding="16,6">
+          <Border.ContextMenu>
+            <ContextMenu IsVisible="{Binding HasActions}">
+              <MenuItem Header="{loc:Loc Sync.ShowDiff}" Command="{Binding ShowDiffCommand}">
+                <MenuItem.Icon>
+                  <controls:IconView Classes="menu" IconKey="Icon.Diff" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="{loc:Loc Sync.ChooseChanges}" Command="{Binding ChooseChangesCommand}">
+                <MenuItem.Icon>
+                  <controls:IconView Classes="menu" IconKey="Icon.SquareCheck" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="{loc:Loc Sync.ChooseAllChanges}" Command="{Binding ChooseAllChangesCommand}" IsVisible="{Binding IsPartial}">
+                <MenuItem.Icon>
+                  <controls:IconView Classes="menu" IconKey="Icon.CheckAll" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <!-- Taking the changes back cannot be undone: apart from the rest and in red. -->
+              <Separator IsVisible="{Binding CanRevertChanges}" />
+              <MenuItem Classes="danger" Header="{loc:Loc Sync.RevertChanges}" Command="{Binding RevertChangesCommand}"
+                        IsVisible="{Binding CanRevertChanges}">
+                <MenuItem.Icon>
+                  <controls:IconView Classes="menu" IconKey="Icon.Undo" />
+                </MenuItem.Icon>
+              </MenuItem>
+            </ContextMenu>
+          </Border.ContextMenu>
           <DockPanel>
             <Border DockPanel.Dock="Left" Width="{Binding IndentWidth}" />
+            <!-- Something is being done with the file: the actions that change it wait until it ends. -->
+            <Arc DockPanel.Dock="Right" Classes="busy-ring" Margin="12,0,0,0" IsVisible="{Binding IsWorking}"
+                 ToolTip.Tip="{loc:Loc Sync.FileBusy}" />
             <Panel>
               <Grid ColumnDefinitions="22,*,Auto" IsVisible="{Binding !IsSelectable}">
                 <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
                 <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding Path}" />
-                <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
-                           Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                  <TextBlock Classes="muted partial-note" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding IsPartialCurrent}"
+                             Text="{loc:Loc Sync.Partial}" ToolTip.Tip="{loc:Loc Sync.PartialTip}" />
+                  <TextBlock Classes="muted partial-note" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding IsPartialOutdated}"
+                             Text="{loc:Loc Sync.PartialOutdated}" ToolTip.Tip="{loc:Loc Sync.PartialOutdatedTip}" />
+                  <TextBlock Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                             Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                </StackPanel>
               </Grid>
               <CheckBox IsVisible="{Binding IsSelectable}" IsChecked="{Binding IsSelected}"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" MinHeight="0" Padding="8,0,0,0" Margin="0,-7">
@@ -52,8 +89,14 @@
                   <TextBlock Classes="mono muted" FontSize="12.5" Text="{Binding KindText}" />
                   <TextBlock Grid.Column="1" Classes="mono secondary" FontSize="12.5" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
                              ToolTip.Tip="{Binding Path}" />
-                  <TextBlock Grid.Column="2" Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
-                             Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                  <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <TextBlock Classes="muted partial-note" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding IsPartialCurrent}"
+                               Text="{loc:Loc Sync.Partial}" ToolTip.Tip="{loc:Loc Sync.PartialTip}" />
+                    <TextBlock Classes="muted partial-note" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding IsPartialOutdated}"
+                               Text="{loc:Loc Sync.PartialOutdated}" ToolTip.Tip="{loc:Loc Sync.PartialOutdatedTip}" />
+                    <TextBlock Classes="muted" FontSize="12" Margin="12,0,0,0" IsVisible="{Binding AlreadySent}"
+                               Text="{loc:Loc Sync.AlreadySent}" ToolTip.Tip="{loc:Loc Sync.AlreadySentTip}" />
+                  </StackPanel>
                 </Grid>
               </CheckBox>
             </Panel>

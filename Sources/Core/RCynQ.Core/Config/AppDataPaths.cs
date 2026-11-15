@@ -128,13 +128,20 @@ public sealed record AppDataPaths
     public string MergeSessionsDirectory => Path.Combine(Root, "merges");
 
     /// <summary>
+    /// Gets the directory of the files handed to an external tool to show the diff of a changed file or to choose a part of
+    /// its changes. Like <see cref="MergeSessionsDirectory"/> they live outside <see cref="TempDirectory"/>, because the tool
+    /// may stay open for long.
+    /// </summary>
+    public string ComparisonsDirectory => Path.Combine(Root, "compare");
+
+    /// <summary>
     /// Gets the lock file that keeps two operations from changing the working tree at once.
     /// </summary>
     public string WorkingTreeLockPath => Path.Combine(Root, WORKING_TREE_LOCK_FILE_NAME);
 
     /// <summary>
     /// Gets every file and folder RCynQ keeps directly in <see cref="Root"/>: the database with the files SQLite keeps
-    /// next to it, the folders of patches, backups, keys, logs, snapshots, temporary files and merge sessions, the
+    /// next to it, the folders of patches, backups, keys, logs, snapshots, temporary files, merge sessions and compared files, the
     /// installation stamp and the working tree lock. Anything else in the folder is not RCynQ's.
     /// </summary>
     public IReadOnlyList<string> NodeEntries => new[]
@@ -150,6 +157,7 @@ public sealed record AppDataPaths
         SnapshotsDirectory,
         TempDirectory,
         MergeSessionsDirectory,
+        ComparisonsDirectory,
         Path.Combine(Root, InstallationStamp.FILE_NAME),
         WorkingTreeLockPath,
     };

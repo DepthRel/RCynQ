@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCynQ.Core.Api;
 using RCynQ.Core.Enums;
+using RCynQ.Core.Exceptions;
 using RCynQ.Core.State;
 using RCynQ.Localization;
 using RCynQ.MergeTools;
@@ -21,7 +22,7 @@ namespace RCynQ.UI.ViewModels.Pages;
 /// <summary>
 /// The synchronization tab: pending files, sending, patch history, diff viewing and conflict resolution.
 /// </summary>
-public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwner
+public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwner, IChangedFileActions
 {
     /// <summary>The number of patches the history loads at a time.</summary>
     public const int HISTORY_PAGE_SIZE = 20;
@@ -47,6 +48,21 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <summary>Runs a merge in a merge tool, or <see langword="null"/> when merging in a tool is not offered.</summary>
     private readonly ExternalMergeCoordinator? _merges;
 
+    /// <summary>Where the diff of a changed file is shown, or <see langword="null"/> for the window of RCynQ.</summary>
+    private readonly IChangesViewPreferences? _changesView;
+
+    /// <summary>Shows a diff in a merge tool, or <see langword="null"/> when a diff is shown only in RCynQ.</summary>
+    private readonly ExternalDiffCoordinator? _diffs;
+
+    /// <summary>The files whose changes are being chosen in a merge tool now, by path.</summary>
+    private readonly HashSet<string> _choosing = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The files something is being done with now (a diff, a choice of changes, a revert), by path, with how many such
+    /// works each one has; their rows show it and keep the other actions closed until the work ends.
+    /// </summary>
+    private readonly Dictionary<string, int> _working = new(StringComparer.Ordinal);
+
     /// <summary>The folders the user closed in the tree, by path.</summary>
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
 
@@ -65,6 +81,12 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
 
     /// <summary>The sync base of the node; <see langword="null"/> until the first refresh.</summary>
     private SyncBaseStatus? _syncBase;
+
+    /// <summary>The role of the node; <see langword="null"/> until the first refresh.</summary>
+    private NodeRole? _role;
+
+    /// <summary>Whether the rows of the changed files were made with the changes revertible, to make them again when that changes.</summary>
+    private bool _listedRevertible;
 
     /// <summary>Whether many files are checked at once, so what depends on the check marks is updated once at the end.</summary>
     private bool _isBatchSelecting;
@@ -125,13 +147,17 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <param name="uiSettings">The store that keeps how the changed files are laid out, or <see langword="null"/>.</param>
     /// <param name="mergeTools">The merge tools of the machine, or <see langword="null"/> when merging in a tool is not offered.</param>
     /// <param name="merges">Runs a merge in a merge tool, or <see langword="null"/> when merging in a tool is not offered.</param>
+    /// <param name="changesView">Where the diff of a changed file is shown, or <see langword="null"/> for the window of RCynQ.</param>
+    /// <param name="diffs">Shows a diff in a merge tool, or <see langword="null"/> when a diff is shown only in RCynQ.</param>
     public SyncViewModel(
         ILocalizer localizer,
         IServiceApiClient api,
         IDialogService dialogs,
         IUiSettingsStore? uiSettings = null,
         IMergeToolPreferences? mergeTools = null,
-        ExternalMergeCoordinator? merges = null)
+        ExternalMergeCoordinator? merges = null,
+        IChangesViewPreferences? changesView = null,
+        ExternalDiffCoordinator? diffs = null)
         : base(localizer)
     {
         _api = api;
@@ -139,6 +165,8 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
         _uiSettings = uiSettings;
         _mergeTools = mergeTools;
         _merges = merges;
+        _changesView = changesView;
+        _diffs = diffs;
         _isTreeView = ChangedFilesLayoutSetting.IsTree(uiSettings);
         ChangedFiles.CollectionChanged += (_, _) =>
         {
@@ -257,6 +285,12 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     /// <summary>Gets the name of the rebuild action, the title of the tool tip of its button.</summary>
     public string RebuildButtonText => Localizer.Get(_syncBase is { Mode: SyncBaseMode.Git } ? "Sync.RebuildBase" : "Sync.RecreateBaseline");
 
+    /// <inheritdoc />
+    public bool CanRevertChanges => _role == NodeRole.Workstation && _syncBase is { Mode: SyncBaseMode.Git };
+
+    /// <summary>Gets the role of the node the changes go to: the Origin of a Workstation, the Workstation of an Origin.</summary>
+    private NodeRole PeerRole => _role == NodeRole.Origin ? NodeRole.Workstation : NodeRole.Origin;
+
     /// <summary>Gets where the sync base comes from, for the header.</summary>
     public string SyncBaseText => _syncBase switch
     {
@@ -270,6 +304,7 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     protected override Task<bool> LoadAsync() => RunQuietAsync(async () =>
     {
         var status = await _api.GetStateAsync();
+        _role = status.Role;
         RoleText = status.Role.ToString();
         _lastSync = new[] { status.State.LastSentAtUtc, status.State.LastReceivedAtUtc }.Max();
         OnPropertyChanged(nameof(LastSyncText));
@@ -278,14 +313,14 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
 
         // A service of an older version reports only what is pending.
         var files = status.ChangedFiles ?? status.PendingChanges.Select(change => new ChangedFile(change.Kind, change.Path, false)).ToArray();
-        var selected = ChangedFiles.Where(file => file.IsSelected).Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
-        ChangedFiles.Clear();
-        foreach (var file in files)
+        ShowChangedFiles(files);
+
+        // A choice of changes made on a version the other node no longer has was dropped by the service: the user hears of it once.
+        if (status.ResetPartials is { Count: > 0 } resets)
         {
-            ChangedFiles.Add(new ChangedFileItemViewModel(file, OnSelectionChanged) { IsSelectable = IsSelectionMode, IsSelected = selected.Contains(file.Path) });
+            InfoMessage = Localizer.Format("Sync.PartialsReset", string.Join(", ", resets), PeerRole);
         }
 
-        RebuildRows();
         OnSelectionChanged();
 
         // As many patches as are on screen are asked for again, so a refresh keeps the pages the user loaded; one more
@@ -617,6 +652,36 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
     private HashSet<string> CollapsedFolders() => IsFiltering ? _collapsedWhileFiltering : _collapsedFolders;
 
     /// <summary>
+    /// Shows the changed files the service reported, keeping the check marks. When nothing changed since the last refresh
+    /// the rows stay as they are: making them again would close a menu the user opened on a file, and a refresh comes
+    /// often (each time the window is activated, for example after a dialog closes).
+    /// </summary>
+    /// <param name="files">The changed files.</param>
+    private void ShowChangedFiles(IReadOnlyList<ChangedFile> files)
+    {
+        var revertible = CanRevertChanges;
+        if (revertible == _listedRevertible && ChangedFiles.Select(file => file.File).SequenceEqual(files))
+        {
+            return;
+        }
+
+        var selected = ChangedFiles.Where(file => file.IsSelected).Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
+        ChangedFiles.Clear();
+        foreach (var file in files)
+        {
+            ChangedFiles.Add(new ChangedFileItemViewModel(file, OnSelectionChanged, this)
+            {
+                IsSelectable = IsSelectionMode,
+                IsSelected = selected.Contains(file.Path),
+                IsWorking = _working.ContainsKey(file.Path)
+            });
+        }
+
+        _listedRevertible = revertible;
+        RebuildRows();
+    }
+
+    /// <summary>
     /// Lays the rows out again from the changed files, the filter, the chosen layout and the closed folders.
     /// </summary>
     private void RebuildRows()
@@ -645,6 +710,332 @@ public sealed partial class SyncViewModel : PageViewModelBase, IChangedFolderOwn
         {
             ShownHistory.Add(item);
         }
+    }
+
+    /// <inheritdoc />
+    public Task ShowDiffAsync(ChangedFileItemViewModel file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+
+        return WorkOnAsync(file.Path, async () =>
+        {
+            if (await DiffToolAsync() is { } tool)
+            {
+                await RunSafeAsync(() => StartToolAsync(() => _diffs!.ShowAsync(file.Path, tool, PeerRole)));
+                return;
+            }
+
+            await ShowDiffInWindowAsync(file);
+        });
+    }
+
+    /// <inheritdoc />
+    public Task ChooseChangesAsync(ChangedFileItemViewModel file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+
+        return WorkOnAsync(file.Path, async () =>
+        {
+            if (await DiffToolAsync() is { } tool)
+            {
+                await ChooseInToolAsync(file, tool);
+                return;
+            }
+
+            await ShowDiffInWindowAsync(file);
+        });
+    }
+
+    /// <inheritdoc />
+    public Task ChooseAllChangesAsync(ChangedFileItemViewModel file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+
+        return WorkOnAsync(file.Path, async () =>
+        {
+            if (await RunSafeAsync(() => _api.ResetPartialAsync(file.Path)))
+            {
+                TakeIn(file.Path);
+                await RefreshAsync();
+            }
+        });
+    }
+
+    /// <inheritdoc />
+    public async Task RevertChangesAsync(ChangedFileItemViewModel file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        if (!CanRevertChanges)
+        {
+            return;
+        }
+
+        var dialog = new DangerConfirmDialogViewModel(
+            Localizer.Get("Sync.RevertTitle"),
+            Localizer.Format("Sync.RevertMessage", file.Path),
+            Localizer.Get("Sync.RevertIrreversible"),
+            Localizer.Get("Sync.RevertConfirm"));
+        if (!await _dialogs.ConfirmDangerAsync(dialog))
+        {
+            return;
+        }
+
+        await WorkOnAsync(file.Path, async () =>
+        {
+            RevertChangesResult? result = null;
+            if (!await RunSafeAsync(async () => result = await _api.RevertChangesAsync(file.Path)))
+            {
+                return;
+            }
+
+            InfoMessage = result!.Outcome switch
+            {
+                WorkingTreeRevertOutcome.Deleted => Localizer.Format("Sync.RevertDeleted", result.Path),
+                WorkingTreeRevertOutcome.NothingToRevert => Localizer.Format("Sync.RevertNothing", result.Path),
+                _ => Localizer.Format("Sync.Reverted", result.Path)
+            };
+            await RefreshAsync();
+        });
+    }
+
+    /// <summary>
+    /// Does something with a file and marks its row as busy until it is done, also when the list is made again
+    /// meanwhile.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    /// <param name="work">The work.</param>
+    /// <returns>A task that completes when the work is done.</returns>
+    private async Task WorkOnAsync(string path, Func<Task> work)
+    {
+        _working[path] = _working.GetValueOrDefault(path) + 1;
+        MarkWorking(path);
+
+        try
+        {
+            await work();
+        }
+        finally
+        {
+            if (--_working[path] == 0)
+            {
+                _working.Remove(path);
+            }
+
+            MarkWorking(path);
+        }
+    }
+
+    /// <summary>
+    /// Shows on the row of a file whether something is being done with it.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    private void MarkWorking(string path)
+    {
+        var working = _working.ContainsKey(path);
+        foreach (var file in ChangedFiles.Where(file => file.Path == path))
+        {
+            file.IsWorking = working;
+        }
+    }
+
+    /// <summary>
+    /// Shows the diff of a file in the window of RCynQ and keeps the changes the user chose there.
+    /// </summary>
+    /// <param name="file">The file.</param>
+    /// <returns>A task that completes when the window is closed and the choice is kept.</returns>
+    private async Task ShowDiffInWindowAsync(ChangedFileItemViewModel file)
+    {
+        FileDiffResponse? diff = null;
+        if (!await RunSafeAsync(async () => diff = await _api.GetFileDiffAsync(file.Path)))
+        {
+            return;
+        }
+
+        // A file left out of the patch sends nothing: its window opens with no change checked.
+        var leftOut = IsSelectionMode && !file.IsSelected;
+        var dialog = new FileDiffDialogViewModel(Localizer, diff!, PeerRole, leftOut);
+        if (!await _dialogs.ShowFileDiffAsync(dialog) || !dialog.CanChoose || !dialog.HasNewChoice)
+        {
+            return;
+        }
+
+        PartialChoiceResult? result = null;
+        if (await RunSafeAsync(async () => result = await _api.ChooseChangesAsync(new ChooseChangesRequest(diff!.Path, diff.BaseSha256, diff.WorkdirSha256, dialog.ChosenBlocks))))
+        {
+            await AfterChoiceAsync(file, result!);
+        }
+    }
+
+    /// <summary>
+    /// Lets the user choose the changes of a file in a merge tool. The page stays usable while the tool is open; the
+    /// choice is kept when the tool is closed.
+    /// </summary>
+    /// <param name="file">The file.</param>
+    /// <param name="tool">The tool.</param>
+    /// <returns>A task that completes when the tool is closed and the choice is kept.</returns>
+    private async Task ChooseInToolAsync(ChangedFileItemViewModel file, MergeTool tool)
+    {
+        if (!_choosing.Add(file.Path))
+        {
+            return;
+        }
+
+        try
+        {
+            var waiting = Localizer.Format("Sync.ChooseWaiting", tool.Name, file.Path);
+            InfoMessage = waiting;
+            PartialChoiceResult? result = null;
+            var chosen = await RunToolAsync(async () => result = await _diffs!.ChooseAsync(file.Path, tool, PeerRole, AskOpenAgainAsync));
+            if (InfoMessage == waiting)
+            {
+                // The tool is closed: the note about it goes, any other message stays.
+                InfoMessage = null;
+            }
+
+            if (chosen && result is not null)
+            {
+                await AfterChoiceAsync(file, result);
+            }
+        }
+        finally
+        {
+            _choosing.Remove(file.Path);
+        }
+
+        Task<bool> AskOpenAgainAsync() => _dialogs.ConfirmAsync(Localizer.Get("Sync.ChooseUnchangedTitle"), Localizer.Format("Sync.ChooseUnchanged", file.Path, tool.Name));
+    }
+
+    /// <summary>
+    /// Makes the check mark of a file follow a choice of its changes and refreshes the list: a file with nothing chosen
+    /// is left out of the next patch, a file with something chosen goes with it.
+    /// </summary>
+    /// <param name="file">The file.</param>
+    /// <param name="result">What the choice came to.</param>
+    /// <returns>A task that completes when the list is refreshed.</returns>
+    private async Task AfterChoiceAsync(ChangedFileItemViewModel file, PartialChoiceResult result)
+    {
+        if (result.Outcome == PartialChoiceOutcome.Nothing)
+        {
+            LeaveOut(file.Path);
+        }
+        else
+        {
+            TakeIn(file.Path);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Puts the check mark back on a file left out of the next patch, so it goes with it. Without check marks every
+    /// file goes already.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    private void TakeIn(string path)
+    {
+        if (!IsSelectionMode)
+        {
+            return;
+        }
+
+        foreach (var file in ChangedFiles.Where(file => file.Path == path))
+        {
+            file.IsSelected = true;
+        }
+    }
+
+    /// <summary>
+    /// Takes the check mark off a file, turning check marks on with every other file checked when they were off, so the
+    /// file stays out of the next patch.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    private void LeaveOut(string path)
+    {
+        if (!IsSelectionMode)
+        {
+            IsSelectionMode = true;
+            SetSelected(ChangedFiles, true);
+        }
+
+        foreach (var file in ChangedFiles.Where(file => file.Path == path))
+        {
+            file.IsSelected = false;
+        }
+    }
+
+    /// <summary>
+    /// Finds the merge tool a diff is shown in, when the settings ask for one.
+    /// </summary>
+    /// <returns>The tool, or <see langword="null"/> for the window of RCynQ.</returns>
+    private async Task<MergeTool?> DiffToolAsync()
+    {
+        if (_changesView?.Mode != ChangesViewMode.ExternalTool || _diffs is null || _mergeTools is null)
+        {
+            return null;
+        }
+
+        MergeTool? tool = null;
+        try
+        {
+            tool = await _mergeTools.GetDefaultAsync();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The search failed: the diff opens in RCynQ.
+        }
+
+        if (tool?.DiffArguments is null)
+        {
+            InfoMessage = Localizer.Get("Sync.NoDiffTool");
+            return null;
+        }
+
+        return tool;
+    }
+
+    /// <summary>
+    /// Starts a merge tool, turning a failure to start it into the error message of the page.
+    /// </summary>
+    /// <param name="start">Starts the tool.</param>
+    /// <returns>A task that completes when the tool is started.</returns>
+    private async Task StartToolAsync(Func<Task> start)
+    {
+        try
+        {
+            await start();
+        }
+        catch (SyncBridgeException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// Runs a choice in a merge tool without keeping the page busy while the tool is open.
+    /// </summary>
+    /// <param name="work">The choice.</param>
+    /// <returns><see langword="true"/> when it ended without an error.</returns>
+    private async Task<bool> RunToolAsync(Func<Task> work)
+    {
+        try
+        {
+            await work();
+            return true;
+        }
+        catch (SyncBridgeException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        catch (ServiceApiException ex)
+        {
+            ErrorMessage = Localizer.Describe(ex);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException)
+        {
+            ErrorMessage = Localizer.Describe(ex);
+        }
+
+        return false;
     }
 
     /// <summary>

@@ -94,7 +94,10 @@ public sealed class CliCommandTests : IDisposable
         var patches = Substitute.For<IPatchService>();
         patches.GetStateAsync(Arg.Any<CancellationToken>()).Returns(new NodeSyncStatus(
             new NodeId("workstation-1"), "Laptop", NodeRole.Workstation, new SyncState(hash, hash, DateTimeOffset.UtcNow, null), new SyncBaseStatus(SyncBaseMode.Git, "main", new string('c', 40), null, false),
-            new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false) }, 1));
+            new[] { new FileChange(ChangeKind.Modified, "src/a.cs", hash, 3, false), new FileChange(ChangeKind.Modified, "src/b.cs", hash, 3, false) },
+            1,
+            new[] { new ChangedFile(ChangeKind.Modified, "src/a.cs", false), new ChangedFile(ChangeKind.Modified, "src/b.cs", false, PartialChangeState.Partial) },
+            ResetPartials: new[] { "src/c.cs" }));
         patches.GetRecentAsync(5, Arg.Any<CancellationToken>()).Returns(new[]
         {
             new PatchMetadata(Guid.NewGuid(), PatchDirection.Outgoing, new NodeId("workstation-1"), new NodeId("origin-1"), DateTimeOffset.UtcNow, hash, hash, PatchStatus.Applied, DateTimeOffset.UtcNow, Array.Empty<FileChange>())
@@ -107,7 +110,9 @@ public sealed class CliCommandTests : IDisposable
         code.Should().Be(0);
         output.Should().Contain("workstation-1 (Workstation) Laptop")
             .And.Contain("Sync base:      Git main @ cccccccccccc")
-            .And.Contain("M src/a.cs")
+            .And.Contain("M src/a.cs\n")
+            .And.Contain("M src/b.cs (selected only)")
+            .And.Contain("The choice of changes was reset for: src/c.cs")
             .And.Contain("patch resolve")
             .And.Contain("relay")
             .And.Contain("jump@203.0.113.4:22")

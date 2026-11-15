@@ -173,6 +173,10 @@ If you declined, press **Role and nodes → Allow node connections**.
 
 From now on: **Pull** to get new commits, **Send changes** to deliver your edits. Changes made on the Origin are sent the same way from there.
 
+**Looking before sending.** A double click on a changed file shows its changes against the version the other node has: the Origin on a Workstation, the Workstation on an Origin. To send only some of the changes of a file, choose them: in the window **Changes in …** check the changes that go, or use **Choose changes** in the menu of the file. Such a file is marked **selected only** and only the chosen changes go; the rest stays and goes with a later patch. **Choose all changes** in the same menu undoes the choice. With check marks on, the check mark of a file follows its changes: the window of a file left out opens with no change checked, checking one puts the file back in, and unchecking every change leaves it out. A double click only opens the window and leaves the check mark as it was. While RCynQ works on a file (its window of changes, a merge tool, a revert), its row shows a turning ring, and the actions that change the file wait until the work ends. A choice made on a version the other node no longer has (after a Pull or a received patch) is reset, and RCynQ says so. **Settings → Viewing changes** shows the changes in the merge tool instead: there the version of the other node is on the left, and the changes that must not go are undone in the right pane before the tool is saved and closed. Saving a patch file and `rcynq patch send` follow the same choice.
+
+**Reverting a file.** On a Workstation whose working tree is a Git repository, **Revert all changes** at the bottom of the menu of a file takes back its changes in the working tree after a warning: the file is restored from the Git index, so the changes staged for commit stay, and a new file Git does not track is deleted. This cannot be undone. An Origin does not offer it: its repository changes only by patches.
+
 ## 10. More repositories
 
 1. On the Origin: **Branches → Add a repository**, pick the folder of another Git repository.

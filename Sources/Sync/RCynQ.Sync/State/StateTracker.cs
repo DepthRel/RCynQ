@@ -8,6 +8,7 @@ using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Git.Manifest;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Partial;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.SyncBase;
 
@@ -70,6 +71,9 @@ public sealed class StateTracker
     /// <summary>Tells the clients that a capture is done, or <see langword="null"/> to tell nobody.</summary>
     private readonly IEventPublisher? _events;
 
+    /// <summary>The choices of a part of the changes of files, or <see langword="null"/> when the node keeps none.</summary>
+    private readonly PartialChangeStore? _partials;
+
     /// <summary>The number of captures that run now, by the repository they look at.</summary>
     private readonly ConcurrentDictionary<Guid, int> _running = new();
 
@@ -94,6 +98,7 @@ public sealed class StateTracker
     /// <param name="syncBase">The sync base manager.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="events">Tells the clients that a capture is done; <see langword="null"/> tells nobody.</param>
+    /// <param name="partials">The choices of a part of the changes of files; <see langword="null"/> when the node keeps none.</param>
     public StateTracker(
         INodeStateStore store,
         IFileManifestBuilder manifest,
@@ -103,7 +108,8 @@ public sealed class StateTracker
         TimeProvider timeProvider,
         SyncBaseManager syncBase,
         WorkingTreeLock workingTreeLock,
-        IEventPublisher? events = null)
+        IEventPublisher? events = null,
+        PartialChangeStore? partials = null)
     {
         _store = store;
         _manifest = manifest;
@@ -114,6 +120,7 @@ public sealed class StateTracker
         _base = syncBase;
         _lock = workingTreeLock;
         _events = events;
+        _partials = partials;
     }
 
     /// <summary>
@@ -249,6 +256,7 @@ public sealed class StateTracker
                 syncBase = await _manifest.ScanAsync(_paths.SyncBase, _paths.Workdir, cancellationToken);
                 pending = await _base.SelectPendingAsync(DefaultFileManifestBuilder.Compare(syncBase, local), status, cancellationToken);
                 changed = await _base.ListChangedAsync(pending, status, cancellationToken);
+                changed = await MarkPartialsAsync(pending, changed, cancellationToken);
             }
         }
 
@@ -260,6 +268,35 @@ public sealed class StateTracker
             stored => new SyncState(localHash, baseHash, stored.LastSentAtUtc, stored.LastReceivedAtUtc),
             cancellationToken);
         return Remember(repositoryId, new SyncSnapshot(updated, status, pending, changed));
+    }
+
+    /// <summary>
+    /// Drops the choices of a part of the changes that no longer fit and marks the files whose choice stays.
+    /// </summary>
+    /// <param name="pending">The pending changes.</param>
+    /// <param name="changed">The changed files.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>The changed files, the ones with a choice marked.</returns>
+    /// <remarks>Called with the working tree lock held and a ready sync base.</remarks>
+    private async Task<IReadOnlyList<ChangedFile>> MarkPartialsAsync(IReadOnlyList<FileChange> pending, IReadOnlyList<ChangedFile> changed, CancellationToken cancellationToken)
+    {
+        if (_partials is null)
+        {
+            return changed;
+        }
+
+        var fitting = await _partials.ReconcileAsync(pending, cancellationToken);
+        if (fitting.Count == 0)
+        {
+            return changed;
+        }
+
+        var hashes = pending.ToDictionary(change => change.Path, change => change.Sha256, SyncBaseManager.PathComparer);
+        return changed
+            .Select(file => fitting.TryGetValue(file.Path, out var choice)
+                ? file with { Partial = PartialChangeStore.StateOf(choice, hashes.GetValueOrDefault(file.Path)) }
+                : file)
+            .ToArray();
     }
 
     /// <summary>

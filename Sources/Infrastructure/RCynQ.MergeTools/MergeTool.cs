@@ -8,7 +8,11 @@ namespace RCynQ.MergeTools;
 /// <param name="ExecutablePath">The full path of the executable.</param>
 /// <param name="Arguments">The template of its arguments (see <see cref="MergeToolArguments"/>).</param>
 /// <param name="TrustExitCode">Whether a non-zero exit code means that the user gave up the merge.</param>
-public sealed record MergeTool(string ProfileId, string Name, string ExecutablePath, IReadOnlyList<string> Arguments, bool TrustExitCode)
+/// <param name="DiffArguments">
+/// The template of its arguments for a diff of two files (see <see cref="MergeToolArguments.ValidateDiff"/>), or
+/// <see langword="null"/> when the tool shows no diff.
+/// </param>
+public sealed record MergeTool(string ProfileId, string Name, string ExecutablePath, IReadOnlyList<string> Arguments, bool TrustExitCode, IReadOnlyList<string>? DiffArguments = null)
 {
     /// <summary>The profile identifier of the tool the user described: an executable and a template of its arguments.</summary>
     public const string CUSTOM_ID = "custom";

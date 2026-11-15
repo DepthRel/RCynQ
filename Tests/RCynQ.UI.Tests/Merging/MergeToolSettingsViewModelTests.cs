@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using RCynQ.MergeTools;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels;
@@ -94,7 +95,7 @@ public sealed class MergeToolSettingsViewModelTests : IDisposable
     public async Task A_Correct_Described_Tool_Is_Saved()
     {
         var custom = new MergeTool(MergeTool.CUSTOM_ID, "merge", _executable, new[] { "{local}", "{incoming}", "{result}" }, false);
-        _preferences.CreateCustom(_executable, "{local} {incoming} {result}").Returns(custom);
+        _preferences.CreateCustom(_executable, "{local} {incoming} {result}", MergeToolSettingsViewModel.DEFAULT_CUSTOM_DIFF_ARGUMENTS).Returns(custom);
         var settings = Settings();
         await settings.LoadAsync();
         settings.Selected = settings.Options.Last();
@@ -138,6 +139,31 @@ public sealed class MergeToolSettingsViewModelTests : IDisposable
 
         await _preferences.Received(1).GetToolsAsync(true, Arg.Any<CancellationToken>());
         settings.HasNoTools.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Verifies that a described tool with a diff template that lacks a file is refused with the reason, and that the
+    /// place of the diff of changed files is remembered.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task A_Wrong_Diff_Template_Is_Refused_And_The_Diff_Place_Is_Kept()
+    {
+        var view = Substitute.For<IChangesViewPreferences>();
+        var settings = new MergeToolSettingsViewModel(TestTexts.Russian, _preferences, Substitute.For<IDialogService>(), view);
+        await settings.LoadAsync();
+        settings.Selected = settings.Options.Last();
+
+        settings.CustomPath = _executable;
+        settings.CustomArguments = "{local} {incoming} {result}";
+        settings.CustomDiffArguments = "{left}";
+        settings.SaveCustomCommand.Execute(null);
+
+        settings.Error.Should().Be(TestTexts.Russian.Get("Settings.MergeTool.MissingRight"));
+        _preferences.DidNotReceiveWithAnyArgs().SetDefault(default!);
+        settings.HasChangesView.Should().BeTrue();
+        settings.IsExternalView = true;
+        view.Received(1).SetMode(ChangesViewMode.ExternalTool);
     }
 
     /// <inheritdoc />

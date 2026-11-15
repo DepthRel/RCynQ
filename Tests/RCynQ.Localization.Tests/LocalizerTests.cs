@@ -44,14 +44,15 @@ public sealed class LocalizerTests
     }
 
     /// <summary>
-    /// A language file without its code or name, and a file that is not a flat object of strings, are refused with
-    /// a clear message.
+    /// A language file without its code or name, a file that is not a flat object of strings, and a file that gives one
+    /// key twice (the later text would silently win) are refused with a clear message.
     /// </summary>
     [Theory]
     [InlineData("""{"Hello": "x"}""")]
     [InlineData("""{"Language.Code": "xx"}""")]
     [InlineData("""{"Language.Code": " ", "Language.Name": "X"}""")]
     [InlineData("""{"Language.Code": "xx", "Language.Name": "X", "Nested": {"a": "b"}}""")]
+    [InlineData("""{"Language.Code": "xx", "Language.Name": "X", "Hello": "a", "Hello": "b"}""")]
     [InlineData("[1, 2]")]
     [InlineData("not json")]
     public void LanguagePack_RefusesBrokenFiles(string json)

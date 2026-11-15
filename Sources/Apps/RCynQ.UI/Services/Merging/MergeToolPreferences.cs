@@ -19,6 +19,9 @@ public sealed class MergeToolPreferences : IMergeToolPreferences
     /// <summary>The setting with the template of the arguments of the tool the user described.</summary>
     public const string ARGUMENTS_SETTING = "mergeToolArguments";
 
+    /// <summary>The setting with the template of the diff arguments of the tool the user described.</summary>
+    public const string DIFF_ARGUMENTS_SETTING = "mergeToolDiffArguments";
+
     /// <summary>Finds the tools of the machine.</summary>
     private readonly IMergeToolLocator _locator;
 
@@ -56,7 +59,7 @@ public sealed class MergeToolPreferences : IMergeToolPreferences
         var path = _settings.Get(PATH_SETTING);
         if (id == MergeTool.CUSTOM_ID)
         {
-            return CreateCustom(path, _settings.Get(ARGUMENTS_SETTING));
+            return CreateCustom(path, _settings.Get(ARGUMENTS_SETTING), _settings.Get(DIFF_ARGUMENTS_SETTING));
         }
 
         if (id is not null)
@@ -82,11 +85,12 @@ public sealed class MergeToolPreferences : IMergeToolPreferences
         if (tool.IsCustom)
         {
             _settings.Set(ARGUMENTS_SETTING, MergeToolArguments.Format(tool.Arguments));
+            _settings.Set(DIFF_ARGUMENTS_SETTING, tool.DiffArguments is null ? string.Empty : MergeToolArguments.Format(tool.DiffArguments));
         }
     }
 
     /// <inheritdoc />
-    public MergeTool? CreateCustom(string? path, string? arguments)
+    public MergeTool? CreateCustom(string? path, string? arguments, string? diffArguments = null)
     {
         var template = MergeToolArguments.Parse(arguments);
         if (string.IsNullOrWhiteSpace(path) ||
@@ -96,7 +100,9 @@ public sealed class MergeToolPreferences : IMergeToolPreferences
             return null;
         }
 
-        return new MergeTool(MergeTool.CUSTOM_ID, Path.GetFileNameWithoutExtension(path), path, template!, TrustExitCode: false);
+        var diff = MergeToolArguments.Parse(diffArguments);
+        var diffTemplate = MergeToolArguments.ValidateDiff(diff) == MergeToolTemplateProblem.None ? diff : null;
+        return new MergeTool(MergeTool.CUSTOM_ID, Path.GetFileNameWithoutExtension(path), path, template!, TrustExitCode: false, diffTemplate);
     }
 
     /// <summary>

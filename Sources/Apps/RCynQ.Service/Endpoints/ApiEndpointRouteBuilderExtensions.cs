@@ -20,6 +20,7 @@ public static class ApiEndpointRouteBuilderExtensions
             .MapServiceEndpoints()
             .MapPatchEndpoints()
             .MapMergeSessionEndpoints()
+            .MapChangeEndpoints()
             .MapCommitEndpoints()
             .MapLinkEndpoints()
             .MapGitEndpoints()

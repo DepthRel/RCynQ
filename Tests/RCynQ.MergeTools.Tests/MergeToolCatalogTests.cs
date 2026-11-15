@@ -17,6 +17,7 @@ public sealed class MergeToolCatalogTests
         foreach (var profile in MergeToolCatalog.Profiles)
         {
             MergeToolArguments.Validate(profile.Arguments).Should().Be(MergeToolTemplateProblem.None, profile.Id);
+            MergeToolArguments.ValidateDiff(profile.DiffArguments).Should().Be(MergeToolTemplateProblem.None, profile.Id);
             profile.GitNames.Should().NotBeEmpty(profile.Id);
             (profile.Discovery == MergeToolDiscovery.VisualStudio || profile.Commands.Count > 0 || profile.Candidates.Count > 0).Should().BeTrue(profile.Id);
             profile.Id.Should().NotBe(MergeTool.CUSTOM_ID);

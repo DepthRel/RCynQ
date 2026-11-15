@@ -89,4 +89,36 @@ public sealed class MergeToolArgumentsTests
 
         expand.Should().Throw<ArgumentException>().WithMessage("*{MERGED}*");
     }
+
+    /// <summary>
+    /// Verifies the checks of a template of a diff of two files: both files are needed, and the placeholders of a merge
+    /// do not belong there.
+    /// </summary>
+    /// <param name="text">The template as typed.</param>
+    /// <param name="problem">The expected problem.</param>
+    [Theory]
+    [InlineData("{left} {right}", MergeToolTemplateProblem.None)]
+    [InlineData("-L {leftLabel} -L {rightLabel} {left} {right}", MergeToolTemplateProblem.None)]
+    [InlineData("{right}", MergeToolTemplateProblem.MissingLeft)]
+    [InlineData("{left}", MergeToolTemplateProblem.MissingRight)]
+    [InlineData("{left} {right} {result}", MergeToolTemplateProblem.UnknownPlaceholder)]
+    [InlineData("", MergeToolTemplateProblem.Unreadable)]
+    public void ValidateDiff_Finds_The_Problem(string text, MergeToolTemplateProblem problem)
+    {
+        MergeToolArguments.ValidateDiff(MergeToolArguments.Parse(text)).Should().Be(problem);
+    }
+
+    /// <summary>
+    /// Verifies that a template of a diff is filled in with the files and the titles of the panes.
+    /// </summary>
+    [Fact]
+    public void ExpandDiff_Fills_Files_And_Titles()
+    {
+        var arguments = MergeToolArguments.ExpandDiff(
+            new[] { "-lefttitle={leftLabel}", "{left}", "{right}" },
+            new DiffToolFiles(@"C:\My Work\base\a.cs", @"C:\My Work\a.cs"),
+            new DiffToolLabels("Origin", "Working tree"));
+
+        arguments.Should().Equal("-lefttitle=Origin", @"C:\My Work\base\a.cs", @"C:\My Work\a.cs");
+    }
 }

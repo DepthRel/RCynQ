@@ -12,6 +12,7 @@ using RCynQ.Sync.Apply;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Partial;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.Signing;
 using RCynQ.Sync.State;
@@ -73,6 +74,9 @@ public sealed class PatchSendOperation
     /// <summary>The localizer of the messages.</summary>
     private readonly ILocalizer _localizer;
 
+    /// <summary>The choices of a part of the changes of files, or <see langword="null"/> when the node keeps none.</summary>
+    private readonly PartialChangeStore? _partials;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchSendOperation"/> class.
     /// </summary>
@@ -91,6 +95,7 @@ public sealed class PatchSendOperation
     /// <param name="tracker">The state tracker.</param>
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="syncBase">The sync base manager.</param>
+    /// <param name="partials">The choices of a part of the changes of files; <see langword="null"/> when the node keeps none.</param>
     public PatchSendOperation(
         ILocalizer localizer,
         NodeConfig node,
@@ -106,8 +111,10 @@ public sealed class PatchSendOperation
         PatchOutcomeRecorder outcomes,
         StateTracker tracker,
         WorkingTreeLock workingTreeLock,
-        SyncBaseManager syncBase)
+        SyncBaseManager syncBase,
+        PartialChangeStore? partials = null)
     {
+        _partials = partials;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _paths = paths;
@@ -149,7 +156,8 @@ public sealed class PatchSendOperation
         }
 
         PatchEnvelope envelope;
-        var content = new WorkdirPatchContent(_localizer, _paths.Workdir, _pathUtility);
+        IPatchContent content = new WorkdirPatchContent(_localizer, _paths.Workdir, _pathUtility);
+        IReadOnlyDictionary<string, PartialChange> partials = new Dictionary<string, PartialChange>();
         using (await _lock.AcquireAsync(cancellationToken))
         {
             var syncBase = await _syncBase.EnsureAsync(cancellationToken);
@@ -164,6 +172,15 @@ public sealed class PatchSendOperation
             // Those the peer already has are sent once more.
             var pending = await _syncBase.SelectPendingAsync(envelope.Manifest, syncBase, cancellationToken);
             var selected = await _syncBase.SelectForSendAsync(pending, syncBase, paths, cancellationToken);
+
+            // A file with a choice of a part of its changes goes as the chosen version.
+            if (_partials is not null)
+            {
+                partials = PartialPatchContent.Of(selected, await _partials.ReconcileAsync(pending, cancellationToken));
+                selected = PartialPatchContent.Substitute(selected, partials);
+                content = new PartialPatchContent(content, partials);
+            }
+
             // The repository is named in what gets signed, so the peer applies the patch to that repository or refuses it.
             envelope = new PatchEnvelope(
                 envelope.Id, envelope.SourceNode, envelope.TargetNode, envelope.CreatedAtUtc, envelope.BaseStateHash, envelope.IncomingStateHash, selected,
@@ -202,8 +219,9 @@ public sealed class PatchSendOperation
             {
                 // The peer now has the sent files, so they become the base. Files edited while the patch was on its way
                 // stay out of the base and travel with the next patch.
-                var accepted = await _baseUpdater.UpdateAsync(envelope, _paths.Workdir, _paths.SyncBase, CancellationToken.None);
+                var accepted = await _baseUpdater.UpdateAsync(envelope, _paths.Workdir, _paths.SyncBase, partials, CancellationToken.None);
                 await _syncBase.RecordExchangeAsync(accepted.Select(change => change.Path), CancellationToken.None);
+                await ForgetSentChoicesAsync(partials);
             }
         }
 
@@ -212,6 +230,28 @@ public sealed class PatchSendOperation
         // "Last sent" is the time a patch reached the peer, so a delivery that failed does not move it.
         await PatchOperations.RefreshQuietlyAsync(() => delivered ? _tracker.MarkSentAsync(CancellationToken.None) : _tracker.RefreshAsync(CancellationToken.None));
         return new SendPatchResult(true, envelope.Id, result, Describe(result, envelope.Manifest.Count));
+    }
+
+    /// <summary>
+    /// Forgets the choices the peer now has: the rest of the changes of those files is pending as usual. A choice made
+    /// again while the patch was on its way is kept.
+    /// </summary>
+    /// <param name="partials">The choices the patch carried.</param>
+    /// <returns>A task that completes when the choices are forgotten.</returns>
+    private async Task ForgetSentChoicesAsync(IReadOnlyDictionary<string, PartialChange> partials)
+    {
+        if (_partials is null)
+        {
+            return;
+        }
+
+        foreach (var (path, sent) in partials)
+        {
+            if (await _partials.GetAsync(path, CancellationToken.None) is { } stored && stored.Content.AsSpan().SequenceEqual(sent.Content))
+            {
+                await _partials.RemoveAsync(path, CancellationToken.None);
+            }
+        }
     }
 
     /// <summary>

@@ -117,9 +117,25 @@ public sealed class StatusCommandService
     /// <param name="status">The state of the node.</param>
     private void AppendChanges(StringBuilder text, NodeSyncStatus status)
     {
+        // A file of which only a chosen part goes is marked, so the command line tells the same as the window.
+        var partial = (status.ChangedFiles ?? Array.Empty<ChangedFile>())
+            .Where(file => file.Partial != PartialChangeState.None)
+            .Select(file => file.Path)
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var change in status.PendingChanges.Take(MAX_LISTED_CHANGES))
         {
-            text.Append("  ").Append(TextFormat.Change(change.Kind)).Append(' ').Append(change.Path).Append('\n');
+            text.Append("  ").Append(TextFormat.Change(change.Kind)).Append(' ').Append(change.Path);
+            if (partial.Contains(change.Path))
+            {
+                text.Append(' ').Append(_localizer.Get("Cli.Status.Partial"));
+            }
+
+            text.Append('\n');
+        }
+
+        if (status.ResetPartials is { Count: > 0 } resets)
+        {
+            text.Append("  ").Append(_localizer.Format("Cli.Status.PartialsReset", string.Join(", ", resets))).Append('\n');
         }
 
         if (status.PendingChanges.Count > MAX_LISTED_CHANGES)

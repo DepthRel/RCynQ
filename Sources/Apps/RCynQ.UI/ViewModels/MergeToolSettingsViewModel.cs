@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using RCynQ.Localization;
 using RCynQ.MergeTools;
 using RCynQ.MergeTools.Enums;
+using RCynQ.UI.Enums;
 using RCynQ.UI.Services.Dialogs;
 using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Items;
@@ -19,6 +20,9 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
     /// <summary>The template offered for a tool the user describes.</summary>
     public const string DEFAULT_CUSTOM_ARGUMENTS = "{local} {base} {incoming} {result}";
 
+    /// <summary>The template of a diff offered for a tool the user describes.</summary>
+    public const string DEFAULT_CUSTOM_DIFF_ARGUMENTS = "{left} {right}";
+
     /// <summary>The merge tools of the machine and the choice.</summary>
     private readonly IMergeToolPreferences _preferences;
 
@@ -27,6 +31,9 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
 
     /// <summary>The localizer of the texts.</summary>
     private readonly ILocalizer _localizer;
+
+    /// <summary>Where the diff of a changed file is shown, or <see langword="null"/> when the choice is not offered.</summary>
+    private readonly IChangesViewPreferences? _changesView;
 
     /// <summary>Whether the selection is being set by the code, not by the user.</summary>
     private bool _isLoading;
@@ -44,6 +51,10 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
     /// <summary>The template of the arguments of the tool the user describes.</summary>
     [ObservableProperty]
     private string _customArguments = DEFAULT_CUSTOM_ARGUMENTS;
+
+    /// <summary>The template of the diff arguments of the tool the user describes.</summary>
+    [ObservableProperty]
+    private string _customDiffArguments = DEFAULT_CUSTOM_DIFF_ARGUMENTS;
 
     /// <summary>What is wrong with the tool the user describes, or an empty text.</summary>
     [ObservableProperty]
@@ -65,11 +76,54 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
     /// <param name="localizer">The localizer of the texts.</param>
     /// <param name="preferences">The merge tools of the machine and the choice.</param>
     /// <param name="dialogs">The dialog service, for the picker of the executable.</param>
-    public MergeToolSettingsViewModel(ILocalizer localizer, IMergeToolPreferences preferences, IDialogService dialogs)
+    /// <param name="changesView">Where the diff of a changed file is shown, or <see langword="null"/> when the choice is not offered.</param>
+    public MergeToolSettingsViewModel(ILocalizer localizer, IMergeToolPreferences preferences, IDialogService dialogs, IChangesViewPreferences? changesView = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _changesView = changesView;
+    }
+
+    /// <summary>Gets a value indicating whether the place of the diff of changed files can be chosen.</summary>
+    public bool HasChangesView => _changesView is not null;
+
+    /// <summary>Gets or sets a value indicating whether the diff of changed files is shown in RCynQ.</summary>
+    public bool IsBuiltInView
+    {
+        get => _changesView?.Mode != ChangesViewMode.ExternalTool;
+        set => SetChangesView(value ? ChangesViewMode.BuiltIn : ChangesViewMode.ExternalTool);
+    }
+
+    /// <summary>Gets or sets a value indicating whether the diff of changed files is shown in the merge tool.</summary>
+    public bool IsExternalView
+    {
+        get => _changesView?.Mode == ChangesViewMode.ExternalTool;
+        set => SetChangesView(value ? ChangesViewMode.ExternalTool : ChangesViewMode.BuiltIn);
+    }
+
+    /// <summary>
+    /// Remembers where the diff of changed files is shown.
+    /// </summary>
+    /// <param name="mode">The place.</param>
+    private void SetChangesView(ChangesViewMode mode)
+    {
+        if (_changesView is null || _changesView.Mode == mode)
+        {
+            return;
+        }
+
+        try
+        {
+            _changesView.SetMode(mode);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Error = _localizer.Describe(ex);
+        }
+
+        OnPropertyChanged(nameof(IsBuiltInView));
+        OnPropertyChanged(nameof(IsExternalView));
     }
 
     /// <summary>Gets the entries of the list: the found tools and the tool the user describes.</summary>
@@ -113,6 +167,7 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
             {
                 CustomPath = current.ExecutablePath;
                 CustomArguments = MergeToolArguments.Format(current.Arguments);
+                CustomDiffArguments = current.DiffArguments is null ? DEFAULT_CUSTOM_DIFF_ARGUMENTS : MergeToolArguments.Format(current.DiffArguments);
                 Selected = custom;
             }
             else
@@ -196,7 +251,22 @@ public sealed partial class MergeToolSettingsViewModel : ObservableObject
             return;
         }
 
-        if (_preferences.CreateCustom(path, CustomArguments) is { } tool)
+        var diffProblem = string.IsNullOrWhiteSpace(CustomDiffArguments)
+            ? MergeToolTemplateProblem.None
+            : MergeToolArguments.ValidateDiff(MergeToolArguments.Parse(CustomDiffArguments));
+        if (diffProblem != MergeToolTemplateProblem.None)
+        {
+            Error = _localizer.Get(diffProblem switch
+            {
+                MergeToolTemplateProblem.UnknownPlaceholder => "Settings.MergeTool.UnknownDiffPlaceholder",
+                MergeToolTemplateProblem.MissingLeft => "Settings.MergeTool.MissingLeft",
+                MergeToolTemplateProblem.MissingRight => "Settings.MergeTool.MissingRight",
+                _ => "Settings.MergeTool.DiffUnreadable"
+            });
+            return;
+        }
+
+        if (_preferences.CreateCustom(path, CustomArguments, CustomDiffArguments) is { } tool)
         {
             Error = string.Empty;
             Save(tool);

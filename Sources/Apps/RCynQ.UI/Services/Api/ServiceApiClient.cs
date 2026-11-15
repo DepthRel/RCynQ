@@ -124,6 +124,33 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     }
 
     /// <inheritdoc />
+    public Task<FileDiffResponse> GetFileDiffAsync(string path, CancellationToken cancellationToken = default)
+        => GetAsync<FileDiffResponse>(ApiRoutes.ChangesDiffPath(path), cancellationToken);
+
+    /// <inheritdoc />
+    public Task<CompareFilesResponse> PrepareCompareAsync(string path, bool forChoice, CancellationToken cancellationToken = default)
+        => PostAsync<CompareFilesResponse>(ApiRoutes.CHANGES_COMPARE, new CompareFilesRequest(path, forChoice), cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PartialChoiceResult> ChooseChangesAsync(ChooseChangesRequest request, CancellationToken cancellationToken = default)
+        => PutAsync<PartialChoiceResult>(ApiRoutes.CHANGES_PARTIAL, request, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<PartialChoiceResult> SetPartialContentAsync(SetPartialContentRequest request, CancellationToken cancellationToken = default)
+        => PutAsync<PartialChoiceResult>(ApiRoutes.CHANGES_PARTIAL_CONTENT, request, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task ResetPartialAsync(string path, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync(ApiRoutes.ChangesPartialPath(path), cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<RevertChangesResult> RevertChangesAsync(string path, CancellationToken cancellationToken = default)
+        => PostAsync<RevertChangesResult>(ApiRoutes.CHANGES_REVERT, new RevertChangesRequest(path), cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<LinkDto>> GetLinksAsync(CancellationToken cancellationToken = default) => await GetAsync<LinkDto[]>(ApiRoutes.LINKS, cancellationToken);
 
     /// <inheritdoc />
@@ -384,6 +411,20 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
         using var response = body is null
             ? await client.PostAsync(path, null, cancellationToken)
             : await client.PostAsync(path, JsonContent.Create(body, body.GetType(), options: _json), cancellationToken);
+        return await ReadAsync<T>(response, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a PUT request.
+    /// </summary>
+    /// <typeparam name="T">The response type.</typeparam>
+    /// <param name="path">The path.</param>
+    /// <param name="body">The body.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The response body.</returns>
+    private async Task<T> PutAsync<T>(string path, object body, CancellationToken cancellationToken)
+    {
+        using var response = await _http.PutAsync(path, JsonContent.Create(body, body.GetType(), options: _json), cancellationToken);
         return await ReadAsync<T>(response, cancellationToken);
     }
 

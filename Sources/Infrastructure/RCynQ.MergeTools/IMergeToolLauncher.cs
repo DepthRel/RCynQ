@@ -17,4 +17,14 @@ public interface IMergeToolLauncher
     /// <returns>The running tool. Disposing it releases the handle and leaves the tool running.</returns>
     /// <exception cref="SyncBridgeException">The tool is missing or could not be started.</exception>
     IRunningProcess Start(MergeTool tool, MergeToolFiles files, MergeToolLabels labels);
+
+    /// <summary>
+    /// Starts the tool on a diff of two files.
+    /// </summary>
+    /// <param name="tool">The tool.</param>
+    /// <param name="files">The files of the diff.</param>
+    /// <param name="labels">The titles of the panes.</param>
+    /// <returns>The running tool. Disposing it releases the handle and leaves the tool running.</returns>
+    /// <exception cref="SyncBridgeException">The tool is missing, shows no diff, or could not be started.</exception>
+    IRunningProcess StartDiff(MergeTool tool, DiffToolFiles files, DiffToolLabels labels);
 }

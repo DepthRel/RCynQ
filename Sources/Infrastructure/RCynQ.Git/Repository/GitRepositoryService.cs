@@ -816,6 +816,70 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     }
 
     /// <inheritdoc />
+    public async Task<WorkingTreeRevertOutcome> RevertWorkingTreeFileAsync(string directory, string path, CancellationToken cancellationToken = default)
+    {
+        Guard.NotBlank(directory, nameof(directory));
+        var full = ResolveWithin(directory, path);
+
+        // ":(literal)" keeps characters such as '*' or '[' in a file name from being read as a pattern.
+        var pathspec = ":(literal)" + path;
+        var cached = await _git.RunAsync(new[] { "ls-files", "--cached", "-z", "--", pathspec }, directory, cancellationToken: cancellationToken);
+        EnsureSuccess(cached, "git ls-files");
+
+        if (ListsExactly(cached.StandardOutput, path))
+        {
+            // Exit code 0 means the file matches the index, 1 that it differs; anything else is an error.
+            var differs = await _git.RunInWorkingTreeAsync(new[] { "diff", "--quiet", "--no-ext-diff", "--", pathspec }, directory, cancellationToken: cancellationToken);
+            if (differs.ExitCode == 0)
+            {
+                return WorkingTreeRevertOutcome.NothingToRevert;
+            }
+
+            if (differs.ExitCode != 1)
+            {
+                EnsureSuccess(differs, "git diff");
+            }
+
+            // Without a commit-ish, checkout writes the working file from the index and leaves the index as it is.
+            var checkout = await _git.RunInWorkingTreeAsync(new[] { "checkout", "--quiet", "--", pathspec }, directory, cancellationToken: cancellationToken);
+            EnsureSuccess(checkout, "git checkout");
+            return WorkingTreeRevertOutcome.Restored;
+        }
+
+        // Only what Git itself shows as untracked is deleted: never an ignored file or a path Git does not know.
+        var untracked = await _git.RunInWorkingTreeAsync(new[] { "ls-files", "--others", "--exclude-standard", "-z", "--", pathspec }, directory, cancellationToken: cancellationToken);
+        EnsureSuccess(untracked, "git ls-files");
+        if (!ListsExactly(untracked.StandardOutput, path))
+        {
+            return WorkingTreeRevertOutcome.Unknown;
+        }
+
+        if (new DirectoryInfo(full) is { Exists: true, LinkTarget: not null })
+        {
+            // A link to a directory is removed as a directory: File.Delete refuses it on Windows.
+            Directory.Delete(full);
+        }
+        else if (new FileInfo(full) is { } file && (file.Exists || file.LinkTarget is not null))
+        {
+            File.Delete(full);
+        }
+
+        return WorkingTreeRevertOutcome.Deleted;
+    }
+
+    /// <summary>
+    /// Tells whether the NUL-separated output of <c>git ls-files -z</c> names exactly one path, the given one.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="path">The path relative to the working tree, with <c>/</c> separators.</param>
+    /// <returns><see langword="true"/> when the output names the path and nothing else, as it does for a file.</returns>
+    private static bool ListsExactly(string output, string path)
+    {
+        var listed = output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Select(entry => entry.Replace('\\', '/')).Distinct(StringComparer.Ordinal).ToArray();
+        return listed.Length == 1 && string.Equals(listed[0], path, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc />
     public async Task<string?> GetRemoteHeadBranchAsync(string directory, string remoteUrl, string? sshCommand, CancellationToken cancellationToken = default)
     {
         Guard.NotBlank(directory, nameof(directory));

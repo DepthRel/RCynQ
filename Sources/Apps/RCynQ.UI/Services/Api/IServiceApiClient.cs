@@ -99,6 +99,43 @@ public interface IServiceApiClient
     /// <returns>A task that completes when the session is gone.</returns>
     Task CancelMergeAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
+    /// <summary>Gets the diff of a changed file against the version of the other node.</summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The diff.</returns>
+    Task<FileDiffResponse> GetFileDiffAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>Prepares the files of a diff for an external tool.</summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <param name="forChoice">Whether a part of the changes is chosen (an editable copy) or only looked at.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The files.</returns>
+    Task<CompareFilesResponse> PrepareCompareAsync(string path, bool forChoice, CancellationToken cancellationToken = default);
+
+    /// <summary>Chooses the changes of a file that go to the other node.</summary>
+    /// <param name="request">The choice.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>What the choice came to.</returns>
+    Task<PartialChoiceResult> ChooseChangesAsync(ChooseChangesRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets the version of a file that goes to the other node, as it was left in an external tool.</summary>
+    /// <param name="request">The version.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>What the choice came to.</returns>
+    Task<PartialChoiceResult> SetPartialContentAsync(SetPartialContentRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Lets the whole file go again.</summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>A task that completes when the choice is gone.</returns>
+    Task ResetPartialAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>Takes back the changes of a file of the working tree that are not staged (a Workstation only).</summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>Whether the file was restored, deleted or had nothing to take back.</returns>
+    Task<RevertChangesResult> RevertChangesAsync(string path, CancellationToken cancellationToken = default);
+
     /// <summary>Gets the configured links.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The links.</returns>

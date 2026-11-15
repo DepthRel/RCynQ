@@ -7,6 +7,7 @@ using RCynQ.Core.Enums;
 using RCynQ.Core.Patches;
 using RCynQ.Core.State;
 using RCynQ.Localization;
+using RCynQ.Sync.Partial;
 using RCynQ.Sync.State;
 using RCynQ.Sync.SyncBase;
 
@@ -51,6 +52,9 @@ public sealed class PatchService : IPatchService
     /// <summary>Tells which repository the node works with now, or <see langword="null"/> for the one it started with.</summary>
     private readonly IActiveRepository? _repository;
 
+    /// <summary>The choices of a part of the changes of files, or <see langword="null"/> when the node keeps none.</summary>
+    private readonly PartialChangeStore? _partials;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PatchService"/> class.
     /// </summary>
@@ -64,6 +68,7 @@ public sealed class PatchService : IPatchService
     /// <param name="tracker">The state tracker.</param>
     /// <param name="syncBase">The sync base manager.</param>
     /// <param name="repository">Tells which repository the node works with now; <see langword="null"/> for the one the node started with.</param>
+    /// <param name="partials">The choices of a part of the changes of files; <see langword="null"/> when the node keeps none.</param>
     public PatchService(
         NodeConfig node,
         PatchSendOperation send,
@@ -74,9 +79,11 @@ public sealed class PatchService : IPatchService
         IPatchFileStorage storage,
         StateTracker tracker,
         SyncBaseManager syncBase,
-        IActiveRepository? repository = null)
+        IActiveRepository? repository = null,
+        PartialChangeStore? partials = null)
     {
         _repository = repository;
+        _partials = partials;
         _node = node;
         _send = send;
         _resolve = resolve;
@@ -125,7 +132,7 @@ public sealed class PatchService : IPatchService
     {
         var snapshot = await _tracker.CaptureAsync(cancellationToken);
         var conflicts = await CountConflictsAsync(cancellationToken);
-        return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, snapshot.State, snapshot.SyncBase, snapshot.PendingChanges, conflicts, snapshot.ChangedFiles);
+        return new NodeSyncStatus(_node.Id, _node.Name, _node.Role, snapshot.State, snapshot.SyncBase, snapshot.PendingChanges, conflicts, snapshot.ChangedFiles, ResetPartials: TakeResetNotices());
     }
 
     /// <inheritdoc />
@@ -191,6 +198,13 @@ public sealed class PatchService : IPatchService
 
         return page;
     }
+
+    /// <summary>
+    /// Takes the files whose choice of a part of the changes was dropped since the last report.
+    /// </summary>
+    /// <returns>The paths, or <see langword="null"/> when there are none.</returns>
+    private IReadOnlyList<string>? TakeResetNotices()
+        => _partials?.TakeResetNotices() is { Count: > 0 } resets ? resets : null;
 
     /// <summary>
     /// The most patches read to find those of one repository.

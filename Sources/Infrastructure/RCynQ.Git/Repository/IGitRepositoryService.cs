@@ -342,6 +342,21 @@ public interface IGitRepositoryService
     Task DiscardLocalChangesAsync(string directory, IReadOnlyList<string> paths, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Takes back the changes of one file of the working tree that are not staged: a file in the index is restored from
+    /// the index, as <c>git checkout -- path</c> does, so its staged changes stay; a file Git lists as untracked is deleted.
+    /// </summary>
+    /// <param name="directory">The working tree, which is the root of the repository.</param>
+    /// <param name="path">The path relative to <paramref name="directory"/>, with <c>/</c> separators.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// What was done; <see cref="WorkingTreeRevertOutcome.Unknown"/> for a path Git neither has in the index nor lists as
+    /// untracked (an ignored file, a folder), which is left as it is.
+    /// </returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is unsafe or leaves the working tree.</exception>
+    /// <exception cref="GitExecutionException">git reported an error, for example for a file with an unresolved conflict.</exception>
+    Task<WorkingTreeRevertOutcome> RevertWorkingTreeFileAsync(string directory, string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Asks a remote repository which branch its <c>HEAD</c> points to.
     /// </summary>
     /// <param name="directory">An existing directory to run git in; it need not be a repository.</param>

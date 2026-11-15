@@ -23,6 +23,12 @@ public static class ApiLimits
     /// </summary>
     public const long MAX_GIT_BUNDLE_BYTES = 16L * 1024 * 1024 * 1024;
 
+    /// <summary>
+    /// The largest file whose diff is shown line by line and whose changes can be chosen one by one, in bytes, on either
+    /// side; a larger file goes whole.
+    /// </summary>
+    public const int MAX_DIFF_FILE_BYTES = 8 * 1024 * 1024;
+
     /// <summary>The longest answer of a peer that refused a request, in bytes, that is read for its reason.</summary>
     public const int MAX_REFUSAL_BYTES = 64 * 1024;
 }

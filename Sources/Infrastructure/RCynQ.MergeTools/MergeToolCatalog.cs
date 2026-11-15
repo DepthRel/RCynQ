@@ -64,7 +64,8 @@ public static class MergeToolCatalog
                 },
                 Template("--wait", "--merge", "{incoming}", "{local}", "{base}", "{result}"),
                 TrustExitCode: false,
-                new[] { "vscode", "code" }),
+                new[] { "vscode", "code" },
+                Template("--wait", "--diff", "{left}", "{right}")),
 
             // vsDiffMerge.exe <incoming> <local> <base> <result> /m, as Visual Studio registers itself for Git.
             new(
@@ -75,7 +76,8 @@ public static class MergeToolCatalog
                 Array.Empty<MergeToolCandidate>(),
                 Template("{incoming}", "{local}", "{base}", "{result}", "/m"),
                 TrustExitCode: true,
-                new[] { "vsdiffmerge", "vs", "visualstudio" }),
+                new[] { "vsdiffmerge", "vs", "visualstudio" },
+                Template("{left}", "{right}", "{leftLabel}", "{rightLabel}", "/t")),
 
             // kdiff3 --L1 <base title> --L2 <local title> --L3 <incoming title> -o <result> <base> <local> <incoming>.
             new(
@@ -94,7 +96,8 @@ public static class MergeToolCatalog
                 },
                 Template("--L1", "{baseLabel}", "--L2", "{localLabel}", "--L3", "{incomingLabel}", "-o", "{result}", "{base}", "{local}", "{incoming}"),
                 TrustExitCode: true,
-                new[] { "kdiff3" }),
+                new[] { "kdiff3" },
+                Template("--L1", "{leftLabel}", "--L2", "{rightLabel}", "{left}", "{right}")),
 
             // meld --auto-merge -L … -o <result> <local> <base> <incoming>: the middle pane is written to the result.
             new(
@@ -111,7 +114,8 @@ public static class MergeToolCatalog
                 },
                 Template("--auto-merge", "-L", "{localLabel}", "-L", "{baseLabel}", "-L", "{incomingLabel}", "--output", "{result}", "{local}", "{base}", "{incoming}"),
                 TrustExitCode: false,
-                new[] { "meld" }),
+                new[] { "meld" },
+                Template("-L", "{leftLabel}", "-L", "{rightLabel}", "{left}", "{right}")),
 
             // WinMergeU /e /u /fm /wl /wr /dl … /dm … /dr … /o <result> <local> <base> <incoming>: three panes, the middle one is saved.
             new(
@@ -127,7 +131,8 @@ public static class MergeToolCatalog
                 },
                 Template("/e", "/u", "/fm", "/wl", "/wr", "/dl", "{localLabel}", "/dm", "{baseLabel}", "/dr", "{incomingLabel}", "/o", "{result}", "{local}", "{base}", "{incoming}"),
                 TrustExitCode: false,
-                new[] { "winmerge" }),
+                new[] { "winmerge" },
+                Template("/e", "/u", "/wl", "/dl", "{leftLabel}", "/dr", "{rightLabel}", "{left}", "{right}")),
 
             // bcomp <local> <incoming> <base> -mergeoutput=<result>; a three-way merge needs Beyond Compare Pro.
             new(
@@ -146,7 +151,8 @@ public static class MergeToolCatalog
                 },
                 Template("{local}", "{incoming}", "{base}", "-mergeoutput={result}", "-lefttitle={localLabel}", "-righttitle={incomingLabel}", "-centertitle={baseLabel}", "-outputtitle={resultLabel}"),
                 TrustExitCode: false,
-                new[] { "bc", "bc3", "bc4", "bc5", "beyondcompare" }),
+                new[] { "bc", "bc3", "bc4", "bc5", "beyondcompare" },
+                Template("{left}", "{right}", "-lefttitle={leftLabel}", "-righttitle={rightLabel}", "-leftreadonly")),
 
             // p4merge -nb … -nl … -nr … -nm … <base> <incoming> <local> <result> (base, theirs, yours, result).
             new(
@@ -162,7 +168,8 @@ public static class MergeToolCatalog
                 },
                 Template("-nb", "{baseLabel}", "-nl", "{incomingLabel}", "-nr", "{localLabel}", "-nm", "{resultLabel}", "{base}", "{incoming}", "{local}", "{result}"),
                 TrustExitCode: false,
-                new[] { "p4merge" }),
+                new[] { "p4merge" },
+                Template("-nl", "{leftLabel}", "-nr", "{rightLabel}", "{left}", "{right}")),
 
             // TortoiseGitMerge /base: /theirs: /mine: /merged: with the titles of the panes.
             new(
@@ -176,7 +183,8 @@ public static class MergeToolCatalog
                 },
                 Template("/base:{base}", "/theirs:{incoming}", "/mine:{local}", "/merged:{result}", "/basename:{baseLabel}", "/theirsname:{incomingLabel}", "/minename:{localLabel}", "/mergedname:{resultLabel}"),
                 TrustExitCode: false,
-                new[] { "tortoisemerge", "tortoisegitmerge" })
+                new[] { "tortoisemerge", "tortoisegitmerge" },
+                Template("/base:{left}", "/mine:{right}", "/basename:{leftLabel}", "/minename:{rightLabel}"))
         };
 
         // <ide> merge <local> <incoming> <base> <result>: the merge dialog of the IDE, also when the IDE is open already.
@@ -198,7 +206,8 @@ public static class MergeToolCatalog
                 },
                 Template("merge", "{local}", "{incoming}", "{base}", "{result}"),
                 TrustExitCode: false,
-                new[] { launcher }));
+                new[] { launcher },
+                Template("diff", "{left}", "{right}")));
         }
 
         return profiles;

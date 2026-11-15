@@ -23,6 +23,10 @@ namespace RCynQ.Core.State;
 /// conflicts are known, but <paramref name="SyncBase"/>, <paramref name="PendingChanges"/> and
 /// <paramref name="ChangedFiles"/> are not yet. The service tells when the look is done with a state event.
 /// </param>
+/// <param name="ResetPartials">
+/// The files whose choice of a part of the changes was dropped since the last report, because the version of the peer it
+/// was made on changed; <see langword="null"/> or empty when there are none. Each is reported once.
+/// </param>
 public sealed record NodeSyncStatus(
     NodeId NodeId,
     string Name,
@@ -32,4 +36,5 @@ public sealed record NodeSyncStatus(
     IReadOnlyList<FileChange> PendingChanges,
     int ConflictPendingCount,
     IReadOnlyList<ChangedFile>? ChangedFiles = null,
-    bool IsPreliminary = false);
+    bool IsPreliminary = false,
+    IReadOnlyList<string>? ResetPartials = null);

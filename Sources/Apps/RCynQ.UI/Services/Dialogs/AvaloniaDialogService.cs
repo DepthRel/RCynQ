@@ -93,6 +93,13 @@ public sealed class AvaloniaDialogService : IDialogService
     }
 
     /// <inheritdoc />
+    public Task<bool> ShowFileDiffAsync(FileDiffDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new FileDiffDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
     public Task ShowTextAsync(string title, string text)
         => ShowAsync(new TextDialog { DataContext = new TextDialogViewModel(title, text) });
 
@@ -106,6 +113,13 @@ public sealed class AvaloniaDialogService : IDialogService
     /// <inheritdoc />
     public Task<bool> ConfirmAsync(string title, string message)
         => ShowAsync(new ConfirmDialog { DataContext = new ConfirmDialogViewModel(title, message) });
+
+    /// <inheritdoc />
+    public Task<bool> ConfirmDangerAsync(DangerConfirmDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new DangerConfirmDialog { DataContext = dialog });
+    }
 
     /// <inheritdoc />
     public async Task<string?> PickFolderAsync(string title)

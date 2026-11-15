@@ -1,0 +1,78 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:items="using:RCynQ.UI.ViewModels.Items"
+                     x:Class="RCynQ.UI.Views.Dialogs.FileDiffDialog"
+                     x:DataType="vm:FileDiffDialogViewModel"
+                     Title="{Binding Title}"
+                     Width="1000" Height="720" MinWidth="520" MinHeight="340"
+                     WindowStartupLocation="CenterOwner">
+  <dialogs:DialogWindow.Styles>
+    <!-- The lines only the neighbour has, and the lines only the working tree has. -->
+    <Style Selector="Border.diff-line.removed">
+      <Setter Property="Background" Value="{StaticResource DangerSubtleBrush}" />
+    </Style>
+    <Style Selector="Border.diff-line.added">
+      <Setter Property="Background" Value="{StaticResource SuccessSubtleBrush}" />
+    </Style>
+  </dialogs:DialogWindow.Styles>
+
+  <Grid Margin="18" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+    <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding NoticeText}" IsVisible="{Binding HasNotice}" />
+
+    <!-- Every change at once, and how many of them go. -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanChoose}">
+      <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Diff.All}" Command="{Binding SelectAllCommand}" />
+      <Button Classes="outline" Padding="10,3" MinHeight="26" FontSize="12" Content="{loc:Loc Diff.None}" Command="{Binding SelectNoneCommand}" />
+      <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding CountText}" />
+    </StackPanel>
+
+    <!-- The rows are virtualized: a file with thousands of changed lines opens at once. -->
+    <Border Grid.Row="2" Classes="card">
+      <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.Template>
+          <ControlTemplate>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </ScrollViewer>
+          </ControlTemplate>
+        </ItemsControl.Template>
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.DataTemplates>
+          <DataTemplate DataType="items:DiffBlockRowViewModel">
+            <Border Padding="10,10,10,4">
+              <Panel>
+                <CheckBox IsVisible="{Binding CanChoose}" IsChecked="{Binding IsSelected}" MinHeight="0" Padding="8,0,0,0">
+                  <TextBlock Classes="secondary" FontWeight="SemiBold" Text="{Binding Text}" />
+                </CheckBox>
+                <TextBlock IsVisible="{Binding !CanChoose}" Classes="secondary" FontWeight="SemiBold" Text="{Binding Text}" />
+              </Panel>
+            </Border>
+          </DataTemplate>
+          <DataTemplate DataType="items:DiffLineRowViewModel">
+            <Border Classes="diff-line" Classes.removed="{Binding IsRemoved}" Classes.added="{Binding IsAdded}" Padding="10,0">
+              <Grid ColumnDefinitions="48,48,18,*">
+                <TextBlock Classes="mono muted" FontSize="12.5" TextAlignment="Right" Margin="0,0,8,0" Text="{Binding BaseNumber}" />
+                <TextBlock Grid.Column="1" Classes="mono muted" FontSize="12.5" TextAlignment="Right" Margin="0,0,8,0" Text="{Binding WorkNumber}" />
+                <TextBlock Grid.Column="2" Classes="mono" FontSize="12.5" Text="{Binding Marker}" />
+                <TextBlock Grid.Column="3" Classes="mono" FontSize="12.5" TextWrapping="NoWrap" Text="{Binding Text}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.DataTemplates>
+      </ItemsControl>
+    </Border>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Classes="outline" Content="{loc:Loc Common.Close}" IsCancel="True" Command="{Binding CancelCommand}" IsVisible="{Binding !CanChoose}" />
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" IsVisible="{Binding CanChoose}" />
+      <Button Classes="accent" Content="{loc:Loc Diff.Apply}" IsDefault="True" Command="{Binding ApplyCommand}" IsVisible="{Binding CanChoose}" />
+    </StackPanel>
+  </Grid>
+</dialogs:DialogWindow>

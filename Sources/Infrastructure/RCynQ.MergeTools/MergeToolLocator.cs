@@ -97,7 +97,7 @@ public sealed class MergeToolLocator : IMergeToolLocator
 
             if (profile.Discovery == MergeToolDiscovery.Paths && seen.Add(path))
             {
-                configured = new MergeTool(profile.Id, profile.Name, path, profile.Arguments, profile.TrustExitCode);
+                configured = new MergeTool(profile.Id, profile.Name, path, profile.Arguments, profile.TrustExitCode, profile.DiffArguments);
                 tools.Add(configured);
                 return configured;
             }
@@ -117,7 +117,7 @@ public sealed class MergeToolLocator : IMergeToolLocator
         {
             if (FindInPath(command) is { } path)
             {
-                yield return new MergeTool(profile.Id, profile.Name, path, profile.Arguments, profile.TrustExitCode);
+                yield return new MergeTool(profile.Id, profile.Name, path, profile.Arguments, profile.TrustExitCode, profile.DiffArguments);
             }
         }
 
@@ -125,7 +125,7 @@ public sealed class MergeToolLocator : IMergeToolLocator
         {
             foreach (var (path, label) in Resolve(candidate.Path))
             {
-                yield return new MergeTool(profile.Id, label ?? profile.Name, path, profile.Arguments, profile.TrustExitCode);
+                yield return new MergeTool(profile.Id, label ?? profile.Name, path, profile.Arguments, profile.TrustExitCode, profile.DiffArguments);
             }
         }
     }
@@ -178,7 +178,7 @@ public sealed class MergeToolLocator : IMergeToolLocator
                 installation.Name,
                 installation.InstallationPath.TrimEnd('\\', '/') + Separator + VisualStudioInstallations.MERGE_TOOL_PATH,
                 profile.Arguments,
-                profile.TrustExitCode))
+                profile.TrustExitCode, profile.DiffArguments))
             .Where(tool => _environment.FileExists(tool.ExecutablePath))
             .ToList();
     }

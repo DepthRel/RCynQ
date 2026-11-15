@@ -257,7 +257,10 @@ public sealed class App : Application
         var processes = new SystemProcessRunner(Localizer);
         var machine = new SystemMergeToolEnvironment();
         var mergeTools = new MergeToolPreferences(new MergeToolLocator(machine, processes), uiSettings, machine);
-        var merges = new ExternalMergeCoordinator(Localizer, api, new MergeToolLauncher(Localizer, new SystemMergeToolProcessStarter(Localizer), machine));
+        var launcher = new MergeToolLauncher(Localizer, new SystemMergeToolProcessStarter(Localizer), machine);
+        var merges = new ExternalMergeCoordinator(Localizer, api, launcher);
+        var changesView = new ChangesViewPreferences(uiSettings);
+        var diffs = new ExternalDiffCoordinator(Localizer, api, launcher);
 
         // New versions: the list of releases on the project page, compared with the version that runs.
         var dispatcher = new AvaloniaUiDispatcher();
@@ -279,7 +282,7 @@ public sealed class App : Application
                 new ElevatedCliRunner(Localizer, settings.ConfigPath, cli),
                 new LocalNodeSettings(Localizer, settings.ConfigPath),
                 new ServerSetupService(Localizer, new SystemHostSystemSource(), new SystemElevatedProcessLauncher())),
-            new SyncViewModel(Localizer, api, dialogs, uiSettings, mergeTools, merges),
+            new SyncViewModel(Localizer, api, dialogs, uiSettings, mergeTools, merges, changesView, diffs),
             new TunnelViewModel(Localizer, api),
             new DiagnosticsViewModel(Localizer, api, dialogs),
             new BranchViewModel(Localizer, api, dialogs, uiSettings),
@@ -289,7 +292,7 @@ public sealed class App : Application
                 languageSelector,
                 api,
                 dialogs,
-                new MergeToolSettingsViewModel(Localizer, mergeTools, dialogs),
+                new MergeToolSettingsViewModel(Localizer, mergeTools, dialogs, changesView),
                 tray,
                 new NodeResetCoordinator(Localizer, api, controller, new NodeDataEraser()),
                 updates),

@@ -21,5 +21,11 @@ public enum MergeToolTemplateProblem
     MissingIncoming,
 
     /// <summary>The tool is not told where to write the result.</summary>
-    MissingResult
+    MissingResult,
+
+    /// <summary>The left file of a diff is not handed to the tool.</summary>
+    MissingLeft,
+
+    /// <summary>The right file of a diff is not handed to the tool.</summary>
+    MissingRight
 }

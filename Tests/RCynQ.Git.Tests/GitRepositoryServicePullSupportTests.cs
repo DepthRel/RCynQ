@@ -102,6 +102,98 @@ public sealed class GitRepositoryServicePullSupportTests : IDisposable
     }
 
     /// <summary>
+    /// Verifies that a revert restores a file from the index, so what was staged stays staged and only the later edits go.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Revert_Restores_The_Index_Version_And_Keeps_Staged_Changes()
+    {
+        if (!await GitIntegrationTests.GitAvailableAsync())
+        {
+            return;
+        }
+
+        await CreateRepositoryAsync();
+        _repo.Write("a.txt", "staged\n");
+        await RunAsync("add", "a.txt");
+        _repo.Write("a.txt", "staged and edited\n");
+
+        var outcome = await _service.RevertWorkingTreeFileAsync(_repo.Path, "a.txt");
+
+        outcome.Should().Be(WorkingTreeRevertOutcome.Restored);
+        File.ReadAllText(_repo["a.txt"]).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("staged\n");
+        var staged = await _git.RunAsync(new[] { "diff", "--cached", "--name-only" }, _repo.Path);
+        staged.StandardOutput.Trim().Should().Be("a.txt");
+    }
+
+    /// <summary>
+    /// Verifies that a file whose changes are all staged has nothing to revert and is left as it is.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Revert_Of_A_Fully_Staged_File_Changes_Nothing()
+    {
+        if (!await GitIntegrationTests.GitAvailableAsync())
+        {
+            return;
+        }
+
+        await CreateRepositoryAsync();
+        _repo.Write("a.txt", "staged\n");
+        await RunAsync("add", "a.txt");
+
+        var outcome = await _service.RevertWorkingTreeFileAsync(_repo.Path, "a.txt");
+
+        outcome.Should().Be(WorkingTreeRevertOutcome.NothingToRevert);
+        File.ReadAllText(_repo["a.txt"]).Replace("\r\n", "\n", StringComparison.Ordinal).Should().Be("staged\n");
+    }
+
+    /// <summary>
+    /// Verifies that a deleted tracked file comes back, an untracked one is deleted, and an ignored one is left alone.
+    /// </summary>
+    /// <returns>A task representing the test.</returns>
+    [Fact]
+    public async Task Revert_Brings_Back_Deleted_Removes_Untracked_And_Leaves_Ignored_Files()
+    {
+        if (!await GitIntegrationTests.GitAvailableAsync())
+        {
+            return;
+        }
+
+        await CreateRepositoryAsync();
+        File.Delete(_repo["sub/b.txt"]);
+        _repo.Write("[x].txt", "untracked with pattern characters\n");
+        _repo.Write("x.txt", "must survive: '[x].txt' is not a pattern\n");
+        _repo.Write("ignored.log", "noise\n");
+
+        (await _service.RevertWorkingTreeFileAsync(_repo.Path, "sub/b.txt")).Should().Be(WorkingTreeRevertOutcome.Restored);
+        (await _service.RevertWorkingTreeFileAsync(_repo.Path, "[x].txt")).Should().Be(WorkingTreeRevertOutcome.Deleted);
+        (await _service.RevertWorkingTreeFileAsync(_repo.Path, "ignored.log")).Should().Be(WorkingTreeRevertOutcome.Unknown);
+        (await _service.RevertWorkingTreeFileAsync(_repo.Path, "sub")).Should().Be(WorkingTreeRevertOutcome.Unknown);
+
+        File.Exists(_repo["sub/b.txt"]).Should().BeTrue();
+        File.Exists(_repo["[x].txt"]).Should().BeFalse();
+        File.Exists(_repo["x.txt"]).Should().BeTrue();
+        File.Exists(_repo["ignored.log"]).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Verifies that a revert refuses paths leaving the working tree or pointing into Git metadata.
+    /// </summary>
+    /// <param name="path">The unsafe path.</param>
+    /// <returns>A task representing the test.</returns>
+    [Theory]
+    [InlineData("../outside.txt")]
+    [InlineData(".git/config")]
+    [InlineData("-rf")]
+    public async Task Revert_Refuses_Unsafe_Paths(string path)
+    {
+        var revert = () => _service.RevertWorkingTreeFileAsync(_repo.Path, path);
+
+        await revert.Should().ThrowAsync<ArgumentException>();
+    }
+
+    /// <summary>
     /// Verifies that paths leaving the working tree or pointing into Git metadata are refused.
     /// </summary>
     /// <param name="path">The unsafe path.</param>

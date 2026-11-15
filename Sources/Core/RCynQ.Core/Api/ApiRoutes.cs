@@ -93,6 +93,24 @@ public static class ApiRoutes
     /// <summary>Bring a patch file into the working tree without committing it, or take it out again.</summary>
     public const string PATCH_FILE_APPLY = "/patches/file/apply";
 
+    /// <summary>The diff of one changed file against the version of the peer (<c>?path=</c>).</summary>
+    public const string CHANGES_DIFF = "/changes/diff";
+
+    /// <summary>Prepare the files of a diff of one changed file in an external tool.</summary>
+    public const string CHANGES_COMPARE = "/changes/compare";
+
+    /// <summary>Choose the changes of a file that go to the peer (PUT), or let the whole file go again (DELETE, <c>?path=</c>).</summary>
+    public const string CHANGES_PARTIAL = "/changes/partial";
+
+    /// <summary>Set the version of a file that goes to the peer, as the user left it in an external tool (PUT).</summary>
+    public const string CHANGES_PARTIAL_CONTENT = "/changes/partial/content";
+
+    /// <summary>Take back the changes of one file of the working tree that are not staged (POST); a Workstation only.</summary>
+    public const string CHANGES_REVERT = "/changes/revert";
+
+    /// <summary>The query parameter that names a file of the working tree.</summary>
+    public const string PATH_PARAMETER = "path";
+
     /// <summary>Create the sync base from the working tree.</summary>
     public const string BASELINE = "/patches/baseline";
 
@@ -315,6 +333,20 @@ public static class ApiRoutes
     /// <param name="id">The patch identifier.</param>
     /// <returns>The path.</returns>
     public static string PatchDiffPath(Guid id) => $"/patches/{id}/diff";
+
+    /// <summary>
+    /// Builds the path of the diff of one changed file.
+    /// </summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <returns>The path with its query.</returns>
+    public static string ChangesDiffPath(string path) => $"{CHANGES_DIFF}?{PATH_PARAMETER}={Uri.EscapeDataString(path)}";
+
+    /// <summary>
+    /// Builds the path that lets the whole file go again.
+    /// </summary>
+    /// <param name="path">The path of the file relative to the working tree.</param>
+    /// <returns>The path with its query.</returns>
+    public static string ChangesPartialPath(string path) => $"{CHANGES_PARTIAL}?{PATH_PARAMETER}={Uri.EscapeDataString(path)}";
 
     /// <summary>
     /// Builds the path of one link.

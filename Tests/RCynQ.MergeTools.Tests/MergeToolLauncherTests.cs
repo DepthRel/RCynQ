@@ -66,4 +66,26 @@ public sealed class MergeToolLauncherTests
     /// <param name="machine">The machine.</param>
     /// <returns>The launcher.</returns>
     private MergeToolLauncher Launcher(IMergeToolEnvironment machine) => new(TestTexts.English, _processes, machine);
+
+    /// <summary>
+    /// Verifies that a diff starts the tool with its diff template filled in, in the folder of the left file, and that a
+    /// tool without a diff template is reported instead of started.
+    /// </summary>
+    [Fact]
+    public void A_Diff_Starts_With_The_Diff_Template()
+    {
+        ProcessSpec? started = null;
+        _processes.Start(Arg.Do<ProcessSpec>(spec => started = spec)).Returns(Substitute.For<IRunningProcess>());
+        var files = new DiffToolFiles(Path.Combine(_folder, "base", "a.cs"), Path.Combine(_folder, "a.cs"));
+        var labels = new DiffToolLabels("Origin", "Working tree");
+        var tool = new MergeTool("custom", "diff", EXECUTABLE, new[] { "{local}", "{incoming}", "{result}" }, false, new[] { "--title={leftLabel}", "{left}", "{right}" });
+        var machine = new FakeMergeToolEnvironment(MergeToolPlatform.Windows, @"C:\Users\me").WithFiles(EXECUTABLE);
+
+        Launcher(machine).StartDiff(tool, files, labels);
+        var withoutDiff = () => Launcher(machine).StartDiff(tool with { DiffArguments = null }, files, labels);
+
+        started!.Arguments.Should().Equal("--title=Origin", files.Left, files.Right);
+        started.WorkingDirectory.Should().Be(Path.Combine(_folder, "base"));
+        withoutDiff.Should().Throw<SyncBridgeException>().Which.Message.Should().Contain("diff");
+    }
 }

@@ -23,6 +23,7 @@ using RCynQ.Sync.Conflicts;
 using RCynQ.Sync.Content;
 using RCynQ.Sync.History;
 using RCynQ.Sync.Locking;
+using RCynQ.Sync.Partial;
 using RCynQ.Sync.Paths;
 using RCynQ.Sync.Security;
 using RCynQ.Sync.Services;
@@ -61,6 +62,9 @@ public sealed class SyncFixture : IDisposable
 
     /// <summary>The sync base manager of the Workstation node, created on first use.</summary>
     private SyncBaseManager? _workstationSyncBase;
+
+    /// <summary>The store of the choices of the Workstation, created on first use.</summary>
+    private PartialChangeStore? _workstationPartials;
 
     /// <summary>The sync base manager of the Origin node, created on first use.</summary>
     private SyncBaseManager? _originSyncBase;
@@ -144,6 +148,18 @@ public sealed class SyncFixture : IDisposable
 
     /// <summary>Gets the payload storage.</summary>
     public InMemoryPatchFileStorage Storage { get; } = new();
+
+    /// <summary>Gets the choices of a part of the changes of files of the Workstation.</summary>
+    public InMemoryPartialChangeRepository PartialChanges { get; } = new();
+
+    /// <summary>Gets the store of the choices of the Workstation.</summary>
+    public PartialChangeStore WorkstationPartials => _workstationPartials ??= new(PartialChanges, WorkstationPaths, Paths);
+
+    /// <summary>Creates the service of the choices of the Workstation.</summary>
+    /// <param name="timeProvider">The clock; the system clock when <see langword="null"/>.</param>
+    /// <returns>The service.</returns>
+    public PartialChangeService CreatePartialChangeService(TimeProvider? timeProvider = null)
+        => new(TestTexts.English, WorkstationNode, WorkstationPaths, Paths, WorkstationPartials, timeProvider ?? TimeProvider.System);
 
     /// <summary>Gets the history repository mock.</summary>
     public ISyncHistoryRepository History { get; } = Substitute.For<ISyncHistoryRepository>();
@@ -272,7 +288,8 @@ public sealed class SyncFixture : IDisposable
             outcomes,
             tracker,
             WorkstationLock,
-            WorkstationSyncBase);
+            WorkstationSyncBase,
+            WorkstationPartials);
         var resolve = new PatchResolveOperation(
             TestTexts.English,
             WorkstationNode,
@@ -285,7 +302,7 @@ public sealed class SyncFixture : IDisposable
             tracker,
             WorkstationLock,
             WorkstationSyncBase);
-        return new PatchService(WorkstationNode, send, resolve, CreatePatchFileOperation(WorkstationNode), Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase, repository);
+        return new PatchService(WorkstationNode, send, resolve, CreatePatchFileOperation(WorkstationNode), Substitute.For<IPatchReceiver>(), Patches, Storage, tracker, WorkstationSyncBase, repository, WorkstationPartials);
     }
 
     /// <summary>
@@ -310,7 +327,8 @@ public sealed class SyncFixture : IDisposable
             GitRepository,
             CreateTracker(node),
             LockOf(node),
-            appData);
+            appData,
+            isWorkstation ? WorkstationPartials : null);
     }
 
     /// <summary>
@@ -424,7 +442,8 @@ public sealed class SyncFixture : IDisposable
             node,
             TimeProvider.System,
             SyncBaseOf(node),
-            LockOf(node));
+            LockOf(node),
+            partials: node.Id == WorkstationNode.Id ? WorkstationPartials : null);
 
     /// <summary>
     /// Creates a sync base manager.

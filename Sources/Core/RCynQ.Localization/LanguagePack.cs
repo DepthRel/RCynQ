@@ -18,6 +18,11 @@ public sealed class LanguagePack : ILanguagePack
     public const string NAME_KEY = "Language.Name";
 
     /// <summary>
+    /// The options of reading a file: a key given twice is an error, not a text that silently replaces the first.
+    /// </summary>
+    private static readonly JsonSerializerOptions _readOptions = new() { AllowDuplicateProperties = false };
+
+    /// <summary>
     /// The texts by key.
     /// </summary>
     private readonly IReadOnlyDictionary<string, string> _texts;
@@ -52,14 +57,14 @@ public sealed class LanguagePack : ILanguagePack
     /// </summary>
     /// <param name="json">The JSON document.</param>
     /// <returns>The pack.</returns>
-    /// <exception cref="InvalidDataException">The document is not a flat object of strings or does not name its language.</exception>
+    /// <exception cref="InvalidDataException">The document is not a flat object of strings, gives a key twice or does not name its language.</exception>
     public static LanguagePack FromJson(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
         Dictionary<string, string>? texts;
         try
         {
-            texts = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            texts = JsonSerializer.Deserialize<Dictionary<string, string>>(json, _readOptions);
         }
         catch (JsonException ex)
         {

@@ -62,6 +62,8 @@
               </DockPanel>
               <TextBox Classes="mono" Text="{Binding CustomArguments}" PlaceholderText="{loc:Loc Settings.MergeTool.ArgumentsWatermark}" />
               <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.ArgumentsHint}" />
+              <TextBox Classes="mono" Text="{Binding CustomDiffArguments}" PlaceholderText="{loc:Loc Settings.MergeTool.DiffArgumentsWatermark}" />
+              <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.DiffArgumentsHint}" />
               <Button Classes="outline" HorizontalAlignment="Left" Content="{loc:Loc Settings.MergeTool.Save}" Command="{Binding SaveCustomCommand}" />
             </StackPanel>
 
@@ -69,6 +71,18 @@
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SavedText}"
                        IsVisible="{Binding SavedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.MergeTool.Hint}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Where a double click on a changed file shows its diff, and where a part of its changes is chosen. -->
+      <StackPanel IsVisible="{Binding MergeTool.HasChangesView, FallbackValue=False}">
+        <TextBlock Classes="section" Text="{loc:Loc Settings.ChangesView.Title}" />
+        <Border Classes="card">
+          <StackPanel Margin="16,14" Spacing="10" DataContext="{Binding MergeTool}" x:DataType="vm:MergeToolSettingsViewModel">
+            <RadioButton GroupName="ChangesView" IsChecked="{Binding IsBuiltInView}" Content="{loc:Loc Settings.ChangesView.BuiltIn}" />
+            <RadioButton GroupName="ChangesView" IsChecked="{Binding IsExternalView}" Content="{loc:Loc Settings.ChangesView.External}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{loc:Loc Settings.ChangesView.Hint}" />
           </StackPanel>
         </Border>
       </StackPanel>

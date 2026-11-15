@@ -56,6 +56,9 @@ public sealed class RCynQDbContext : DbContext
     /// <summary>Gets the set of the tickets of invitations.</summary>
     public DbSet<EnrollmentTicketEntity> EnrollmentTickets => Set<EnrollmentTicketEntity>();
 
+    /// <summary>Gets the set of the choices of a part of the changes of files.</summary>
+    public DbSet<PartialChangeEntity> PartialChanges => Set<PartialChangeEntity>();
+
     /// <summary>
     /// Configures table names, keys, relations and value conversions.
     /// </summary>
@@ -119,6 +122,12 @@ public sealed class RCynQDbContext : DbContext
         {
             entity.ToTable("EnrollmentTickets");
             entity.HasKey(ticket => ticket.Id);
+        });
+
+        modelBuilder.Entity<PartialChangeEntity>(entity =>
+        {
+            entity.ToTable("PartialChanges");
+            entity.HasKey(change => new { change.RepositoryId, change.Path });
         });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

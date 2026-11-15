@@ -73,6 +73,13 @@ public interface IDialogService
     Task<bool> ShowConnectWizardAsync(ConnectWizardViewModel wizard);
 
     /// <summary>
+    /// Shows the diff of a changed file, where a part of its changes can be chosen.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user applied the choice.</returns>
+    Task<bool> ShowFileDiffAsync(FileDiffDialogViewModel dialog);
+
+    /// <summary>
     /// Shows read-only text such as a diff.
     /// </summary>
     /// <param name="title">The window title.</param>
@@ -87,6 +94,13 @@ public interface IDialogService
     /// <param name="message">The message.</param>
     /// <returns><see langword="true"/> when confirmed.</returns>
     Task<bool> ConfirmAsync(string title, string message);
+
+    /// <summary>
+    /// Asks the user to confirm an action that cannot be undone; Cancel is the main answer.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user chose the action.</returns>
+    Task<bool> ConfirmDangerAsync(DangerConfirmDialogViewModel dialog);
 
     /// <summary>
     /// Shows the confirmation of a reset of the node, which the user confirms by typing the identifier of the node.
