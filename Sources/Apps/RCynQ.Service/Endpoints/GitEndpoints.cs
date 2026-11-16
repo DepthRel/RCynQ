@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -50,9 +51,100 @@ public static class GitEndpoints
                 ? Results.Ok(await git.PullAsync(ct))
                 : Results.NotFound(new ErrorResponse(localizer.Format("Api.NoPull", node.Role))));
 
+        app.MapGet(ApiRoutes.GIT_SWITCH, ListSwitchableAsync);
+        app.MapPost(ApiRoutes.GIT_SWITCH, SwitchAsync);
+        app.MapPost(ApiRoutes.GIT_SWITCH_PATCH, BuildSwitchPatchAsync);
         app.MapPost(ApiRoutes.GIT_BUNDLE, BundleAsync);
         app.MapPost(ApiRoutes.GIT_BRANCHES, BranchesAsync);
         return app;
+    }
+
+    /// <summary>
+    /// Handles <c>GET /git/switch</c>: the branches the working tree of a Workstation can be switched to.
+    /// </summary>
+    /// <param name="node">The local node.</param>
+    /// <param name="switcher">The branch switch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The branches, or the reason there are none.</returns>
+    private static async Task<IResult> ListSwitchableAsync(NodeConfig node, BranchSwitchService switcher, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!RoleCapabilities.For(node.Role).FetchesGit)
+        {
+            return Results.NotFound(new ErrorResponse(localizer.Format("BranchSwitch.NotWorkstation", node.Role)));
+        }
+
+        try
+        {
+            return Results.Ok(await switcher.ListAsync(cancellationToken));
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /git/switch</c>: switches the working tree of a Workstation to another branch, and notes it in the log.
+    /// </summary>
+    /// <param name="request">The branch and what happens to uncommitted changes.</param>
+    /// <param name="node">The local node.</param>
+    /// <param name="switcher">The branch switch service.</param>
+    /// <param name="loggers">The logger factory.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>How the switch ended.</returns>
+    private static async Task<IResult> SwitchAsync(SwitchBranchRequest request, NodeConfig node, BranchSwitchService switcher, ILoggerFactory loggers, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!RoleCapabilities.For(node.Role).FetchesGit)
+        {
+            return Results.NotFound(new ErrorResponse(localizer.Format("BranchSwitch.NotWorkstation", node.Role)));
+        }
+
+        var logger = loggers.CreateLogger(typeof(GitEndpoints));
+        try
+        {
+            var result = await switcher.SwitchAsync(request, cancellationToken);
+            logger.LogInformation(
+                "Branch switch to {Branch}, mode {Mode}, saved patch {Hash}: {Outcome}; now on {Current}.",
+                request.Branch,
+                request.Mode,
+                request.Patch is { Length: > 0 } patch ? Convert.ToHexStringLower(SHA256.HashData(patch)) : "none",
+                result.Outcome,
+                result.Branch?.Branch ?? "(detached HEAD)");
+            return Results.Ok(result);
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("Branch switch to {Branch} failed: {Error}", request.Branch, ex.Message);
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
+    }
+
+    /// <summary>
+    /// Handles <c>POST /git/switch/patch</c>: the patch of the uncommitted changes of the working tree, which the user saves
+    /// before a switch takes them out.
+    /// </summary>
+    /// <param name="node">The local node.</param>
+    /// <param name="switcher">The branch switch service.</param>
+    /// <param name="localizer">The localizer that words the answer for the client.</param>
+    /// <param name="cancellationToken">The request token.</param>
+    /// <returns>The patch, or the reason it cannot be built.</returns>
+    private static async Task<IResult> BuildSwitchPatchAsync(NodeConfig node, BranchSwitchService switcher, ILocalizer localizer, CancellationToken cancellationToken)
+    {
+        if (!RoleCapabilities.For(node.Role).FetchesGit)
+        {
+            return Results.NotFound(new ErrorResponse(localizer.Format("BranchSwitch.NotWorkstation", node.Role)));
+        }
+
+        try
+        {
+            return Results.File(await switcher.BuildChangesPatchAsync(cancellationToken), "text/x-diff; charset=utf-8");
+        }
+        catch (Exception ex) when (ex is SyncBridgeException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return Results.BadRequest(new ErrorResponse(localizer.Describe(ex)));
+        }
     }
 
     /// <summary>

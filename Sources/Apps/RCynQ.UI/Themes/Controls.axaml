@@ -313,6 +313,50 @@
   <Style Selector="Button.tool.toggled">
     <Setter Property="ZIndex" Value="1" />
   </Style>
+  <!-- A square tool button that stays pressed in while what it opens is open (a filter panel) -->
+  <Style Selector="ToggleButton.outline.tool">
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="{StaticResource CardRadius}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.outline.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderHoverBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.outline.tool:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource PressedBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderHoverBrush}" />
+  </Style>
+  <!-- Pressed in, or a filter is set: the accent look of the toggled outline buttons. Must follow the styles above. -->
+  <Style Selector="ToggleButton.outline.tool:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.outline.tool.toggled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.outline.tool:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.outline.tool.toggled:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource AccentHoverBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+  </Style>
+  <!-- A panel that opens next to a control, such as the filter of a list: the window colour, a border and a shadow -->
+  <Style Selector="Border.popup-panel">
+    <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource CardRadius}" />
+    <Setter Property="Padding" Value="16,14" />
+    <Setter Property="BoxShadow" Value="0 4 16 0 #33000000" />
+    <Setter Property="Margin" Value="0,0,12,12" />
+  </Style>
   <Style Selector="Border.toolbar-divider">
     <Setter Property="Width" Value="1" />
     <Setter Property="Height" Value="20" />

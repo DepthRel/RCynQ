@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
+using RCynQ.Core.Enums;
 using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Wizard;
@@ -69,6 +70,20 @@ public sealed class AvaloniaDialogService : IDialogService
     {
         ArgumentNullException.ThrowIfNull(dialog);
         return ShowAsync(new ApplyPatchDialog { DataContext = dialog });
+    }
+
+    /// <inheritdoc />
+    public async Task<BranchSwitchMode?> ShowSwitchBranchDialogAsync(SwitchBranchDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return await ShowAsync(new SwitchBranchDialog { DataContext = dialog }) ? dialog.Result : null;
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ShowRestoreChangesDialogAsync(RestoreChangesDialogViewModel dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        return ShowAsync(new RestoreChangesDialog { DataContext = dialog });
     }
 
     /// <inheritdoc />

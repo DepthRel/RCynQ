@@ -201,6 +201,21 @@ public sealed class ServiceApiClient : IServiceApiClient, IDisposable
     public Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default) => PostAsync<GitOperationResult>(ApiRoutes.GIT_PULL, null, cancellationToken, longRunning: true);
 
     /// <inheritdoc />
+    public Task<GitSwitchBranchesResponse> GetSwitchableBranchesAsync(CancellationToken cancellationToken = default) => GetAsync<GitSwitchBranchesResponse>(ApiRoutes.GIT_SWITCH, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<byte[]> BuildSwitchPatchAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _long.PostAsync(ApiRoutes.GIT_SWITCH_PATCH, null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default)
+        => PostAsync<SwitchBranchResult>(ApiRoutes.GIT_SWITCH, request, cancellationToken, longRunning: true);
+
+    /// <inheritdoc />
     public Task<DiagnosticsEvent> RunDiagnosticsAsync(CancellationToken cancellationToken = default) => PostAsync<DiagnosticsEvent>(ApiRoutes.DIAGNOSTICS_RUN, null, cancellationToken);
 
     /// <inheritdoc />

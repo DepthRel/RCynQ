@@ -139,6 +139,8 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
         Read(_workstationWork, "readme.txt").Should().Be("first\n");
         Read(_workstationWork, "src/app.cs").Should().Be("class App {}\n");
         (await CountCommitsAsync(_workstationWork)).Should().Be(1);
+        (await new GitBranchService(_git).GetRemoteHeadAsync(_workstationWork, GitChannelService.REMOTE_NAME)).Should()
+            .Be("main", "the branch the Origin has checked out is recorded like origin/HEAD");
 
         Write(_originRepo, "readme.txt", "second\n");
         Write(_originRepo, "docs/new.md", "new file\n");
@@ -533,7 +535,8 @@ public sealed class GitBundlePullEndToEndTests : IAsyncLifetime
             WorkstationSyncBase(),
             WorkstationPaths(),
             new PathUtility(TestTexts.English),
-            _workstationLock);
+            _workstationLock,
+            branches: new GitBranchService(_git));
     }
 
     /// <summary>

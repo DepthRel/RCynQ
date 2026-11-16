@@ -138,6 +138,7 @@ public static class SyncServiceCollectionExtensions
                 hostKeys: provider.GetService<RCynQ.Ssh.Keys.HostKeys.IPinnedHostKeyGuard>())));
         services.TryAddSingleton<GitChannel.LegacyRemoteMigration>();
         services.TryAddSingleton<GitChannel.GitChannelService>();
+        services.TryAddSingleton<GitChannel.BranchSwitchService>();
         services.TryAddSingleton(new Routing.RouteCheckOptions());
         services.TryAddSingleton<Routing.ILinkRouteProbe, Routing.LinkRouteProbe>();
         services.TryAddSingleton<Routing.ILinkRouteSelector, Routing.LinkRouteSelector>();

@@ -1,0 +1,35 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.RestoreChangesDialog"
+                     x:DataType="vm:RestoreChangesDialogViewModel"
+                     Title="{loc:Loc BranchSwitch.Dialog.WindowTitle}"
+                     Width="560" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <controls:IconView IconKey="Icon.PatchApply" Width="22" Height="22" Foreground="{StaticResource AccentBrush}" />
+      <TextBlock Classes="page-title" Text="{loc:Loc BranchSwitch.Restore.Title}" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding HintText}" />
+
+    <Border Classes="card" Padding="10,8">
+      <TextBlock Classes="mono" FontSize="12.5" TextWrapping="Wrap" Text="{Binding PatchPath}" />
+    </Border>
+
+    <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc BranchSwitch.Restore.Note}" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Classes="outline" Content="{loc:Loc BranchSwitch.Restore.Later}" IsCancel="True" Command="{Binding LaterCommand}" />
+      <Button Classes="accent" IsDefault="True" Command="{Binding RestoreCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <controls:IconView Classes="small" IconKey="Icon.PatchApply" />
+          <TextBlock Text="{loc:Loc BranchSwitch.Restore.Apply}" />
+        </StackPanel>
+      </Button>
+    </StackPanel>
+  </StackPanel>
+</dialogs:DialogWindow>

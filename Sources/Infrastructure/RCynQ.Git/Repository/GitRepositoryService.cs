@@ -169,7 +169,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     /// </summary>
     /// <param name="remoteName">The name.</param>
     /// <exception cref="ArgumentException">The name is unsafe.</exception>
-    private static void ValidateRemoteName(string remoteName)
+    internal static void ValidateRemoteName(string remoteName)
     {
         if (remoteName is null || !SafeRemoteName().IsMatch(remoteName))
         {
@@ -426,7 +426,7 @@ public sealed partial class GitRepositoryService : IGitRepositoryService
     /// </summary>
     /// <param name="output">The output.</param>
     /// <returns>The names with their commits.</returns>
-    private static IEnumerable<(string Name, string Commit)> ParseRefList(string output)
+    internal static IEnumerable<(string Name, string Commit)> ParseRefList(string output)
     {
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {

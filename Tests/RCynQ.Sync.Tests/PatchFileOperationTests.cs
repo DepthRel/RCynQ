@@ -218,7 +218,7 @@ public sealed class PatchFileOperationTests : IDisposable
         var result = await operation.ApplyAsync(patch, null, reverse: true);
 
         result.Succeeded.Should().BeFalse();
-        result.Message.Should().Be(TestTexts.English.Format("PatchFile.Error.DoesNotApply", "  a.txt"));
+        result.Message.Should().Be(TestTexts.English.Format("PatchFile.Error.DoesNotApply", "• a.txt"));
         result.Output.Should().Contain("a.txt");
     }
 

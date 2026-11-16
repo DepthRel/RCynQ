@@ -1,3 +1,4 @@
+using RCynQ.Core.Enums;
 using RCynQ.UI.Services.Merging;
 using RCynQ.UI.ViewModels.Dialogs;
 using RCynQ.UI.ViewModels.Wizard;
@@ -50,6 +51,20 @@ public interface IDialogService
     /// <param name="dialog">The dialog view model.</param>
     /// <returns><see langword="true"/> when the user confirmed.</returns>
     Task<bool> ShowApplyPatchDialogAsync(ApplyPatchDialogViewModel dialog);
+
+    /// <summary>
+    /// Asks what happens to uncommitted changes before a switch to another branch.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns>The choice, or <see langword="null"/> when the user stays on the branch.</returns>
+    Task<BranchSwitchMode?> ShowSwitchBranchDialogAsync(SwitchBranchDialogViewModel dialog);
+
+    /// <summary>
+    /// Offers to bring the changes saved before a switch back from their patch file.
+    /// </summary>
+    /// <param name="dialog">The dialog view model.</param>
+    /// <returns><see langword="true"/> when the user brings the changes back now.</returns>
+    Task<bool> ShowRestoreChangesDialogAsync(RestoreChangesDialogViewModel dialog);
 
     /// <summary>
     /// Shows the dialog that adds a chain node.

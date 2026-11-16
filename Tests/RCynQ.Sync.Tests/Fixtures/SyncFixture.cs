@@ -332,6 +332,30 @@ public sealed class SyncFixture : IDisposable
     }
 
     /// <summary>
+    /// Creates the branch switch service of a node, on the real Git.
+    /// </summary>
+    /// <param name="branches">The branches of the working copy; <see langword="null"/> for the real ones.</param>
+    /// <param name="node">The node; <see langword="null"/> for the Workstation.</param>
+    /// <returns>The service.</returns>
+    public GitChannel.BranchSwitchService CreateBranchSwitchService(IGitBranchService? branches = null, NodeConfig? node = null)
+    {
+        var runner = new GitCommandRunner(new SystemProcessRunner(TestTexts.English), new GitOptions());
+        var owner = node ?? WorkstationNode;
+        var isWorkstation = owner.Id == WorkstationNode.Id;
+        var appData = isWorkstation ? _workstationAppData : _originAppData;
+        return new GitChannel.BranchSwitchService(
+            TestTexts.English,
+            owner,
+            isWorkstation ? WorkstationPaths : OriginPaths,
+            GitRepository,
+            branches ?? new GitBranchService(runner),
+            new GitPatchFileService(runner, appData),
+            LockOf(owner),
+            appData,
+            CreateTracker(owner));
+    }
+
+    /// <summary>
     /// Gets the reader of the Workstation working tree, the content a sender streams.
     /// </summary>
     public WorkdirPatchContent WorkstationContent => new(TestTexts.English, WorkstationWork, Paths);

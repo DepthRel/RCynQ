@@ -1,0 +1,51 @@
+<dialogs:DialogWindow xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:loc="using:RCynQ.UI.Localization"
+                     xmlns:dialogs="using:RCynQ.UI.Views.Dialogs"
+                     xmlns:vm="using:RCynQ.UI.ViewModels.Dialogs"
+                     xmlns:controls="using:RCynQ.UI.Controls"
+                     x:Class="RCynQ.UI.Views.Dialogs.SwitchBranchDialog"
+                     x:DataType="vm:SwitchBranchDialogViewModel"
+                     Title="{loc:Loc BranchSwitch.Dialog.WindowTitle}"
+                     Width="620" SizeToContent="Height" CanResize="False"
+                     WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="22" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <controls:IconView IconKey="Icon.Alert" Width="22" Height="22" Foreground="{StaticResource WarningBrush}" />
+      <TextBlock Classes="page-title" Text="{loc:Loc BranchSwitch.Dialog.Title}" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding HintText}" />
+
+    <Border Classes="card" Padding="10,8">
+      <ScrollViewer MaxHeight="180">
+        <ItemsControl ItemsSource="{Binding Files}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Classes="mono" FontSize="12.5" Text="{Binding}" TextTrimming="CharacterEllipsis" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="{loc:Loc BranchSwitch.Dialog.Carry}" FontWeight="Medium" />
+      <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding CarryHintText}" />
+    </StackPanel>
+    <StackPanel Spacing="4">
+      <TextBlock Text="{loc:Loc BranchSwitch.Dialog.SavePatch}" FontWeight="Medium" />
+      <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{loc:Loc BranchSwitch.Dialog.SavePatchHint}" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Classes="outline" Content="{loc:Loc Common.Cancel}" IsCancel="True" Command="{Binding CancelCommand}" />
+      <Button Classes="outline" Command="{Binding SavePatchCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <controls:IconView Classes="small" IconKey="Icon.PatchSave" />
+          <TextBlock Text="{loc:Loc BranchSwitch.Dialog.SavePatch}" />
+        </StackPanel>
+      </Button>
+      <Button Classes="accent" IsDefault="True" Content="{loc:Loc BranchSwitch.Dialog.Carry}" Command="{Binding CarryCommand}" />
+    </StackPanel>
+  </StackPanel>
+</dialogs:DialogWindow>

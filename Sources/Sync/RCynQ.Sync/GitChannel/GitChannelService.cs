@@ -91,6 +91,9 @@ public sealed class GitChannelService
     /// <summary>Closes deliveries of commits a Fetch shows the fate of, or <see langword="null"/>.</summary>
     private readonly OutgoingCommitTracker? _outgoingCommits;
 
+    /// <summary>Records the branch the Origin has checked out, or <see langword="null"/>.</summary>
+    private readonly IGitBranchService? _branches;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GitChannelService"/> class.
     /// </summary>
@@ -106,6 +109,7 @@ public sealed class GitChannelService
     /// <param name="workingTreeLock">The working tree lock.</param>
     /// <param name="legacyRemote">Renames the remote-tracking namespace of an earlier version; <see langword="null"/> leaves it alone.</param>
     /// <param name="outgoingCommits">Closes deliveries of commits a Fetch shows the fate of; <see langword="null"/> leaves them alone.</param>
+    /// <param name="branches">Records the branch the Origin has checked out; <see langword="null"/> records nothing.</param>
     public GitChannelService(
         ILocalizer localizer,
         NodeConfig node,
@@ -118,9 +122,11 @@ public sealed class GitChannelService
         IPathUtility pathUtility,
         WorkingTreeLock workingTreeLock,
         LegacyRemoteMigration? legacyRemote = null,
-        OutgoingCommitTracker? outgoingCommits = null)
+        OutgoingCommitTracker? outgoingCommits = null,
+        IGitBranchService? branches = null)
     {
         _outgoingCommits = outgoingCommits;
+        _branches = branches;
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _node = node;
         _links = links;
@@ -424,6 +430,12 @@ public sealed class GitChannelService
         }
 
         var changes = await _git.MirrorRemoteBranchesAsync(workdir, REMOTE_NAME, list.Branches, cancellationToken);
+        if (_branches is not null)
+        {
+            // Like origin/HEAD: the Branches tab warns when the Workstation works on another branch than the Origin has checked out.
+            await _branches.SetRemoteHeadAsync(workdir, REMOTE_NAME, list.Head, cancellationToken);
+        }
+
         var lines = new List<string>();
         if (changes.Added.Count > 0)
         {

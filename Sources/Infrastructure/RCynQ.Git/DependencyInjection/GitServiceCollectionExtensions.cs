@@ -60,6 +60,7 @@ public static class GitServiceCollectionExtensions
         services.TryAddSingleton<IPatchBuilder, DefaultPatchBuilder>();
         services.TryAddSingleton<PatchEnvelopeSerializer>();
         services.TryAddSingleton<IGitRepositoryService, GitRepositoryService>();
+        services.TryAddSingleton<IGitBranchService, GitBranchService>();
         services.TryAddSingleton<IGitCommitService, GitCommitService>();
         return services;
     }

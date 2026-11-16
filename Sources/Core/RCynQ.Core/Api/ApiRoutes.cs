@@ -168,6 +168,12 @@ public static class ApiRoutes
     /// <summary>Fetch and fast-forward the current branch.</summary>
     public const string GIT_PULL = "/git/pull";
 
+    /// <summary>The branches the working tree can be switched to (GET), or switch to one of them (POST); a Workstation only.</summary>
+    public const string GIT_SWITCH = "/git/switch";
+
+    /// <summary>Build the patch of the uncommitted changes of the working tree against <c>HEAD</c>, before a switch.</summary>
+    public const string GIT_SWITCH_PATCH = "/git/switch/patch";
+
     /// <summary>
     /// Answers the counterpart endpoint that asks whether this node is ready to exchange patches with it. Like the patch
     /// session routes it needs no local API token: the link token and the identifier of the asking node protect it.

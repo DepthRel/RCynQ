@@ -3,9 +3,26 @@
              xmlns:loc="using:RCynQ.UI.Localization"
              xmlns:pages="using:RCynQ.UI.ViewModels.Pages"
              xmlns:repos="using:RCynQ.UI.ViewModels.Repositories"
+             xmlns:items="using:RCynQ.UI.ViewModels.Items"
              xmlns:controls="using:RCynQ.UI.Controls"
+             xmlns:vm="using:RCynQ.UI.ViewModels"
              x:Class="RCynQ.UI.Views.Pages.BranchView"
              x:DataType="pages:BranchViewModel">
+  <UserControl.Styles>
+    <!-- The colour of a branch in the switcher; its status text says the same in words. -->
+    <Style Selector="TextBlock.branch-pulled">
+      <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+    </Style>
+    <Style Selector="TextBlock.branch-not-pulled">
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="TextBlock.branch-local-only">
+      <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.branch-current">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
   <ScrollViewer>
     <StackPanel Margin="28,22,28,28" Spacing="18">
 
@@ -17,6 +34,110 @@
             <TextBlock Classes="muted" Text="{loc:Loc Branch.Current}" />
             <TextBlock Classes="value mono" Text="{Binding CurrentBranch}" />
             <TextBlock Classes="secondary" Text="{Binding DivergenceText}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasOriginHeadWarning}">
+              <controls:IconView Classes="small" IconKey="Icon.Alert" Foreground="{StaticResource WarningBrush}" VerticalAlignment="Top" Margin="0,1,0,0" />
+              <TextBlock Classes="secondary" Text="{Binding OriginHeadWarning}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- The branch switcher: every local branch and every branch of the Origin, with a search by name. -->
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0" IsVisible="{Binding CanSwitch}">
+              <TextBlock Classes="muted" Text="{loc:Loc Branch.SwitchTo}" VerticalAlignment="Center" />
+              <Button x:Name="SwitchButton" Classes="outline" MinWidth="240" HorizontalContentAlignment="Stretch"
+                      ToolTip.Tip="{loc:Loc Branch.SwitchTip}">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{loc:Loc Branch.SwitchChoose}" VerticalAlignment="Center" />
+                  <controls:IconView Grid.Column="1" Classes="small" IconKey="Icon.ChevronDown" Margin="10,0,0,0" />
+                </Grid>
+                <Button.Flyout>
+                  <Flyout Placement="BottomEdgeAlignedLeft" Opened="OnSwitchFlyoutOpened" Closed="OnSwitchFlyoutClosed">
+                    <StackPanel Width="420" Spacing="8">
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox x:Name="BranchSearchBox" Text="{Binding BranchFilter}" PlaceholderText="{loc:Loc Branch.SwitchSearch}">
+                          <TextBox.InnerLeftContent>
+                            <controls:IconView Classes="small" IconKey="Icon.Search" Margin="8,0,0,0" Foreground="{StaticResource TextMutedBrush}" />
+                          </TextBox.InnerLeftContent>
+                        </TextBox>
+
+                        <!-- The filter by the state of a branch: pressed in while its panel is open, accented while a filter is set. -->
+                        <ToggleButton x:Name="StatusFilterButton" Grid.Column="1" Classes="outline tool" VerticalAlignment="Center"
+                                      Classes.toggled="{Binding StatusFilter.IsActive}"
+                                      IsChecked="{Binding StatusFilter.IsOpen}"
+                                      ToolTip.Tip="{loc:Loc Branch.Filter.Tip}">
+                          <controls:IconView Classes="small" IconKey="Icon.Filter" />
+                        </ToggleButton>
+                        <!-- A click outside the panel closes only the panel: the press is taken, so the list under it stays open. -->
+                        <Popup x:Name="StatusFilterPopup" Grid.Column="1" PlacementTarget="{Binding #StatusFilterButton}"
+                               Placement="RightEdgeAlignedTop" HorizontalOffset="8"
+                               IsLightDismissEnabled="True" OverlayDismissEventPassThrough="False"
+                               IsOpen="{Binding StatusFilter.IsOpen, Mode=TwoWay}">
+                          <Border Classes="popup-panel" Width="300" DataContext="{Binding StatusFilter}" x:DataType="vm:BranchStatusFilterViewModel">
+                            <StackPanel Spacing="4">
+                              <TextBlock Classes="page-title" FontSize="15" Margin="0,0,0,6" Text="{loc:Loc Branch.Filter.Title}" />
+
+                              <TextBlock Classes="section" Text="{loc:Loc Branch.Filter.Presence}" />
+                              <Border Classes="card">
+                                <StackPanel Margin="14,10" Spacing="6">
+                                  <CheckBox x:Name="FilterPulled" IsChecked="{Binding ShowPulled}" Content="{loc:Loc Branch.Filter.Pulled}" />
+                                  <CheckBox x:Name="FilterNotPulled" IsChecked="{Binding ShowNotPulled}" Content="{loc:Loc Branch.Filter.NotPulled}" />
+                                </StackPanel>
+                              </Border>
+
+                              <TextBlock Classes="section" Margin="0,10,0,8" Text="{loc:Loc Branch.Filter.Location}" />
+                              <Border Classes="card">
+                                <StackPanel Margin="14,10" Spacing="6">
+                                  <CheckBox x:Name="FilterOnOrigin" IsChecked="{Binding ShowOnOrigin}" Content="{loc:Loc Branch.Filter.OnOrigin}" />
+                                  <CheckBox x:Name="FilterLocalOnly" IsChecked="{Binding ShowLocalOnly}" Content="{loc:Loc Branch.Filter.LocalOnly}" />
+                                </StackPanel>
+                              </Border>
+
+                              <TextBlock Classes="muted" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap" Text="{loc:Loc Branch.Filter.Hint}" />
+                              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+                                <Button Classes="outline" Content="{loc:Loc Branch.Filter.Reset}" Command="{Binding ResetCommand}" />
+                                <Button Classes="accent" Content="{loc:Loc Branch.Filter.Apply}" Command="{Binding ApplyCommand}" />
+                              </StackPanel>
+                            </StackPanel>
+                          </Border>
+                        </Popup>
+                      </Grid>
+                      <ListBox x:Name="BranchList" ItemsSource="{Binding FilteredBranches}" MaxHeight="340" SelectionMode="Single"
+                               Tapped="OnBranchTapped" IsVisible="{Binding !HasNoFilteredBranches}">
+                        <ListBox.ItemTemplate>
+                          <DataTemplate x:DataType="items:SwitchBranchItemViewModel">
+                            <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding StatusText}">
+                              <TextBlock Classes="mono" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                         Classes.branch-pulled="{Binding IsPulled}"
+                                         Classes.branch-not-pulled="{Binding IsNotPulled}"
+                                         Classes.branch-local-only="{Binding IsLocalOnly}"
+                                         Classes.branch-current="{Binding IsCurrent}" />
+                              <TextBlock Grid.Column="1" Margin="12,0,0,0" FontSize="12" Text="{Binding StatusText}" VerticalAlignment="Center"
+                                         Classes.branch-pulled="{Binding IsPulled}"
+                                         Classes.branch-not-pulled="{Binding IsNotPulled}"
+                                         Classes.branch-local-only="{Binding IsLocalOnly}" />
+                            </Grid>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+                      <TextBlock Classes="muted" Margin="4,2" TextWrapping="Wrap" Text="{loc:Loc Branch.SwitchNoMatches}">
+                        <TextBlock.IsVisible>
+                          <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="HasNoFilteredBranches" />
+                            <Binding Path="!StatusFilter.IsActive" />
+                          </MultiBinding>
+                        </TextBlock.IsVisible>
+                      </TextBlock>
+                      <TextBlock Classes="muted" Margin="4,2" TextWrapping="Wrap" Text="{loc:Loc Branch.SwitchNoMatchesFiltered}">
+                        <TextBlock.IsVisible>
+                          <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="HasNoFilteredBranches" />
+                            <Binding Path="StatusFilter.IsActive" />
+                          </MultiBinding>
+                        </TextBlock.IsVisible>
+                      </TextBlock>
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+            </StackPanel>
           </StackPanel>
         </Grid>
       </Border>

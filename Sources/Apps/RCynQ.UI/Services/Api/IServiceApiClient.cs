@@ -185,6 +185,22 @@ public interface IServiceApiClient
     /// <returns>The result.</returns>
     Task<GitOperationResult> PullAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Gets the branches the working tree of the Workstation can be switched to.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The current branch, the branch of the Origin and the branches.</returns>
+    Task<GitSwitchBranchesResponse> GetSwitchableBranchesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Builds the patch of the uncommitted changes of the working tree against <c>HEAD</c>, before a switch.</summary>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>The bytes of the patch; empty when nothing is changed.</returns>
+    Task<byte[]> BuildSwitchPatchAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Switches the working tree of the Workstation to another branch.</summary>
+    /// <param name="request">The branch and what happens to uncommitted changes.</param>
+    /// <param name="cancellationToken">A token to cancel the request.</param>
+    /// <returns>How the switch ended.</returns>
+    Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default);
+
     /// <summary>Runs diagnostics.</summary>
     /// <param name="cancellationToken">A token to cancel the request.</param>
     /// <returns>The results.</returns>
